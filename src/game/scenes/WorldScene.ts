@@ -321,6 +321,34 @@ export class WorldScene extends Phaser.Scene {
     if (w) this.showFloatingText(text, w.sprite.x, w.sprite.y - 70);
   }
 
+  showNpcApproach(npcId: string, text: string): void {
+    const w = this.npcSprites.get(npcId);
+    if (!w || !this.player) return;
+    const startX = w.sprite.x;
+    const targetX = this.player.x + 36;
+    this.tweens.add({
+      targets: [w.sprite, w.shadow, w.label],
+      x: targetX,
+      duration: 380,
+      ease: "Sine.easeInOut",
+      onComplete: () => {
+        w.sprite.setFlipX(false);
+        const bubble = this.add.text(w.sprite.x, w.sprite.y - 70, text.split("\n")[0], {
+          fontFamily: "Noto Serif SC, serif",
+          fontSize: "16px",
+          color: "#fff3c8",
+          backgroundColor: "rgba(18,13,8,.9)",
+          padding: { x: 8, y: 4 },
+          wordWrap: { width: 260 }
+        }).setOrigin(0.5);
+        this.tweens.add({ targets: bubble, y: bubble.y - 28, alpha: 0, duration: 2600, onComplete: () => bubble.destroy() });
+        this.time.delayedCall(2800, () => {
+          this.tweens.add({ targets: [w.sprite, w.shadow, w.label], x: startX, duration: 460, ease: "Sine.easeInOut" });
+        });
+      }
+    });
+  }
+
   toggleMeditate(): void {
     const s = getApp().state;
     if (!s) return;

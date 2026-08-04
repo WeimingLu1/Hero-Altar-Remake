@@ -207,6 +207,7 @@ npm run balance        # 战斗平衡模拟（scripts/balance-sim.mjs，输出 C
 - NPC 互动菜单额外提供「查看NPC状态」，直接打开 `showNpcStatus`。
 - 敌意按概率演化：基础开战概率低，`flags["hostile-<npcId>"]` 累计挑衅次数、关系友好度越低，开战概率越高；多数敌意结果为口角/威胁文案。
 - NPC 会主动对玩家发起互动（`npc-initiates:<npcId>`），也会随机对环境物品执行修缮/破坏/复制/挪动/使用（`sim/objectLife.ts`）。
+- `WorldScene.showNpcApproach`：玩家与 NPC 对话/善意/敌意/使用物品时，NPC 会走到玩家面前、头顶气泡展示内容，再回到原位置；与 NPC-NPC 演出同一套视觉。
 - NPC 位置随机化：房间 NPC 可能外出进入当前区域，异区域无房间 NPC 也可能作为访客出现；`renderArea` 在正常 NPC 之外追加随机出现者。
 - NPC 跨图迁移由 `sim/npcTravel.ts` 提供确定性位置：`npcLocation(npcId, day, hour)` 返回区域/房间/坐标，`renderArea` 按当前位置渲染所有应在该区域的 NPC。
 - NPC 作息调度在 `sim/npcSchedule.ts`：工作日 9-16 `atWork` 固定岗位，非工作时间和周末 `shouldBeOut` 用 `npcId+day+hour` 哈希确定性判断是否外出；周末跨图访客概率更高。

@@ -492,6 +492,7 @@ export class App {
         const text = useItemOnNpc(s, npcId, itemId);
         this.ui.showNarrative(text);
         this.world.showPlayerFloating(text);
+        this.world.showNpcApproach(npcId, text);
         this.refreshUi();
         this.ui.showNpcItemUse(npcId, s);
         return;
@@ -509,6 +510,7 @@ export class App {
           this.startBattle(res.battle, npcId);
           return;
         }
+        this.world.showNpcApproach(npcId, res.text);
         if (res.panel) {
           this.dialogNpc = npcId;
           this.ui.dialogNpc = npcId;
@@ -539,6 +541,7 @@ export class App {
         }
         this.ui.showNarrative(`${NPCS[npcId].name}走了过来。\n${res.text}`);
         this.world.showPlayerFloating(res.text.split("\n")[0]);
+        this.world.showNpcApproach(npcId, res.text);
         return;
       }
       case action.startsWith("master-skill:"): {
