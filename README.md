@@ -15,6 +15,20 @@
 - 1 条主线 + 12 条支线，3 个终局结局
 - 昼夜、天气、随机事件、传闻、恋爱、成亲、宅邸、锻造、存物柜
 
+## 游戏截图
+
+![标题画面](screenshots/title.png)
+
+![平安镇世界](screenshots/world.png)
+
+![江湖舆图](screenshots/map.png)
+
+![NPC 对话](screenshots/dialog.png)
+
+![回合制战斗](screenshots/battle.png)
+
+![人物状态](screenshots/status.png)
+
 ## 快速开始
 
 ```bash
