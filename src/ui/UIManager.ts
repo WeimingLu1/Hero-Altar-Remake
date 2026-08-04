@@ -1,16 +1,15 @@
 import { AREAS, ROOMS } from "../game/content/areas";
 import { ARMORS, ITEMS, WEAPONS } from "../game/content/items";
-import { NPCS, npcDef } from "../game/content/npcs";
-import { QUESTS, questDef } from "../game/content/quests";
+import { NPCS, npcBelongings, npcDef, npcMoves } from "../game/content/npcs";
 import { ROMANCE, randomRelationshipStatus } from "../game/content/romance";
 import { SECTS } from "../game/content/sects";
 import { SKILLS, skillDef } from "../game/content/skills";
 import { enemyDef } from "../game/content/enemies";
-import { PROLOGUE, isQuestNpc } from "../game/content/story";
+import { PROLOGUE } from "../game/content/story";
 import type { DialogNode } from "../game/content/types";
 import type { BattleState } from "../game/sim/battle";
 import { availableUts } from "../game/sim/battle";
-import { canLearnSkill, knownAreas, questProgress } from "../game/sim/actions";
+import { canLearnSkill, knownAreas } from "../game/sim/actions";
 import {
   activeNeigongLevel,
   attackPower,
@@ -26,6 +25,7 @@ import {
 import { hasSave, saveSlots } from "../game/sim/save";
 import type { GameState, PlayerState } from "../game/sim/state";
 import { getApp } from "../game/bus";
+import { relationLabel } from "../game/sim/relations";
 
 type ActionFn = (action: string) => void;
 
@@ -61,11 +61,10 @@ export class UIManager {
             <button class="btn" data-act="status">状态<small>[1]</small></button>
             <button class="btn" data-act="bag">背包<small>[2]</small></button>
             <button class="btn" data-act="skill">武功<small>[3]</small></button>
-            <button class="btn" data-act="quest">任务<small>[4]</small></button>
             <button class="btn" data-act="meditate">打坐<small>[5]</small></button>
             <button class="btn" data-act="save">存档<small>[6]</small></button>
             <button class="btn" data-act="map">舆图<small>[M]</small></button>
-            <button class="btn cheat" data-act="cheat">作弊器<small>[F8]</small></button>
+            <button class="btn cheat" data-act="cheat">穿越者天书<small>[F8]</small></button>
           </div>
           <div id="dialog" class="panel hidden">
             <div class="dlg-name"></div>
@@ -78,7 +77,7 @@ export class UIManager {
             <div class="panel-close"><button class="btn secondary" data-panel-close>关闭 <small>[Esc]</small></button></div>
           </div>
           <div id="cheat" class="panel hidden">
-            <div class="panel-title">作弊器 · 逆天改命</div>
+            <div class="panel-title">穿越者天书 · 逆天改命</div>
             <div class="panel-body"></div>
             <div class="panel-close"><button class="btn secondary" data-panel-close>关闭 <small>[F8]</small></button></div>
           </div>
@@ -95,6 +94,7 @@ export class UIManager {
             <div class="qte-hint">按对应字母</div>
           </div>
           <div id="battle-danmaku"></div>
+          <div id="narrative" class="hidden"></div>
         </div>
       </div>
     `;
@@ -164,6 +164,26 @@ export class UIManager {
     setTimeout(() => d.remove(), dur * 1000 + 150);
   }
 
+  showNarrative(text: string): void {
+    const wrap = this.el("narrative");
+    wrap.classList.remove("hidden");
+    const d = document.createElement("div");
+    d.className = "narrative-item";
+    wrap.appendChild(d);
+    let i = 0;
+    const timer = window.setInterval(() => {
+      i += 1;
+      d.textContent = text.slice(0, i);
+      if (i >= text.length) window.clearInterval(timer);
+    }, 24);
+    window.setTimeout(() => d.classList.add("fade"), 11000);
+    window.setTimeout(() => {
+      d.remove();
+      if (!wrap.children.length) wrap.classList.add("hidden");
+    }, 14500);
+    while (wrap.children.length > 8) wrap.firstElementChild?.remove();
+  }
+
   showHud(s: GameState): void {
     const p = s.player;
     const hud = this.el("hud");
@@ -183,7 +203,6 @@ export class UIManager {
     const shichen = ["子", "丑", "寅", "卯", "辰", "巳", "午", "未", "申", "酉", "戌", "亥"][Math.floor(p.time.hour / 2) % 12];
     const titleTag = p.sect ? SECTS[p.sect].name : "散人";
     this.q(".hud-day").textContent = `第${p.time.day}日 ${shichen}时${p.time.hour % 2 ? "半" : ""} · ${titleTag}`;
-    this.q(".hud-life").textContent = `饥 ${Math.floor(p.hunger)} · 渴 ${Math.floor(p.thirst)}`;
     const weatherIcon: Record<string, string> = { sunny: "☀️", rain: "🌧️", snow: "❄️", fog: "🌫️", wind: "💨" };
     const weatherName: Record<string, string> = { sunny: "晴", rain: "雨", snow: "雪", fog: "雾", wind: "风" };
     const thunder = p.weather === "rain" && getApp().world?.thunderstorm;
@@ -248,10 +267,8 @@ export class UIManager {
       return;
     }
     dlg.classList.remove("hidden");
-    const questNpc = this.dialogNpc ? isQuestNpc(this.dialogNpc, getApp().state ?? undefined) : false;
     const nameEl = this.q("#dialog .dlg-name");
     nameEl.textContent = node.speaker || "江湖传闻";
-    nameEl.innerHTML = (node.speaker || "江湖传闻") + (questNpc ? '<span class="dlg-quest">任务</span>' : "");
     this.q("#dialog .dlg-text").textContent = node.text;
     const opts = this.q("#dialog .dlg-opts");
     opts.innerHTML = "";
@@ -281,34 +298,6 @@ export class UIManager {
         this.actions("ui-close");
       });
       opts.appendChild(b);
-    } else if (this.dialogNpc && !node.opts.some((o) => o.action?.startsWith("spar:") || o.action?.startsWith("challenge:") || o.text.includes("切磋"))) {
-      const b = document.createElement("button");
-      b.className = "btn jade";
-      b.textContent = "切磋武艺";
-      b.addEventListener("click", () => this.actions(`spar:${this.dialogNpc}`));
-      opts.appendChild(b);
-    }
-    if (this.dialogNpc) {
-      const info = document.createElement("button");
-      info.className = "btn secondary";
-      info.textContent = "查看状态";
-      info.addEventListener("click", () => this.actions(`npc-status:${this.dialogNpc}`));
-      opts.appendChild(info);
-      const chat = document.createElement("button");
-      chat.className = "btn";
-      chat.textContent = "对话";
-      chat.addEventListener("click", () => this.actions(`npc-talk:${this.dialogNpc}`));
-      opts.appendChild(chat);
-      const s = getApp().state;
-      const nd = npcDef(this.dialogNpc);
-      const npcAge = nd.age ?? 18;
-      if (s && npcAge >= 16 && nd.gender && nd.gender !== s.player.gender) {
-        const love = document.createElement("button");
-        love.className = "btn jade";
-        love.textContent = "情缘";
-        love.addEventListener("click", () => this.actions(`romance-menu:${this.dialogNpc}`));
-        opts.appendChild(love);
-      }
     }
   }
 
@@ -359,7 +348,6 @@ export class UIManager {
         <div><b>经验</b> ${p.exp}</div>
         <div><b>潜能</b> ${p.potential}</div>
         <div><b>善恶</b> ${p.moral}</div>
-        <div><b>饥饱</b> ${Math.floor(p.hunger)} / 渴 ${Math.floor(p.thirst)}</div>
         <div><b>门派</b> ${p.sect ? SECTS[p.sect].name : "未入门"}</div>
         <div><b>婚配</b> ${p.married ? p.spouse : "未婚"}</div>
         <div><b>宅邸</b> ${p.house ? "桃花源小筑" : "无"}</div>
@@ -451,11 +439,24 @@ export class UIManager {
           <div><b>${def.name}</b> ×${n}<span class="tag">${kindName(def.kind)}</span></div>
           <div class="desc">${def.desc}</div>
           ${usable ? `<button class="btn" data-act="use:${id}">使用</button>` : ""}
+          <button class="btn secondary" data-act="env-item:${id}">对周围使用</button>
           <button class="btn secondary" data-act="drop:${id}">丢弃</button>
         </div>`;
       })
       .join("");
     this.openPanel("背包 · 穿戴", equipBody + (rows || "<div style='text-align:center;opacity:.7'>囊中空空如也。</div>"));
+  }
+
+  showEnvTargets(itemId: string, s: GameState): void {
+    const def = ITEMS[itemId];
+    const objs = (s.world.dynamicObjects || []).filter((o) => o.area === s.player.area && o.room === s.player.room);
+    const rows = objs
+      .map((o) => {
+        const name = o.kind === "flower" ? "花" : o.kind === "bush" ? "灌木" : o.kind === "herb" ? "药草" : "石头";
+        return `<div class="itemrow"><b>${name}</b><span class="tag">完整 ${o.integrity} · 生长 ${o.growth} · ×${o.quantity}</span><button class="btn" data-act="use-item-env:${itemId}:${o.id}">使用</button></div>`;
+      })
+      .join("");
+    this.openPanel(`对周围使用 · ${def?.name || itemId}`, rows || "周围没有可作用的东西。");
   }
 
   showStorage(s: GameState): void {
@@ -502,22 +503,6 @@ export class UIManager {
     group("门派武学", Object.keys(p.skills).filter((id) => SKILLS[id]?.sect));
     group("奇遇武学", ["mengHuQuan", "jingTianDaoFa", "zuiQuan", "xiaoyaoXinfa"]);
     this.openPanel("武功", rows.join("") || "尚未习武。");
-  }
-
-  showQuests(s: GameState): void {
-    const rows = Object.values(QUESTS).map((def) => {
-      const qp = questProgress(s, def.id);
-      const stage = qp.done ? -1 : qp.stage;
-      const body = stage < 0
-        ? `<div class="desc" style="color:#3f6b45">已完成${qp.repeat > 0 ? `（完成 ${qp.repeat} 次）` : ""}</div>`
-        : `<div class="desc">${def.stages[Math.min(stage, def.stages.length - 1)]}</div>
-           <div class="desc" style="opacity:.75">${stage + 1}/${def.stages.length}</div>`;
-      return `<div class="questrow ${stage < 0 ? "done" : ""}">
-        <b>${def.name}</b><span class="tag ${def.kind === "main" ? "red" : "jade"}">${def.kind === "main" ? "主线" : "支线"}</span>
-        ${body}
-      </div>`;
-    });
-    this.openPanel("任务与恩怨", rows.join(""));
   }
 
   /* ---------------- 商店 / 学艺 / 铁匠 ---------------- */
@@ -714,6 +699,8 @@ export class UIManager {
     if (aff > 0) tags.push(`好感 ${aff}`);
     if (!tags.length) tags.push("初识");
     const relation = tags.map((t) => `<span class="tag">${t}</span>`).join("");
+    const rel = s.world?.npcRelations?.["player"]?.[npcId];
+    const relTag = rel ? `<span class="tag purple">${relationLabel(rel)}</span>` : "";
     const relDesc = partner
       ? randomRelationshipStatus(n.name, "partner", intimateTimes)
       : casual
@@ -721,18 +708,47 @@ export class UIManager {
         : aff >= 50
           ? randomRelationshipStatus(n.name, "close", 0)
           : "";
+    const logs = (s.world?.npcLogs?.[npcId] || []).slice(-6).map((t) => `<div class="desc">${t}</div>`).join("");
+    const moves = npcMoves(npcId);
+    const belongings = npcBelongings(npcId);
     this.openPanel(`${n.name} · 人物志`, `
       <div class="kv">
         <div><b>姓名</b> ${n.name}</div>
         <div><b>身份</b> ${n.title || "江湖客"}</div>
         <div><b>性别</b> ${n.gender === "female" ? "女" : "男"}</div>
         <div><b>年岁</b> ${n.age ?? "不详"}</div>
-        <div><b>与你的关系</b> ${relation}</div>
+        <div><b>与你的关系</b> ${relation} ${relTag}</div>
       </div>
       <div class="sectline"><b>容貌</b><br>${n.looks || "只见寻常面目。"}</div>
-      <div class="sectline"><b>武艺</b><br>${n.martial || "看不出深浅。"}</div>
+      <div class="sectline"><b>武艺</b><br>${n.martial || "看不出深浅。"}<br><span style="opacity:.85">独门招式：${moves.join("、")}</span></div>
+      <div class="sectline"><b>随身物品</b><br>${belongings.join("、") || "没什么值钱的东西。"}</div>
       <div class="sectline"><b>近况</b><br>${n.desc}${relDesc ? `<br><br><span style="opacity:.92">${relDesc}</span>` : ""}</div>
+      <div class="sectline"><b>江湖日志</b>${logs || "<span class='tag'>尚无记录。</span>"}</div>
     `);
+  }
+
+  showSocialMenu(npcId: string, s: GameState): void {
+    const npc = npcDef(npcId);
+    this.openPanel(`相遇 · ${npc.name}`, `
+      <div class="sectline">${npc.desc}</div>
+      <div class="itemrow"><button class="btn" data-act="social-intent:${npcId}:talk">对话</button></div>
+      <div class="itemrow"><button class="btn jade" data-act="social-intent:${npcId}:kind">善意</button></div>
+      <div class="itemrow"><button class="btn danger" data-act="social-intent:${npcId}:hostile">敌意</button></div>
+      <div class="itemrow"><button class="btn" data-act="npc-item:${npcId}">使用物品</button></div>
+      <div class="itemrow"><button class="btn secondary" data-act="npc-status:${npcId}">查看NPC状态</button></div>
+    `);
+  }
+
+  showNpcItemUse(npcId: string, s: GameState): void {
+    const npc = npcDef(npcId);
+    const rows = Object.entries(s.player.items)
+      .filter(([id, n]) => n > 0 && ITEMS[id])
+      .map(([id, n]) => {
+        const def = ITEMS[id];
+        return `<div class="itemrow"><b>${def.name}</b> ×${n}<button class="btn" data-act="use-item-npc:${npcId}:${id}">给${npc.name}</button></div>`;
+      })
+      .join("");
+    this.openPanel(`对${npc.name}使用物品`, rows || "你身上没有可给的东西。");
   }
 
   showRomanceMenu(npcId: string, s: GameState): void {
@@ -782,10 +798,8 @@ export class UIManager {
 
   showCheat(s: GameState): void {
     const p = s.player;
-    const skillOpts = Object.keys(SKILLS).map((id) => `<option value="${id}">${skillDef(id).name}</option>`).join("");
     const itemOpts = Object.keys(ITEMS).map((id) => `<option value="${id}">${ITEMS[id].name}</option>`).join("");
     const areaOpts = Object.keys(AREAS).map((id) => `<option value="${id}">${AREAS[id].name}</option>`).join("");
-    const questOpts = Object.keys(QUESTS).map((id) => `<option value="${id}">${QUESTS[id].name}</option>`).join("");
     const sectOpts = `<option value="">无门派</option>` + Object.keys(SECTS).map((id) => `<option value="${id}">${SECTS[id].name}</option>`).join("");
     const npcOpts = Object.keys(NPCS).map((id) => `<option value="${id}">${NPCS[id].name}</option>`).join("");
     const weatherOpts = ([
@@ -797,6 +811,20 @@ export class UIManager {
     ] as const).map(([v, n]) => `<option value="${v}"${p.weather === v ? " selected" : ""}>${n}</option>`).join("");
     const genderOpts = `<option value="male"${p.gender === "male" ? " selected" : ""}>男</option><option value="female"${p.gender === "female" ? " selected" : ""}>女</option>`;
     const firstNpc = Object.keys(NPCS)[0] || "";
+    const observedRows = (p.observedSkills || [])
+      .map((name) => {
+        const id = Object.entries(SKILLS).find(([, def]) => def.name === name || name.includes(def.name))?.[0];
+        const mastered = !!id && (p.skills[id] || 0) >= SKILLS[id].max;
+        return `<div class="itemrow"><b>${name}</b>${
+          id
+            ? `<button class="btn" data-act="master-skill:${id}">${mastered ? "已掌握" : "瞬间掌握"}</button>`
+            : `<span class="tag">见闻</span>`
+        }</div>`;
+      })
+      .join("");
+    const historyRows = (s.world.objectHistory || []).slice(-12).map((t) => `<div class="itemrow"><div class="desc">${t}</div></div>`).join("");
+    const itemRows = Object.values(ITEMS).slice(0, 48).map((def) => `<span class="tag">${def.name}</span>`).join("");
+    const variationCount = Object.keys(s.world.areaVariations || {}).length;
     const row = (label: string, id: string, value: string | number, action: string) => `
       <div class="cheat-row"><label>${label}</label><input id="${id}" value="${value}"><span class="now">当前 ${value}</span>
       <button class="btn" data-act="${action}">应用</button></div>`;
@@ -815,8 +843,6 @@ export class UIManager {
       ${row("年龄 (14-99)", "ch-age", p.age, "cheat-age")}
       ${row(`气血 (1~${maxHp(p)})`, "ch-hp", p.hp, "cheat-hp")}
       ${row(`内力 (0~${maxMp(p)})`, "ch-mp", p.mp, "cheat-mp")}
-      ${row("饥饱 (0-100)", "ch-hunger", Math.floor(p.hunger), "cheat-hunger")}
-      ${row("口渴 (0-100)", "ch-thirst", Math.floor(p.thirst), "cheat-thirst")}
       ${row("中毒回合 (0-20)", "ch-poison", p.poison, "cheat-poison")}
       ${row("容貌 (1-100)", "ch-looks", p.looks, "cheat-looks")}
       <div class="cheat-row"><label>日期时辰</label><input id="ch-day" value="${p.time.day}"><span class="now">日</span><input id="ch-hour" value="${Math.floor(p.time.hour)}"><span class="now">时</span><button class="btn" data-act="cheat-time">设置</button></div>
@@ -825,10 +851,6 @@ export class UIManager {
       <div class="cheat-row"><label>门派</label><select id="ch-sect">${sectOpts}</select><button class="btn" data-act="cheat-sect">设置</button></div>
       <div class="cheat-row"><label>宅邸</label><select id="ch-house"><option value="1"${p.house ? " selected" : ""}>已购</option><option value="0"${!p.house ? " selected" : ""}>未购</option></select><button class="btn" data-act="cheat-house">设置</button></div>
       <div class="cheat-row"><label>好感 (0-100)</label><select id="ch-npc">${npcOpts}</select><input id="ch-aff" value="${p.affections[firstNpc] || 0}"><button class="btn" data-act="cheat-affection">设置</button></div>
-      <div class="cheat-row"><label>武功等级</label>
-        <select id="ch-skill">${skillOpts}</select><input id="ch-skill-lv" value="100">
-        <button class="btn" data-act="cheat-skill">设置</button></div>
-      <div class="cheat-row"><label>全部武功等级 (按各武功上限)</label><input id="ch-all-lv" value="100"><button class="btn" data-act="cheat-allskills">设置全部</button></div>
       <div class="cheat-row"><label>添加物品</label>
         <select id="ch-item">${itemOpts}</select><input id="ch-item-n" value="1">
         <button class="btn" data-act="cheat-item">添加</button>
@@ -836,9 +858,9 @@ export class UIManager {
       <div class="cheat-row"><label>瞬移</label>
         <select id="ch-area">${areaOpts}</select>
         <button class="btn" data-act="cheat-area">前往</button></div>
-      <div class="cheat-row"><label>完成任务</label>
-        <select id="ch-quest">${questOpts}</select>
-        <button class="btn" data-act="cheat-quest">完成</button></div>
+      <div class="sectline"><b>所见武学</b>${observedRows || "<span class='tag'>尚未见过任何武学。</span>"}</div>
+      <div class="sectline"><b>世界档案</b><div class="desc">已演化区域 ${variationCount} 个，最近事件：</div>${historyRows || "<span class='tag'>尚无世界事件。</span>"}</div>
+      <div class="sectline"><b>物品图鉴</b><div class="desc">${itemRows || "暂无图鉴。"}</div></div>
       <div class="cheat-actions">
         <button class="btn jade" data-act="cheat-heal">满血满蓝</button>
         <button class="btn" data-act="cheat-lock">${p.cheatLock ? "解除锁血" : "锁血无敌"}</button>
@@ -883,9 +905,8 @@ export class UIManager {
       </div>
       <div id="cb-btns" style="display:flex;gap:7px;flex-wrap:wrap;justify-content:center">
         ${over ? `<button class="btn jade" data-act="battle-close">${intimacy ? (b.victory ? "尽兴而归" : "灯下相对") : b.victory ? "收下战利品" : b.fled ? "返回" : enemy.spar ? "切磋结束" : "轮回转生"}</button>` : `
-          <button class="btn" data-act="battle-attack">${intimacy ? "温存" : "攻击"}</button>
-          ${intimacy ? "" : `<button class="btn" data-act="battle-ult-menu">绝招</button>`}
-          <button class="btn secondary" data-act="battle-defend">${intimacy ? "低语" : "运功防御"}</button>
+          <button class="btn" data-act="battle-attack">${intimacy ? "温存" : "出手"}</button>
+          ${intimacy ? `<button class="btn secondary" data-act="battle-defend">低语</button>` : ""}
           <button class="btn" data-act="battle-item-menu">${intimacy ? "小酌" : "物品"}</button>
           ${intimacy ? "" : `<button class="btn ghost" data-act="battle-flee">逃跑</button>`}
         `}
@@ -993,7 +1014,7 @@ export class UIManager {
     const panel = document.createElement("div");
     panel.className = "panel";
     panel.innerHTML = `<div class="panel-title">游戏说明</div><div class="panel-body">
-      <div class="sectline"><b>移动</b> 方向键 / A D　<b>交互</b> E 或 回车　<b>入室</b> W　<b>菜单</b> 1-6　<b>作弊器</b> F8</div>
+      <div class="sectline"><b>移动</b> 方向键 / A D　<b>交互</b> E 或 回车　<b>入室</b> W　<b>菜单</b> 1/2/3/5/6　<b>天书</b> F8</div>
       <div class="sectline"><b>江湖基础</b> 潜能与经验是成长的柴火：打坐把潜能化为内力强度，向师父请教把潜能化为武功等级。武功练到火候，方能悟出绝招。</div>
       <div class="sectline"><b>门派</b> 太极、八卦、雪山、花间、尹贺、红莲，外加黄金版新增的丐帮。每派各有内功、轻功、兵器功夫与独门绝招，拜师有门槛。</div>
       <div class="sectline"><b>主线</b> 从平安镇出发，查黑风寨、破青龙坛、败六大掌门取六块三角石板，最终打开时空尽头，直面「我是谁」。</div>

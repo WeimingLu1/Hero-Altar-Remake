@@ -4,5 +4,6 @@ dist-single/
 tsconfig.tsbuildinfo
 scripts/.balance-bundle.mjs
 .DS_Store
+WORLD_PLAN.md
 -l
 AGENTS.md

@@ -115,6 +115,7 @@ export interface ArmorDef {
 
 export interface EnemySkillDef {
   name: string;
+  skillId?: string;
   chance: number;
   mult: number;
   text: string;
@@ -235,6 +236,10 @@ export interface NpcDef {
   forge?: boolean;
   // 任务发布者标记：当前仅作数据标注，后续任务引擎（Phase 5）据此生成/挂载任务
   questGiver?: string;
+  personality?: string;
+  temper?: string;
+  loreTopics?: string[];
+  moves?: string[];
   marriage?: boolean;
 }
 

@@ -21,6 +21,11 @@ import { ROMANCE } from "./content/romance";
 import { SKILLS } from "./content/skills";
 import type { GameState } from "./sim/state";
 import { newGame, rollAttrs } from "./sim/state";
+import { releaseLock, resolveSocialIntent } from "./sim/socialEngine";
+import { randomObjectAction } from "./sim/objectLife";
+import { masterSkill } from "./sim/traveler";
+import { mutateRelation } from "./sim/relations";
+import { useItemOnNpc, useItemOnObject } from "./sim/itemUse";
 import type { BattleState } from "./sim/battle";
 import {
   availableUts,
@@ -179,10 +184,6 @@ export class App {
       case action === "skill":
         this.lastPanelAction = "skill";
         this.ui.showSkills(s);
-        return;
-      case action === "quest":
-        this.lastPanelAction = "quest";
-        this.ui.showQuests(s);
         return;
       case action === "meditate":
         if (this.battle) {
@@ -471,6 +472,82 @@ export class App {
       }
       case action.startsWith("npc-status:"): {
         this.ui.showNpcStatus(action.split(":")[1], s);
+        return;
+      }
+      case action.startsWith("social-menu:"): {
+        const npcId = action.split(":")[1];
+        if (NPCS[npcId]) this.ui.showSocialMenu(npcId, s);
+        return;
+      }
+      case action.startsWith("npc-item:"): {
+        const npcId = action.split(":")[1];
+        if (NPCS[npcId]) this.ui.showNpcItemUse(npcId, s);
+        return;
+      }
+      case action.startsWith("use-item-npc:"): {
+        const parts = action.split(":");
+        const npcId = parts[1];
+        const itemId = parts.slice(2).join(":");
+        if (!NPCS[npcId] || !ITEMS[itemId]) return;
+        const text = useItemOnNpc(s, npcId, itemId);
+        this.ui.showNarrative(text);
+        this.world.showPlayerFloating(text);
+        this.refreshUi();
+        this.ui.showNpcItemUse(npcId, s);
+        return;
+      }
+      case action.startsWith("social-intent:"): {
+        const [, npcId, intent] = action.split(":");
+        if (!NPCS[npcId] || !["talk", "kind", "hostile"].includes(intent)) return;
+        const res = resolveSocialIntent(s, npcId, intent as "talk" | "kind" | "hostile");
+        mutateRelation(s, "player", npcId, res.deltas, res.text.slice(0, 42));
+        releaseLock(s.world, "player", npcId);
+        this.ui.closePanels();
+        this.ui.showNarrative(res.text);
+        this.world.showPlayerFloating(res.text.split("\n")[0]);
+        if (res.battle) {
+          this.startBattle(res.battle, npcId);
+          return;
+        }
+        if (res.panel) {
+          this.dialogNpc = npcId;
+          this.ui.dialogNpc = npcId;
+          this.ui.showDialog([
+            {
+              id: "r",
+              speaker: NPCS[npcId].name,
+              text: res.text,
+              opts: [{ text: "好", action: res.panel === "shop" ? "shop" : res.panel === "learn" ? "learn" : "forge" }]
+            }
+          ]);
+          return;
+        }
+        this.refreshUi();
+        return;
+      }
+      case action.startsWith("npc-initiates:"): {
+        const npcId = action.split(":")[1];
+        if (!NPCS[npcId]) return;
+        const intents = ["talk", "kind", "hostile"] as const;
+        const res = resolveSocialIntent(s, npcId, intents[Math.floor(Math.random() * intents.length)]);
+        mutateRelation(s, "player", npcId, res.deltas, res.text.slice(0, 42));
+        releaseLock(s.world, "player", npcId);
+        if (res.battle && Math.random() < 0.4) {
+          this.ui.closePanels();
+          this.startBattle(res.battle, npcId);
+          return;
+        }
+        this.ui.showNarrative(`${NPCS[npcId].name}走了过来。\n${res.text}`);
+        this.world.showPlayerFloating(res.text.split("\n")[0]);
+        return;
+      }
+      case action.startsWith("master-skill:"): {
+        const id = action.split(":")[1];
+        if (masterSkill(s, id)) {
+          this.toast(`你已通过穿越者天书记住并掌握了「${SKILLS[id].name}」。`);
+        }
+        this.refreshUi();
+        this.ui.showCheat(s);
         return;
       }
       case action.startsWith("romance-menu:"): {
@@ -1018,6 +1095,25 @@ export class App {
         this.refreshUi();
         return;
       }
+      case action.startsWith("env-item:"): {
+        const id = action.split(":")[1];
+        if (ITEMS[id]) this.ui.showEnvTargets(id, s);
+        return;
+      }
+      case action.startsWith("use-item-env:"): {
+        const parts = action.split(":");
+        const itemId = parts[1];
+        const objId = parts.slice(2).join(":");
+        const obj = s.world.dynamicObjects.find((o) => o.id === objId);
+        if (!ITEMS[itemId] || !obj) return;
+        const text = useItemOnObject(s, itemId, obj);
+        this.ui.showNarrative(text);
+        this.world.showPlayerFloating(text);
+        this.world.syncDynamicObjects();
+        this.refreshUi();
+        this.ui.showEnvTargets(itemId, s);
+        return;
+      }
       case action.startsWith("drop:"): {
         const id = action.split(":")[1];
         removeItem(s, id);
@@ -1315,7 +1411,14 @@ export class App {
     const s = this.state;
     if (!s || !this.battle || this.battle.over) return;
     if (kind === "attack") {
-      this.battle.log = [...this.battle.log, ...playerAttack(this.battle, s, qteSuccess)].slice(-60);
+      const b = this.battle;
+      const ults = availableUts(s).filter((u) => u.kind === "attack" && u.cost <= b.player.mp);
+      if (ults.length && Math.random() < 0.45) {
+        const ult = ults[Math.floor(Math.random() * ults.length)];
+        this.battle.log = [...this.battle.log, ...playerUlt(this.battle, s, ult, qteSuccess)].slice(-60);
+      } else {
+        this.battle.log = [...this.battle.log, ...playerAttack(this.battle, s, qteSuccess)].slice(-60);
+      }
     } else if (kind === "ult" && ultId) {
       const ult = availableUts(s).find((u) => u.id === ultId);
       if (ult) this.battle.log = [...this.battle.log, ...playerUlt(this.battle, s, ult, qteSuccess)].slice(-60);
@@ -1515,7 +1618,6 @@ export class App {
         if (lastAction === "status") this.ui.showStatus(this.state);
         else if (lastAction === "bag") this.ui.showBag(this.state);
         else if (lastAction === "skill") this.ui.showSkills(this.state);
-        else if (lastAction === "quest") this.ui.showQuests(this.state);
         else if (lastAction === "storage") this.ui.showStorage(this.state);
         else if (title.includes("买卖")) this.ui.showShop(this.state, this.dialogNpc || "");
         else if (title.includes("授艺")) this.ui.showLearn(this.state, this.dialogNpc || "");
@@ -1567,7 +1669,8 @@ export class App {
 
   // 选择支事件的结算：替换为结果叙述 + 刷新界面
   private eventOut(text: string): void {
-    this.ui.showDialog([{ id: "r", speaker: "奇遇", text, opts: [] }]);
+    this.ui.showNarrative(text);
+    this.world?.showPlayerFloating(text.split("\n")[0]);
     this.refreshUi();
   }
 
@@ -1734,12 +1837,6 @@ export class App {
         this.toast("好感已改。");
         break;
       }
-      case "cheat-skill": {
-        const id = (this.ui.q("#ch-skill") as HTMLSelectElement).value;
-        cheat.cheatSetSkill(s, id, this.inputVal("ch-skill-lv"));
-        this.toast(`「${requireSkill(id).name}」已改为 ${p.skills[id] || 0} 级。`);
-        break;
-      }
       case "cheat-item": {
         const id = (this.ui.q("#ch-item") as HTMLSelectElement).value;
         cheat.cheatAddItem(s, id, this.inputVal("ch-item-n"));
@@ -1759,19 +1856,9 @@ export class App {
         this.toast("你一步跨过了千山万水。");
         break;
       }
-      case "cheat-quest": {
-        const id = (this.ui.q("#ch-quest") as HTMLSelectElement).value;
-        cheat.cheatCompleteQuest(s, id);
-        this.toast("任务已完成。");
-        break;
-      }
       case "cheat-heal":
         cheat.cheatHeal(s);
         this.toast("气血精神尽复。");
-        break;
-      case "cheat-allskills":
-        cheat.cheatAllSkills(s, this.inputVal("ch-all-lv") || 100);
-        this.toast("全部武功已按各自上限设置。");
         break;
       case "cheat-lock":
         this.toast(cheat.cheatToggleLock(s) ? "已开启锁血无敌。" : "已解除锁血。");

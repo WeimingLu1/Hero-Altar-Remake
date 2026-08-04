@@ -6,7 +6,7 @@
 
 - 类型：浏览器 2D 武侠 RPG（横版卷轴探索 + 回合制战斗 + 文字剧情）
 - 风格：程序化像素/Canvas 美术、分层视差、天气与昼夜、水墨纸卷风 DOM 界面
-- 核心循环：探索平安镇与世界 → 战斗/任务/修炼成长 → 拜师学艺 → 除黑主线 → 六块三角石板 → 时空尽头终局
+- 核心循环：探索平安镇与世界 → 随机互动/战斗/修炼成长 → NPC 关系与物品世界演化 → 穿越者天书掌握所见武学
 - 内容规模：约 1.1 万行 TypeScript/CSS；七大派、三十余个区域/房间（14 室外区域 + 19 室内房间）、五十个 NPC、十余场 BOSS 战
 
 ## 快速开始
@@ -42,9 +42,9 @@ npm run balance        # 战斗平衡模拟（scripts/balance-sim.mjs，输出 C
 ├── vite.single.config.ts      # 单文件构建
 ├── src/
 │   ├── main.ts                # 入口：创建 App、挂载致命错误遮罩、暴露 window.__app
-│   ├── style.css              # 全局主题样式（纸卷/暗金/红烛/战斗/作弊器等）
+│   ├── style.css              # 全局主题样式（纸卷/暗金/红烛/战斗/叙事流等）
 │   ├── game/
-│   │   ├── app.ts             # 总控：Phaser 启动、全部 action 分发、存档/战斗/任务/恋爱/作弊入口
+│   │   ├── app.ts             # 总控：Phaser 启动、全部 action 分发、存档/战斗/恋爱/开放世界入口
 │   │   ├── bus.ts             # App 单例访问（避免循环依赖）
 │   │   ├── content/           # 纯数据与文案（尽可能 data-driven）
 │   │   │   ├── types.ts       # 所有内容类型定义（EnemySkillDef 含 mpCost/heal/buff/debuff）
@@ -54,17 +54,19 @@ npm run balance        # 战斗平衡模拟（scripts/balance-sim.mjs，输出 C
 │   │   │   ├── enemies.ts     # 敌人/BOSS（五档 AI 字段）+ 动态生成的切磋敌人（spar-*）
 │   │   │   ├── npcs.ts        # NPC 数据（性别/年龄/容貌/武艺/作息；缺省者按 npcId 哈希确定性生成）
 │   │   │   ├── areas.ts       # 区域与房间地图数据（14 室外区域双向连通 + 19 房间，exits 步行触发区）
-│   │   │   ├── quests.ts      # 任务定义与奖励
+│   │   │   ├── quests.ts      # 旧版任务底料（不再接入玩家 UI）
 │   │   │   ├── romance.ts     # 可攻略角色、礼物、亲密文本
 │   │   │   ├── relations.ts   # NPC 关系网（12 对专属语料 + 六类通用闲聊池）
 │   │   │   ├── story.ts       # 对话树、开场志、结局、传闻（randomRumor 统一出口）
 │   │   ├── sim/               # 模拟层（规则源，不依赖 Phaser 场景）
 │   │   │   ├── state.ts       # GameState / PlayerState 与初始角色
 │   │   │   ├── formulas.ts    # 属性、攻防、上限、学习/打坐公式
-│   │   │   ├── actions.ts     # 物品/修炼/商店/任务/天气/随机事件（四场景 36 条）等
+│   │   │   ├── actions.ts     # 物品/修炼/商店/天气/随机事件（四场景 36 条）等
 │   │   │   ├── battle.ts      # 回合制战斗状态机与事件
-│   │   │   ├── cheat.ts       # 作弊器逻辑
+│   │   │   ├── cheat.ts       # 穿越者天书数值逻辑
 │   │   │   ├── npcLife.ts     # NPC 生活引擎纯逻辑（关系对挑选、语料抽取）
+│   │   │   ├── socialEngine.ts # 三意图社交结果与 1 对 1 互动锁
+│   │   │   ├── objectLife.ts  # NPC-环境物品随机互动（修缮/破坏/复制/挪动）
 │   │   │   ├── save.ts        # localStorage 存档（key: yxts-golden-save）
 │   │   ├── scenes/
 │   │   │   ├── BootScene.ts   # 生成全部贴图，启动 WorldScene
@@ -86,9 +88,9 @@ npm run balance        # 战斗平衡模拟（scripts/balance-sim.mjs，输出 C
 ## 架构边界（重要）
 
 - **模拟层**（`sim/*`）拥有全部规则与可存档状态；Phaser 场景只做渲染与输入适配。
-- **内容层**（`content/*`）是纯数据/文案，新增角色、武功、任务、区域优先改这里。
+- **内容层**（`content/*`）是纯数据/文案，新增角色、武功、世界观碎片、区域优先改这里。
 - **App**（`app.ts`）是唯一 action 分发中心，DOM 按钮只发字符串 action（如 `use:jinchuang`、`quest-advance:qMain:1`）。
-- **DOM 覆盖层**（`UIManager`）负责对话、面板、战斗菜单、作弊器、亲密演出；Canvas 负责世界与战斗动画。
+- **DOM 覆盖层**（`UIManager`）负责对话、面板、战斗菜单、穿越者天书、叙事流、亲密演出；Canvas 负责世界与战斗动画。
 - 场景之间不直接传状态；世界切换用 `game.scene.start("World")`，`WorldScene.create()` 会调 `app.world.refresh()` 重新渲染当前区域。
 
 ## 视觉与美术（Phase 3 重制）
@@ -146,8 +148,8 @@ npm run balance        # 战斗平衡模拟（scripts/balance-sim.mjs，输出 C
 
 ## 修炼与成长
 
-- 潜能：战斗、任务、随机事件获得，用于学艺与打坐。
-- 经验：战斗、任务获得，是高级武功与主线进度的门槛。
+- 潜能：战斗、随机事件、穿越者天书调整获得，用于学艺与打坐。
+- 经验：战斗与随机事件获得，是高级武功与江湖成长的门槛。
 - 学艺曲线：`learnCost = Σ(l+2)^1.55 × factor / (1+悟性×0.012)`（门派 factor 0.5、基本 0.35、读书 1.6）；门派武功 0→100 级约 2.5 万潜能（悟性 0 时），100→150 再加约 4.5 万。
 - 读书识字：每 10 级 +2% 战斗领悟率（`gainExpForSkill`，上限 +20%），另加悟性。
 - 打坐（键 5）：消耗潜能提升内力强度并缓慢恢复；客栈“闭关七日”（50 两）可快速推进时间与年龄。
@@ -166,7 +168,7 @@ npm run balance        # 战斗平衡模拟（scripts/balance-sim.mjs，输出 C
 - 购买装备自动入持有列表并装备；铁匠铺可打造自定义命名兵器（铁矿石/玄铁），可随时装卸。
 - 存档会迁移 `weaponsOwned/armorsOwned/accessoriesOwned/forgeEquipped` 等字段。
 
-## 任务
+## 任务（旧版底料，已不接入玩家 UI）
 
 - 主线 `qMain`：采药 → 读书 → 除恶霸 → 青龙坛地图 → 破黑风寨/冷铁衣 → 密信 → 六块石板 → 时空尽头终局（我是谁/道德和尚/东方求败 三选一）。
 - 支线：`qYigong`（婆婆义工）、`qXunWu`（马大哈寻物）、`qChuE`（捕快除恶，可重复）、`qSha`（平一指杀人，可重复）、`qBeiFang`（村长拜访）、`qTieJiang`（玄铁难求）。
@@ -196,39 +198,115 @@ npm run balance        # 战斗平衡模拟（scripts/balance-sim.mjs，输出 C
 - 人物状态「情缘录」记录共度良宵/一夜偷香/好感/次数，点击名字可查看 NPC 人物志；人物志会按关系追加随机文案（romance.ts `randomRelationshipStatus`）。
 - 结婚须 ≥18 岁（月下老人牵线，`marry` action）。
 
+## 开放世界框架（无任务）
+
+- 玩家可见任务系统已移除：无任务面板/按键/奖励路径；旧任务文案作为世界观底料保留在 story.ts/lore 类数据中，随机进入对话与传闻。
+- 世界状态存 `GameState.world`：`npcRelations`（多对多关系网络）、`dynamicObjects`、`interactionLocks`、`objectHistory`、`seed`；存档 v3 持久化。
+- 关系维度：`friendliness`（-100~100）、`respect`（-100~100）、`love`（0~100）、`trust`（0~100）；玩家与 NPC 平级，键 `"player"`。
+- NPC 互动菜单只有三意图：对话/善意/敌意，统一走 `sim/socialEngine.ts` 的 `resolveSocialIntent`；商店、学艺、疗伤、切磋等作为随机结果出现。
+- NPC 互动菜单额外提供「查看NPC状态」，直接打开 `showNpcStatus`。
+- 敌意按概率演化：基础开战概率低，`flags["hostile-<npcId>"]` 累计挑衅次数、关系友好度越低，开战概率越高；多数敌意结果为口角/威胁文案。
+- NPC 会主动对玩家发起互动（`npc-initiates:<npcId>`），也会随机对环境物品执行修缮/破坏/复制/挪动/使用（`sim/objectLife.ts`）。
+- NPC 位置随机化：房间 NPC 可能外出进入当前区域，异区域无房间 NPC 也可能作为访客出现；`renderArea` 在正常 NPC 之外追加随机出现者。
+- NPC 跨图迁移由 `sim/npcTravel.ts` 提供确定性位置：`npcLocation(npcId, day, hour)` 返回区域/房间/坐标，`renderArea` 按当前位置渲染所有应在该区域的 NPC。
+- NPC 作息调度在 `sim/npcSchedule.ts`：工作日 9-16 `atWork` 固定岗位，非工作时间和周末 `shouldBeOut` 用 `npcId+day+hour` 哈希确定性判断是否外出；周末跨图访客概率更高。
+- NPC 之间会随机爆发可见的 1 对 1 战斗：头顶气泡逐条展示招式/命中/收场（复用 story.ts 战斗文案），多组可同时发生，受 `interactionLocks` 保护。
+- 所有 1 对 1 互动使用 `interactionLocks`：NPC-NPC、NPC-玩家、NPC-物品同一套锁；被锁主体不会参与其他互动。
+- 所有叙事文字走 `UIManager.showNarrative` 打字机大字流，留存最近 8 条。
+- 所有事件同时通过 `WorldScene.showFloatingText/showPlayerFloating/showNpcFloating` 在主体头顶悬浮展示，字号统一 16px。
+- 玩家对话、NPC 互聊、随机事件结算统一走 `UIManager.showNarrative` 叙事流；`App.eventOut` 不再单独弹奇遇对话框。
+- `world.npcLogs` 记录每个 NPC 的江湖日志；社交、互斗、物品事件会写入相关 NPC，人物志展示最近 6 条。
+- 每个 NPC 的独门招式与随身物品由 `npcMoves/npcBelongings` 确定性分配；互斗文案会引用独门招式，人物志展示招式和物品。
+- 战斗自动触发已掌握武学 + QTE；敌方技能写入 `observedSkills`，穿越者天书可瞬间掌握。
+- 穿越者天书只能掌握已经见过的武学；未见过、未记入 `observedSkills` 的武功不能直接修改等级。
+
+### 世界逻辑细节
+
+#### 状态字段
+
+- `world.npcRelations`：`Record<npcId, Record<npcId, NpcRelationState>>`，对称写入同一对象；玩家键固定 `"player"`。
+- `world.dynamicObjects`：花草/灌木/石头/药草等，字段含 `integrity/growth/quantity/size/tint/history`。
+- `world.interactionLocks`：`entityId -> { partner, kind, until }`，`Date.now()` 过期后自动视为可互动。
+- `world.objectHistory`：环境事件叙事记录，最多在界面展示最近若干条。
+- `world.areaVariations`：区域随机色调与演化标记，读档后继续保留。
+
+#### 关系变更规则
+
+- 每次社交结果调用 `mutateRelation`，四维分别 clamp：友好/敬畏 ±100，爱意/信任 0-100。
+- 同一对关系在 `npcRelations[a][b]` 与 `npcRelations[b][a]` 引用同一对象，避免不同步。
+- NPC-NPC 闲聊、NPC 互斗、玩家三意图、NPC-物品互动都会触发关系变更。
+
+#### 敌意概率
+
+- `flags["hostile-<npcId>"]` 记录连续挑衅次数。
+- 开战概率 = 基础值（普通 NPC 8%、master/enemy 14%）+ 挑衅次数 × 10% + `max(0, -friendliness) × 0.2%`，上限 70%。
+- 未开战的敌意输出口角/威胁文案并 +1 挑衅次数；真的开战后清空该 flag。
+
+#### 对话生成管线
+
+- `sim/dialogEngine.ts` 输入 `npcId + GameState + intent`，输出 3 条槽位化文案。
+- 槽位：`{name}`、`{title}`、`{relation}`、`{weather}`、`{lore}`。
+- `content/lore.ts` 提供世界观碎片；`sim/socialEngine.ts` 负责把对话结果转成关系变化、战斗或面板动作。
+
+#### NPC 互斗
+
+- `WorldScene.npcFights` 可同时存在多组；每个 NPC 受 `interactionLocks` 保护。
+- 斗殴开始条件：关系 `friendliness < -20`，或小概率随机冲突；`tryLock` 成功才开演。
+- 头顶气泡按 1.25 秒/条展示招式、命中、收场；结束后关系继续恶化并释放锁。
+
+#### 环境物品
+
+- 物品行动池：`repair / destroy / copy / move / use`。
+- 修缮提升 `integrity/growth/size`；破坏降低，归零后移除；复制生成副本并 `quantity + 1`；挪动改变位置；使用轻微影响生长。
+- `objectLife.ts` 负责物品状态变更，`WorldScene.renderDynamicObjects` 把状态映射为尺寸/颜色/透明度。
+- 玩家物品对环境使用走 `sim/itemUse.ts`：背包任意物品可投向当前区域动态对象，按物品类型随机改变 `growth/integrity/quantity/size/tint` 并输出文案。
+- `useItemOnNpc` 支持把背包物品交给 NPC，按类型随机回应并写入关系与日志；入口为 NPC 互动菜单「使用物品」。
+
+#### NPC 日志与开场
+
+- `mutateRelation` 会把互动事件写入双方 `npcLogs`，上限 24 条。
+- NPC 互斗收场、NPC 对物品操作也会写入 `npcLogs`。
+- 新角色首次进入世界先看到「穿越者天书」开场介绍，`flags["intro-traveler"]` 标记后不再重复。
+
+#### 叙事流
+
+- `UIManager.showNarrative(text)` 追加一条打字机条目，每 24ms 打一个字符。
+- 条目 11 秒后淡出，14.5 秒后移除；容器最多保留 8 条。
+
 ## 世界地图与舆图（Phase 4）
 
 - 世界连接图（全部双向可达，areas.ts exits）：
   `武当山 ←→ 平安镇 ←→ 商家堡 ←→ 官道 ←┬→ 百花谷 ├→ 五指山 ├→ 莲花山 └→ 渡口 →（摆渡）→ 冰火岛`；镇内「后山入口」步行入后山；后山 ├→ 大雪山 ├→ 黑风寨（门槛）└→ 无名石窟（cave 主题）；时空尽头仅舆图进入（`endOpen` 机制不变）。
-- **进入门槛**（`travelTo` 统一检查，被拦返回文案并留在原地）：黑风寨需背包有 `qingLongTu`（青龙坛地图，qMain 第 4 阶段奖励）；石窟深处裂缝（`crack` action）需基本轻功 ≥30，深处内容留给 Phase 5（云中鹤巢穴）。
+- **进入门槛**（`travelTo` 统一检查，被拦返回文案并留在原地）：黑风寨需背包有 `qingLongTu`（旧版主线奖励，现作为可收集底料）；石窟深处裂缝（`crack` action）需基本轻功 ≥30，深处内容为预留彩蛋。
 - **已知区域**：`flags["known-areas"]: string[]`，初始 `[town, houshan, wudang, shangjia]`；`travelTo` 成功进入即记入（作弊瞬移 `cheatTeleport` 绕过 travelTo，不记入）。旧档缺省时 `fillDefaults` 补默认四区域 + 当前所在区域。
 - **舆图界面**（UIManager.showTravel，DOM + inline SVG，viewBox 860×460）：羊皮纸底 + 程序化山川/河流/树林/海岸线；已知=墨点+名称（可点击传送，hover 金光），未知=灰点「???」，当前所在=红点+小红旗；两端都已知的连接画虚线路径；节点/路径布局常量在文件末尾 `MAP_POS/MAP_EDGES/MAP_DECOR`。
 - 传送规则：仅 known-areas 内区域可传送（end 额外需 `endOpen`），未知区域在 App `travel:` action 拦阻；顶部小字「足迹所至，方入舆图」。
-- 主线目标指引：`mainQuestTarget` 按 qMain stage 返回目标区域（0-2 镇/后山、3 镇、4-5 黑风寨、6 首个未击败持板掌门所在区域、7 镇、8+ 时空尽头），在对应节点画金色光圈脉动（`.map-pulse` CSS 动画）。
+- 旧版主线目标指引 `mainQuestTarget` 已不用于开放世界；若仍渲染金色光圈，属旧版遗留逻辑。
 - cave 主题渲染：WorldScene `caveMode` 恒暗（不随时辰变色温、无日月星云），远中近景按暗色调、地面装饰为灰紫石笋 + 火把光晕呼吸；`rollWeather` 把 cave 归入 dark/cloud 分支（不下雨雪）。
 
 ## 世界活性
 
 - 天气：晴/雨/雪/雾/风（雨 10% 升级雷雨），随机变化，切换时粒子 1 秒淡入淡出；雨落地溅射、雪斜落、雾分前后两层、风按区域主题吹不同粒子；HUD 天气格带图标（☀️🌧️❄️🌫️💨⛈️）。天气罩按昼夜浓度动态变色：雨天夜里更沉、雪天夜里更冷、雾天夜里更浓。
-- 昼夜：全天色温关键帧渐变（daynight.ts），日月按弧线运行、夜晚星空闪烁、建筑窗灯与门口灯笼亮起；NPC 作息（小乞丐 6-21 时夜里回破庙、阿绣 5-22 时夜里回屋、挑夫 6-18 时、说书人 19-23 时；任务/商店关键 NPC 一律不加作息）。
+- 昼夜：全天色温关键帧渐变（daynight.ts），日月按弧线运行、夜晚星空闪烁、建筑窗灯与门口灯笼亮起；NPC 作息（小乞丐 6-21 时夜里回破庙、阿绣 5-22 时夜里回屋、挑夫 6-18 时、说书人 19-23 时；商店/功能关键 NPC 一律不加作息）。
 - **NPC 生活引擎**（content/relations.ts + sim/npcLife.ts + WorldScene 接线）：每 25-45 秒从当前区域/房间**在场且同屏**（|Δx|<500）的 NPC 中挑一对有关系的演出——互相走近至相距 60px → 轮流头顶冒气泡（emoji 大字号 + 短句，每条 1.6 秒，2-3 来回）→ 各自归位。语料 75% 取该对专属、25% 取 kind 通用池（couple/master/neighbor/rival/friend/trade 各 6 组），并按情境插入：雨雪雾风吐槽、夜晚寒暄、冷铁衣已除后的主线传闻。演出期间暂停单人闲聊气泡；同一对 10 分钟冷却（lifeCooldowns，按 this.time.now 真实时间）；玩家全程在互动中点 300px 内看完，10% 概率得一条传闻 toast（👂 你无意间听到……）。气泡用完即 destroy，`cleanup()` 中止演出防泄漏。12 对关系全部同区域/同房间且站位可达（为此微调了站位：挑夫 820→780、小乞丐 1850→1100、九袋长老 980→760、苍月 1160→640、神秘人 3150→3080）。
 - **随机事件**（actions.ts，四场景）：投宿/闭关 30%、旅行 20%（travelTo 成功即掷，含舆图传送与步行出口）、打坐收功（满 8 秒）15%；统一入口 `App.maybeEvent(scene)`——先掷选择支（约占触发 15%，走 ui.showDialog 的「奇遇」对话，选项发 `event-*` action 在 App 结算奖惩），否则掷文本事件（31 条，按场景/天气/夜间过滤后加权抽取，toast 输出并刷新 HUD）。选择支 5 个：老乞婆施舍（善恶，10% 回赠残页）、神药商贩（40% 真大还丹/60% 假药）、醉汉比武（输赢各半）、寒夜书生（仅夜间旅行）、货郎藏宝图（30% 真货）。
 - **传闻体系**：统一出口 story.ts 的 `randomRumor(s?)`——常识 12 条 + 区域 28 条（14 区域各 2 条）+ 状态感知 9 组（周三已除/冷铁衣已除/云中鹤已除/石板 ≥1/≥3/善恶 ≤-20/≥60/已婚/主线完成），不传 state 只出常识池；闲聊气泡与开场志都传 state。app.ts 旧 randomRumorText 已删除。
 - 地图收集物：金银光点/药草随机刷新，拾取提示，40 秒后易位重刷。
 - NPC 头顶随机闲聊气泡（randomRumor(s)，生活演出期间暂停）；区域首次进入有“开场志”文案。
 
-## 作弊器（F8）
+## 穿越者天书（F8）
 
-- 可改：四项天赋、银两、潜能、经验、善恶、内力强度、年龄、气血、内力、饥饱、口渴、中毒、容貌、日期时辰、天气、性别、门派、宅邸、好感、物品数量、单门或全部武功；另支持瞬移、完成任务、锁血无敌、经典黑白模式（`YOBDC` 创建名可解锁并送资源）。
+- 可改：四项天赋、银两、潜能、经验、善恶、内力强度、年龄、气血、内力、饥饱、口渴、中毒、容貌、日期时辰、天气、性别、门派、宅邸、好感、物品数量、单门或全部武功；另支持瞬移、锁血无敌、经典黑白模式（`YOBDC` 创建名可解锁并送资源）。
+- 新增「所见武学」：战斗/事件观察到的武学自动记录，可瞬间掌握到该武学上限。
 - 所有数值按江湖上限截断：天赋 10-60、善恶 ±100、内力强度 0-999、年龄 14-99、物品 0-999、气血/内力按公式上限、武功按各自 `max`。
 - 作弊面板按钮必须 `bindPanelActions`；输入框带 id，取值用 `App.inputVal`（面板未打开时安全返回 0）。
 
 ## 存档
 
 - `localStorage` key：`yxts-golden-save`；槽位 0 为自动存档，1-3 为手动。
-- 存档版本：当前 v2（`newGame` 写入 `version`）。`loadGame` 经 `migrate` 管线逐级迁移（v1→v2：旧字段 `axiuLiking` 并入 `affections.axiu` 取较大值），再用 `fillDefaults` 补全缺省字段（任务、flags、装备列表、好感、天气、门口位置、存物柜 storage 等）。
+- 存档版本：当前 v3（`newGame` 写入 `version`）。v1→v2 迁移 `axiuLiking`；v2→v3 新增 `world`/`observedSkills`/关系网络，并用 `fillDefaults` 补全缺省字段。
 - 存档 JSON 损坏时：原始串备份到 `yxts-golden-save.corrupt`，置 `hadCorruptSave`，App 启动 toast 提示后按空档处理。
-- 阿绣好感只存 `affections.axiu`，不要再引入独立字段。
+- 阿绣好感保留在 `affections.axiu` 供旧界面兼容，新关系系统统一走 `world.npcRelations["player"]["axiu"]`。
 - 舆图已知区域只存 `flags["known-areas"]`（string[]），缺省由 `fillDefaults` 补默认四区域 + 当前区域，加新区域无需迁移。
 - 角色死亡：回平安镇镇口，银两减半、潜能损失三成、有效气血减半（仅 battle.syncBack 一处执行）；切磋死亡无惩罚。
 
@@ -236,8 +314,8 @@ npm run balance        # 战斗平衡模拟（scripts/balance-sim.mjs，输出 C
 
 - 移动：方向键 / A D；W 进入房间
 - 交互：E 或回车；打开舆图：M（或底部“舆图”按钮，任意地点可用；Esc/面板按钮关闭；只能传送到已知区域）
-- 菜单：1 状态 / 2 背包·穿戴 / 3 武功 / 4 任务 / 5 打坐 / 6 存档 / M 舆图 / F8 作弊器
-- 对话里通用按钮：切磋武艺、查看状态、送礼/谈心/亲近（成人向）、偷香（成年一夜风流）
+- 菜单：1 状态 / 2 背包·穿戴 / 3 武功 / 5 打坐 / 6 存档 / M 舆图 / F8 穿越者天书
+- NPC 互动按钮：对话 / 善意 / 敌意（商店、学艺、疗伤、切磋、亲密作为随机结果出现）
 
 ## 开发约定
 

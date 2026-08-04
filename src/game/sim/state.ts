@@ -11,6 +11,47 @@ export interface QuestProgress {
   repeat: number;
 }
 
+export interface NpcRelationState {
+  friendliness: number; // -100 敌对 .. 100 友好
+  respect: number; // -100 轻视 .. 100 敬畏
+  love: number; // 0..100
+  trust: number; // 0..100
+  meetings: number;
+  lastEvent: string;
+  lastDay: number;
+}
+
+export interface DynamicObjectState {
+  id: string;
+  kind: string;
+  x: number;
+  y: number;
+  area: string;
+  room: string | null;
+  integrity: number;
+  growth: number;
+  quantity: number;
+  size: number;
+  tint: string;
+  history: string[];
+}
+
+export interface InteractionLock {
+  partner: string;
+  kind: string;
+  until: number;
+}
+
+export interface WorldState {
+  npcRelations: Record<string, Record<string, NpcRelationState>>;
+  dynamicObjects: DynamicObjectState[];
+  interactionLocks: Record<string, InteractionLock>;
+  objectHistory: string[];
+  areaVariations: Record<string, { variation: number; tint: string }>;
+  npcLogs: Record<string, string[]>;
+  seed: number;
+}
+
 export interface PlayerState {
   name: string;
   gender: "male" | "female";
@@ -54,6 +95,8 @@ export interface PlayerState {
   affections: Record<string, number>;
   lastIntimacyDay: number;
   titles: string[];
+  observedSkills: string[];
+  bookNotes: string[];
   quests: Record<string, QuestProgress>;
   task: {
     popoWater: number;
@@ -71,8 +114,43 @@ export interface PlayerState {
 export interface GameState {
   version: number;
   player: PlayerState;
+  world: WorldState;
   createdAt: number;
   savedAt?: number; // 最近一次写入存档槽位的时间戳
+}
+
+export function createWorld(seed = Date.now()): WorldState {
+  return {
+    npcRelations: {},
+    dynamicObjects: [],
+    interactionLocks: {},
+    objectHistory: [],
+    areaVariations: {},
+    npcLogs: {},
+    seed
+  };
+}
+
+export function relationKey(a: string, b: string): string {
+  return [a, b].sort().join("|");
+}
+
+export function getRelation(world: WorldState, a: string, b: string): NpcRelationState {
+  const row = (world.npcRelations[a] ||= {});
+  if (!row[b]) {
+    row[b] = {
+      friendliness: 0,
+      respect: 0,
+      love: 0,
+      trust: 0,
+      meetings: 0,
+      lastEvent: "",
+      lastDay: 0
+    };
+    const back = (world.npcRelations[b] ||= {});
+    back[a] = row[b];
+  }
+  return row[b];
 }
 
 export function rollAttrs(): Attrs {
@@ -143,6 +221,8 @@ export function createPlayer(name: string, gender: "male" | "female", attrs: Att
     affections: {},
     lastIntimacyDay: 0,
     titles: [],
+    observedSkills: [],
+    bookNotes: [],
     quests: {},
     task: { popoWater: 0, popoChop: 0, popoSweep: 0, visits: 0 },
     flags: { "known-areas": ["town", "houshan", "wudang", "shangjia"] },
@@ -155,8 +235,9 @@ export function createPlayer(name: string, gender: "male" | "female", attrs: Att
 
 export function newGame(name: string, gender: "male" | "female", attrs: Attrs): GameState {
   return {
-    version: 2,
+    version: 3,
     player: createPlayer(name, gender, attrs),
+    world: createWorld(Date.now()),
     createdAt: Date.now()
   };
 }

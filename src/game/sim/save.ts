@@ -1,11 +1,11 @@
-import type { GameState } from "./state";
+import { createWorld, getRelation, type GameState } from "./state";
 import { AREAS } from "../content/areas";
 
 const KEY = "yxts-golden-save";
 const CORRUPT_KEY = "yxts-golden-save.corrupt";
 
 // 当前存档版本；旧档读取时经 migrate 逐级迁移
-export const SAVE_VERSION = 2;
+export const SAVE_VERSION = 3;
 
 // 启动时可读：最近一次读取存档时是否发现过损坏数据（损坏串已隔离备份）
 export let hadCorruptSave = false;
@@ -71,6 +71,7 @@ function readAll(): Record<string, GameState> {
 function migrate(s: GameState): GameState {
   const v = s.version || 1;
   if (v < 2) migrateV1toV2(s);
+  if (v < 3) migrateV2toV3(s);
   s.version = SAVE_VERSION;
   fillDefaults(s);
   return s;
@@ -83,6 +84,19 @@ function migrateV1toV2(s: GameState): void {
   if (typeof p.axiuLiking === "number") {
     p.affections.axiu = Math.max(p.affections.axiu || 0, p.axiuLiking);
     delete p.axiuLiking;
+  }
+}
+
+// v2 → v3：穿越者天书/开放世界状态；旧好感并入关系网络
+function migrateV2toV3(s: GameState): void {
+  const p = s.player;
+  p.observedSkills = p.observedSkills || [];
+  p.bookNotes = p.bookNotes || [];
+  if (!s.world) s.world = createWorld(s.createdAt || Date.now());
+  for (const [npcId, love] of Object.entries(p.affections || {})) {
+    const rel = getRelation(s.world, "player", npcId);
+    rel.love = Math.max(rel.love, Math.round(love));
+    rel.friendliness = Math.max(rel.friendliness, Math.round((love - 50) / 2));
   }
 }
 
@@ -101,6 +115,15 @@ function fillDefaults(s: GameState): void {
   if (!s.player.affections) s.player.affections = {};
   if (!s.player.lastIntimacyDay) s.player.lastIntimacyDay = 0;
   if (!s.player.titles) s.player.titles = [];
+  if (!s.player.observedSkills) s.player.observedSkills = [];
+  if (!s.player.bookNotes) s.player.bookNotes = [];
+  if (!s.world) s.world = createWorld(s.createdAt || Date.now());
+  if (!s.world.npcRelations) s.world.npcRelations = {};
+  if (!s.world.dynamicObjects) s.world.dynamicObjects = [];
+  if (!s.world.interactionLocks) s.world.interactionLocks = {};
+  if (!s.world.objectHistory) s.world.objectHistory = [];
+  if (!s.world.areaVariations) s.world.areaVariations = {};
+  if (!s.world.npcLogs) s.world.npcLogs = {};
   // 旧版偷香恶行线已移除，老档里的玩家称号一并清理
   s.player.titles = s.player.titles.filter((t) => t !== "采花大盗");
   if (s.player.weapon && !s.player.weaponsOwned.includes(s.player.weapon)) s.player.weaponsOwned.push(s.player.weapon);

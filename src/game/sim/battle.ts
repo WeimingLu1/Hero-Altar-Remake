@@ -31,6 +31,7 @@ import {
 } from "./formulas";
 import type { GameState } from "./state";
 import { applyNpcDrops, getRewards } from "./actions";
+import { observeSkillName } from "./traveler";
 
 export interface Buff {
   stat: "atk" | "def" | "spd" | "dodge" | "parry";
@@ -647,6 +648,7 @@ function enemyTurn(b: BattleState, s: GameState): BattleEvent[] {
   if (skill) {
     e.mp = Math.max(0, e.mp - (skill.mpCost || 0));
     events.push({ kind: "move", side: "enemy", text: skill.text, ultName: skill.name });
+    observeSkillName(s, skill.name);
     if (skill.heal) {
       const amt = Math.max(1, Math.floor(e.maxHp * skill.heal));
       e.hp = Math.min(e.maxHp, e.hp + amt);

@@ -1,4 +1,5 @@
 import type { NpcDef } from "./types";
+import { ITEMS } from "./items";
 
 export const NPCS: Record<string, NpcDef> = {
   laozhe: {
@@ -640,6 +641,39 @@ export const NPCS: Record<string, NpcDef> = {
     desc: "花讽院的年轻学徒，东瀛话说得比中原话顺，正在努力学说中原话，努力得让人心疼。"
   }
 };
+
+const MOVE_POOL = [
+  "落英掌", "清风剑", "断水刀", "碎玉拳", "游龙鞭", "撼山杖", "穿云指", "伏虎爪",
+  "惊鸿步", "回风拂柳", "寒梅三弄", "孤雁回巢", "金蛇缠丝", "破军一击", "白鹤亮翅",
+  "黑虎掏心", "灵猿摘果", "苍鹰扑兔", "野马分鬃", "云手三叠", "单鞭救主", "十字手",
+  "玉女穿梭", "揽雀尾", "如封似闭", "抱虎归山", "手挥琵琶", "进步搬拦锤", "左蹬脚",
+  "双峰贯耳", "闪通背", "海底针", "扇通背", "转身撇身捶", "高探马", "斜飞式",
+  "金鸡独立", "倒卷肱", "青龙出水", "旋风扫叶", "燕子抄水", "夜叉探海", "罗汉撞钟",
+  "韦陀献杵", "金刚伏魔", "拈花指", "大摔碑手", "小擒拿", "缠丝劲", "震山靠",
+  "追风逐月", "踏雪无痕", "寒江独钓", "月下听箫", "竹影横斜", "一苇渡江", "袖里乾坤",
+  "乾坤一掷", "无影脚", "碎星斩"
+];
+
+function hashNpcId(id: string): number {
+  let h = 0;
+  for (let i = 0; i < id.length; i++) h = ((h << 5) - h + id.charCodeAt(i)) | 0;
+  return h >>> 0;
+}
+
+export function npcMoves(npcId: string): string[] {
+  const n = NPCS[npcId];
+  if (n?.moves?.length) return n.moves;
+  const h = hashNpcId(npcId);
+  const a = MOVE_POOL[h % MOVE_POOL.length];
+  const b = MOVE_POOL[Math.floor(h / 7) % MOVE_POOL.length];
+  return a === b ? [a, MOVE_POOL[(h + 11) % MOVE_POOL.length]] : [a, b];
+}
+
+export function npcBelongings(npcId: string): string[] {
+  return npcDrops(npcId)
+    .slice(0, 3)
+    .map((d) => ITEMS[d.item]?.name || d.item);
+}
 
 const FEMALE_NPC = new Set(["axiu", "tangWanCi", "liQingZhao", "funv"]);
 

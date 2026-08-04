@@ -1462,7 +1462,15 @@ const TALK_FLAVOR = [
   "你笑起来的时候，天上的云都挪开了。",
   "这话我只对你一个人说，别传出去。",
   "跟你说话，我连喝水都忘了。",
-  "要是每天都能这样聊两句，日子就有盼头了。"
+  "要是每天都能这样聊两句，日子就有盼头了。",
+  "你这一来，我心里那点烦闷倒散了大半。",
+  "有些话不说出口，是因为说出口就轻了。",
+  "我这辈子见过许多人，像你这样肯听人说话的，不多。",
+  "江湖上风大，能坐下来好好说话的人，更难寻。",
+  "你方才那句话，我想了一路。",
+  "跟你说话，时间过得比马蹄还快。",
+  "往后你若来，我便给你留一盏灯。",
+  "你问的这些，倒让我想起很多年前的事了。"
 ];
 
 const PARTNER_TALK = [
@@ -2061,6 +2069,39 @@ const NPC_TALK: Record<string, string[]> = {
   ]
 };
 
+const NPC_REPLY_COMMON = [
+  "倒也是。",
+  "你这话，倒让我想起一个人。",
+  "江湖大了，什么事都有可能。",
+  "这话我只当没听见。",
+  "你说是就是吧。",
+  "有意思。",
+  "改日再说吧。",
+  "这事儿，说来话长。",
+  "你我还算有些交情，我才多说一句。",
+  "哼，你爱信不信。",
+  "雨要来了，你也早些走吧。",
+  "这世道，能站着说话就是福气。",
+  "说来说去，还是吃饭要紧。",
+  "我劝你，别把话说得太满。",
+  "都是些陈年旧账了。",
+  "你说得轻巧，做起来难。",
+  "行吧，随你怎么想。",
+  "这话听着新鲜。",
+  "要是人人都这么想，江湖就太平了。",
+  "你记住今天这句话，日后自见分晓。"
+];
+
+export function randomNpcLine(npcId: string): string {
+  const pool = NPC_TALK[npcId] || CHAT_FLAVOR;
+  return "「" + pickText(pool) + "」";
+}
+
+export function randomNpcReply(npcId: string): string {
+  const pool = [...(NPC_TALK[npcId] || []), ...NPC_REPLY_COMMON];
+  return "「" + pickText(pool) + "」";
+}
+
 // 该 NPC 是否带任务相关对话：任务发布者、掌门、主线关键角色会标记
 export function isQuestNpc(npcId: string, s?: GameState): boolean {
   const n = NPCS[npcId];
@@ -2302,6 +2343,46 @@ const INTIMACY_QTE_FAIL = [
   "你慢了半拍，对方没忍住，先自己笑弯了腰。"
 ];
 
+const NPC_FIGHT_MOVES = [
+  "抢步上前，拳风带起一片尘土。",
+  "手腕一翻，刀光如一道冷月横切而出。",
+  "脚尖一点，身形贴着地面滑向侧翼。",
+  "低喝一声，双臂轮转，攻势如潮水压来。",
+  "借着转身之势，反手一击直取要害。",
+  "脚步交错，连踏三步，招招不离对手咽喉。",
+  "一记鞭腿扫向下盘，逼得对手连连后退。",
+  "身形一矮，像猎豹般扑出，双手直取双腿。",
+  "吐气开声，一招朴实无华，却带着千斤力道。",
+  "衣袂破风，腾身而起，凌空一击当头压下。",
+  "侧身避过视线，反手一刀已无声递到。",
+  "双臂一震，内息激荡，四周尘土纷纷扬起。",
+  "脚下扬起沙尘，借着尘势掩杀而来。",
+  "以守为攻，先让了半招，再借力打力反击回去。",
+  "招式未老已变，虚虚实实叫人难辨。"
+];
+
+const NPC_FIGHT_HITS = [
+  "这一下正中肩头，对方闷哼一声，连退两步。",
+  "拳风擦过脸颊，带起一缕血线。",
+  "对方格挡不及，胸前门户大开，硬吃了这一记。",
+  "一记重击落在肋下，对方脸色顿时白了。",
+  "这一招来得又快又狠，对方险些栽倒。",
+  "刀锋掠过衣袖，布片与血珠一同飞起。",
+  "对方被震得手臂发麻，兵器几乎脱手。",
+  "这一脚正踹在膝弯，对方单膝跪地。",
+  "对方避开了要害，却被余劲扫得踉跄。",
+  "一击得手，对方嘴角渗出血丝，眼神却更狠了。"
+];
+
+const NPC_FIGHT_OUTCOMES = [
+  "{winner}收招而立，冷冷道：「今日到此为止。」",
+  "{loser}捂着伤处退开，眼里满是不甘，却终究没有再上前。",
+  "围观的人屏住呼吸，直到{winner}转身走开，才敢喘气。",
+  "{loser}吐出一口血沫：「这次是我输了，记下了。」",
+  "{winner}把兵器插回腰间，像什么都没发生过一样走远。",
+  "这场架来得快，去得也快；地上只多了几道脚印和一摊血。"
+];
+
 export function randomIntimacyPlayerMove(name: string): string {
   const line = pickText(INTIMACY_PLAYER_MOVES);
   return Math.random() < 0.4 ? `${name}的气息近在咫尺，` + line : line;
@@ -2335,6 +2416,18 @@ export function randomIntimacyText(pool: "dodgePlayer" | "dodgeEnemy" | "openPla
   return pickText(pools[pool] || INTIMACY_PLAYER_MOVES);
 }
 
+export function randomNpcFightMove(name: string): string {
+  return `${name}${pickText(NPC_FIGHT_MOVES)}`;
+}
+
+export function randomNpcFightHit(name: string): string {
+  return `${name}的攻势破空而至——${pickText(NPC_FIGHT_HITS)}`;
+}
+
+export function randomNpcFightOutcome(winner: string, loser: string): string {
+  return pickText(NPC_FIGHT_OUTCOMES).replace(/\{winner\}/g, winner).replace(/\{loser\}/g, loser);
+}
+
 const PLAYER_MOVE_TEXTS = [
   "你足下生风，抢入中宫，拳影如雨点般洒落。",
   "你沉肩坠肘，气息一沉，身子已贴着地面滑到对方身前。",
@@ -2353,7 +2446,15 @@ const PLAYER_MOVE_TEXTS = [
   "你抖腕震臂，把一路招式使得连绵不断，如水银泻地。",
   "你趁风沙迷眼的一瞬欺近，拳风直取咽喉。",
   "你以守为攻，先让了半招，再借力打力反击回去。",
-  "你身随心动，眨眼间已连换三个方位，招式飘忽如影。"
+  "你身随心动，眨眼间已连换三个方位，招式飘忽如影。",
+  "你足下踏出七星步，招招不离对方胁下。",
+  "你内力灌入四肢，脚下青砖都裂出细纹，随即一掠而上。",
+  "你抖腕震臂，把一路招式使得连绵不断，如水银泻地。",
+  "你趁风沙迷眼的一瞬欺近，拳风直取咽喉。",
+  "你以守为攻，先让了半招，再借力打力反击回去。",
+  "你长吸一口气，拳脚齐出，衣角带起一片尘烟。",
+  "你借着转身之力，招式像泼出去的水，收都收不住。",
+  "你心中默数三息，等到对方旧力已尽，才猛地发难。"
 ];
 
 const ENEMY_MOVE_TEXTS = [
@@ -2374,7 +2475,15 @@ const ENEMY_MOVE_TEXTS = [
   "对方身形一矮，像豹子般窜出，双手直取你双腿。",
   "对方借着退势忽然反扑，刀锋几乎擦着你鼻尖划过。",
   "对方双臂一震，衣袍鼓起，内力激荡得四周尘土飞扬。",
-  "对方一言不发，出手却毫不留情，招招都是杀招。"
+  "对方一言不发，出手却毫不留情，招招都是杀招。",
+  "对方足下如踩莲台，身形忽左忽右，教你捉不住来路。",
+  "对方双掌一错，掌风贴着地面卷来，落叶都被带得飞起。",
+  "对方低吼一声，肩头一沉，整条手臂像铁鞭一样甩来。",
+  "对方忽然停步，气势却压得四周空气都凝住了。",
+  "对方一个滑步欺近，手肘与膝盖几乎同时递到。",
+  "对方借着你后退之势猛然追进，刀锋不离你咽喉三寸。",
+  "对方反手一撩，兵刃划出一道银弧，又快又刁。",
+  "对方连换三式，每一式都封死你一条退路。"
 ];
 
 export function randomPlayerMoveText(): string {

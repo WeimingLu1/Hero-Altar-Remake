@@ -2,15 +2,19 @@ import Phaser from "phaser";
 import { getApp } from "../bus";
 import { AREAS, ROOMS, areaDef, roomDef } from "../content/areas";
 import { enemyDef } from "../content/enemies";
-import { NPCS, npcDef } from "../content/npcs";
-import { getNpcDialog, randomChatText, randomEncounterEvent } from "../content/story";
+import { NPCS, npcDef, npcMoves } from "../content/npcs";
+import { getNpcDialog, randomChatText, randomEncounterEvent, randomNpcFightHit, randomNpcFightMove, randomNpcFightOutcome } from "../content/story";
 import type { BuildingDef, RoomDef } from "../content/types";
 import { buildingTexSize, npcScaleHint, visualForEnemy, visualForNpc, type CharVisual } from "../view/art";
 import { dayTint, moonArc, nightness, sunArc } from "../view/daynight";
 import { enemyAvailable, leaveRoom, meditateTick, travelTo } from "../sim/actions";
 import { candidatePairs, lifeCtxFrom, pickRelationBeats, relationPairKey, type LifeBeat } from "../sim/npcLife";
+import { npcLocation } from "../sim/npcTravel";
+import { ensureAreaObjects, growWorld, randomizeAreaVariation, randomObjectAction } from "../sim/objectLife";
+import { isEntityBusy, releaseLock, resolveNpcNpcSocial, tryLock } from "../sim/socialEngine";
+import { mutateRelation } from "../sim/relations";
 import type { NpcRelation } from "../content/relations";
-import type { GameState } from "../sim/state";
+import { getRelation, type DynamicObjectState, type GameState } from "../sim/state";
 
 const GROUND_Y = 470;
 // 角色脚底贴地线（人形精灵中心在 GROUND_Y、脚底 24px 下）
@@ -49,6 +53,15 @@ interface LifeScript {
   nextAt: number;
   mid: number;
   watched: boolean;
+  bubbles: Phaser.GameObjects.GameObject[];
+}
+
+interface NpcFight {
+  aId: string;
+  bId: string;
+  beats: { who: "a" | "b"; text: string }[];
+  idx: number;
+  nextAt: number;
   bubbles: Phaser.GameObjects.GameObject[];
 }
 
@@ -123,6 +136,9 @@ export class WorldScene extends Phaser.Scene {
   private ambient: Ambient[] = [];
   private weatherOverlay: Phaser.GameObjects.Rectangle | null = null;
   private collectibles: { sprite: Phaser.GameObjects.Image; defX: number; kind: "gold" | "herb"; respawnAt: number }[] = [];
+  private dynamicSprites = new Map<string, { state: DynamicObjectState; sprite: Phaser.GameObjects.Image }>();
+  private worldEventAt = 0;
+  private npcInitiateAt = 0;
   private chatterAt = 0;
   private chatterNext = 12000;
   // 昼夜系统
@@ -147,8 +163,10 @@ export class WorldScene extends Phaser.Scene {
   private fading = false;
   // NPC 生活引擎：定时触发有关系的一对 NPC 走近闲聊
   private lifeScript: LifeScript | null = null;
+  private npcFights: NpcFight[] = [];
   private lifeCooldowns = new Map<string, number>();
   private lifeNext = 0;
+  private fightAt = 0;
   private meditateRun = 0;
 
   constructor() {
@@ -179,7 +197,6 @@ export class WorldScene extends Phaser.Scene {
       ["ONE", "status"],
       ["TWO", "bag"],
       ["THREE", "skill"],
-      ["FOUR", "quest"],
       ["FIVE", "meditate"],
       ["SIX", "save"]
     ] as const) {
@@ -202,11 +219,15 @@ export class WorldScene extends Phaser.Scene {
     this.roomId = p.room;
     this.playerPalette = p.gender === "female" ? "female" : "male";
     this.displayHour = p.time.hour;
+    this.worldEventAt = this.time.now + 7000 + Math.random() * 11000;
+    this.npcInitiateAt = this.time.now + 8000 + Math.random() * 12000;
+    this.fightAt = this.time.now + 22000 + Math.random() * 22000;
     const def = areaDef(this.areaId);
     const room = this.roomId ? roomDef(this.roomId) : null;
     const width = room ? room.width : def.width;
     this.cameras.main.setBounds(0, 0, width, 540);
     this.renderBackground(room ? "temple" : def.theme, width, room ? "room" : "area");
+    this.renderDynamicObjects();
     if (room) this.renderRoom(room, width);
     else this.renderArea(def, width);
     this.player = this.add.sprite(Math.max(40, Math.min(width - 40, p.x)), GROUND_Y, `char-${this.playerPalette}-idle`).setScale(2);
@@ -217,6 +238,26 @@ export class WorldScene extends Phaser.Scene {
     this.maybeIntro();
     this.refreshHud();
     this.maybeTaohunAmbush(s);
+  }
+
+  private renderDynamicObjects(): void {
+    const s = getApp().state;
+    if (!s) return;
+    for (const [, entry] of this.dynamicSprites) entry.sprite.destroy();
+    this.dynamicSprites.clear();
+    const objs = ensureAreaObjects(s.world, this.areaId, this.roomId);
+    for (const o of objs) {
+      const key = o.kind === "flower" ? `flower-${o.tint.slice(1)}` : o.kind === "herb" ? "fx-spark" : o.kind === "bush" ? `bush-${areaDef(this.areaId).theme}` : "rock";
+      const spr = this.add.image(o.x, o.y, key).setOrigin(0.5, 1).setScale(o.size).setAlpha(0.45 + o.integrity / 200).setDepth(-1);
+      if (o.kind === "herb") spr.setTint(0x8ae08a);
+      this.dynamicSprites.set(o.id, { state: o, sprite: spr });
+    }
+  }
+
+  syncDynamicObjects(): void {
+    const s = getApp().state;
+    if (!s) return;
+    this.renderDynamicObjects();
   }
 
   // 逃婚风波·甲线：护送阿沅进入百花谷时，富商的家丁追了上来（每次进谷触发，直到分出胜负）
@@ -251,6 +292,35 @@ export class WorldScene extends Phaser.Scene {
     if (this.player) this.cameras.main.centerOn(this.player.x, 270);
   }
 
+  showFloatingText(text: string, x: number, y: number): void {
+    const t = this.add.text(x, y, text, {
+      fontFamily: "Noto Serif SC, serif",
+      fontSize: "16px",
+      color: "#fff3c8",
+      backgroundColor: "rgba(18,13,8,.88)",
+      padding: { x: 8, y: 4 },
+      align: "center",
+      wordWrap: { width: 260 }
+    }).setOrigin(0.5);
+    this.tweens.add({
+      targets: t,
+      y: y - 38,
+      alpha: 0,
+      duration: 3200,
+      ease: "Sine.easeOut",
+      onComplete: () => t.destroy()
+    });
+  }
+
+  showPlayerFloating(text: string): void {
+    if (this.player) this.showFloatingText(text, this.player.x, this.player.y - 70);
+  }
+
+  showNpcFloating(npcId: string, text: string): void {
+    const w = this.npcSprites.get(npcId);
+    if (w) this.showFloatingText(text, w.sprite.x, w.sprite.y - 70);
+  }
+
   toggleMeditate(): void {
     const s = getApp().state;
     if (!s) return;
@@ -276,6 +346,8 @@ export class WorldScene extends Phaser.Scene {
     const now = this.time.now;
     const width = this.areaDefWidth();
     this.updateDayNight(dt);
+    this.updateLivingWorld(now);
+    this.updateNpcFights(now);
     if (!this.roomId && s.player.weather !== this.renderedWeather) {
       this.transitionWeather(s.player.weather);
     }
@@ -448,7 +520,7 @@ export class WorldScene extends Phaser.Scene {
         this.lastChatText = chat;
         const t = this.add.text(n.sprite.x, n.sprite.y - 58, chat, {
           fontFamily: "Noto Serif SC, serif",
-          fontSize: "12px",
+          fontSize: "16px",
           color: "#f3e3bd",
           backgroundColor: "rgba(18,13,8,.72)",
           padding: { x: 6, y: 2 }
@@ -546,6 +618,124 @@ export class WorldScene extends Phaser.Scene {
     this.weatherOverlay.setFillStyle((r << 16) | (g << 8) | b, alpha);
   }
 
+  private updateLivingWorld(now: number): void {
+    const s = getApp().state;
+    if (!s || getApp().battle || this.fading) return;
+    const npcIds = [...this.npcSprites.keys()];
+    if (!npcIds.length) return;
+    if (now >= this.worldEventAt) {
+      this.worldEventAt = now + 7000 + Math.random() * 11000;
+      const growMsgs = growWorld(s.world, s.player.area, s.player.room);
+      for (const m of growMsgs.slice(0, 2)) {
+        s.world.objectHistory.push(m);
+        getApp().ui.showNarrative(m);
+      }
+      if (Math.random() < 0.25) randomizeAreaVariation(s.world, s.player.area);
+      const npcId = npcIds[Math.floor(Math.random() * npcIds.length)];
+      const npc = NPCS[npcId];
+      if (!npc) return;
+      const text = randomObjectAction(s.world, npcId, npc.name, s.player.area, s.player.room);
+      s.world.objectHistory.push(text);
+      (s.world.npcLogs[npcId] ||= []).push(text);
+      if ((s.world.npcLogs[npcId] || []).length > 24) s.world.npcLogs[npcId].shift();
+      this.syncDynamicObjects();
+      getApp().ui.showNarrative(text);
+      this.showNpcFloating(npcId, text);
+    }
+    if (now >= this.npcInitiateAt) {
+      this.npcInitiateAt = now + 12000 + Math.random() * 14000;
+      const busy = npcIds.some((id) => isEntityBusy(s.world, id)) || isEntityBusy(s.world, "player");
+      if (!busy && getApp().ui.el("dialog").classList.contains("hidden")) {
+        const npcId = npcIds[Math.floor(Math.random() * npcIds.length)];
+        getApp().handleAction("npc-initiates:" + npcId);
+      }
+    }
+    if (now >= this.fightAt) {
+      this.fightAt = now + 25000 + Math.random() * 22000;
+      this.tryStartNpcFight(now);
+    }
+  }
+
+  private tryStartNpcFight(now: number): void {
+    const s = getApp().state;
+    if (!s) return;
+    const ids = [...this.npcSprites.keys()];
+    if (ids.length < 2) return;
+    for (let attempt = 0; attempt < 14; attempt++) {
+      const i = Math.floor(Math.random() * ids.length);
+      let j = Math.floor(Math.random() * (ids.length - 1));
+      if (j >= i) j += 1;
+      const aId = ids[i];
+      const bId = ids[j];
+      if (this.npcFights.some((f) => f.aId === aId || f.bId === aId || f.aId === bId || f.bId === bId)) continue;
+      if (isEntityBusy(s.world, aId) || isEntityBusy(s.world, bId)) continue;
+      const rel = getRelation(s.world, aId, bId);
+      if (rel.friendliness > -10 && Math.random() > 0.18) continue;
+      if (!tryLock(s.world, aId, bId, "fight", 30000)) continue;
+      const aName = NPCS[aId]?.name || aId;
+      const bName = NPCS[bId]?.name || bId;
+      const beats: NpcFight["beats"] = [];
+      const total = 4 + Math.floor(Math.random() * 3);
+      for (let k = 0; k < total; k++) {
+        const who: "a" | "b" = k % 2 === 0 ? "a" : "b";
+        const npcId = who === "a" ? aId : bId;
+        const name = who === "a" ? aName : bName;
+        const move = npcMoves(npcId)[Math.floor(Math.random() * npcMoves(npcId).length)];
+        const base = k % 3 === 2 ? randomNpcFightHit(name) : randomNpcFightMove(name);
+        beats.push({ who, text: `${name}使出一招「${move}」，${base.replace(name, "")}` });
+      }
+      this.npcFights.push({ aId, bId, beats, idx: 0, nextAt: now + 700, bubbles: [] });
+      return;
+    }
+  }
+
+  private updateNpcFights(now: number): void {
+    const s = getApp().state;
+    if (!s) return;
+    for (const f of [...this.npcFights]) {
+      if (now < f.nextAt) continue;
+      for (const b of f.bubbles) b.destroy();
+      f.bubbles = [];
+      if (f.idx < f.beats.length) {
+        const beat = f.beats[f.idx++];
+        const w = this.npcSprites.get(beat.who === "a" ? f.aId : f.bId);
+        if (w) {
+          const em = this.add.text(w.sprite.x, w.sprite.y - 70, "⚔️", { fontSize: "18px" }).setOrigin(0.5, 1);
+          const tx = this.add
+            .text(w.sprite.x, w.sprite.y - 58, beat.text, {
+              fontFamily: "Noto Serif SC, serif",
+              fontSize: "16px",
+              color: "#ffd8a8",
+              backgroundColor: "rgba(18,13,8,.84)",
+              padding: { x: 6, y: 2 }
+            })
+            .setOrigin(0.5);
+          f.bubbles.push(em, tx);
+        }
+        f.nextAt = now + 1250;
+        continue;
+      }
+      const aName = NPCS[f.aId]?.name || f.aId;
+      const bName = NPCS[f.bId]?.name || f.bId;
+      const winner = Math.random() < 0.5 ? f.aId : f.bId;
+      const loser = winner === f.aId ? f.bId : f.aId;
+      const outcome = randomNpcFightOutcome(NPCS[winner]?.name || winner, NPCS[loser]?.name || loser);
+      getApp().ui.showNarrative(outcome);
+      for (const id of [f.aId, f.bId]) {
+        const log = (s.world.npcLogs[id] ||= []);
+        log.push(outcome);
+        if (log.length > 24) log.shift();
+      }
+      mutateRelation(s, f.aId, f.bId, {
+        friendliness: -8 - Math.floor(Math.random() * 10),
+        trust: -4,
+        respect: Math.random() < 0.5 ? 2 : -2
+      }, "npc-fight");
+      releaseLock(s.world, f.aId, f.bId);
+      this.npcFights = this.npcFights.filter((x) => x !== f);
+    }
+  }
+
   // 从在场且同屏（|Δx|<500）的 NPC 中挑一对有关系的，开始互动演出
   private tryStartLife(): void {
     const s = getApp().state;
@@ -559,6 +749,7 @@ export class WorldScene extends Phaser.Scene {
       const wa = this.npcSprites.get(rel.a);
       const wb = this.npcSprites.get(rel.b);
       if (!wa || !wb) continue;
+      if (isEntityBusy(s.world, rel.a) || isEntityBusy(s.world, rel.b)) continue;
       if (Math.abs(wa.sprite.x - wb.sprite.x) >= 950) continue;
       // 同一对 10 分钟内不重复演出
       const last = this.lifeCooldowns.get(relationPairKey(rel.a, rel.b)) ?? -Infinity;
@@ -585,9 +776,10 @@ export class WorldScene extends Phaser.Scene {
           const b = this.npcSprites.get(ids[j]);
           if (!a || !b) continue;
           if (Math.abs(a.sprite.x - b.sprite.x) >= 950) continue;
-          const aId = a.sprite.getData("npcId") as string;
-          const bId = b.sprite.getData("npcId") as string;
-          const last = this.lifeCooldowns.get(relationPairKey(aId, bId)) ?? -Infinity;
+      const aId = a.sprite.getData("npcId") as string;
+      const bId = b.sprite.getData("npcId") as string;
+      if (isEntityBusy(s.world, aId) || isEntityBusy(s.world, bId)) continue;
+      const last = this.lifeCooldowns.get(relationPairKey(aId, bId)) ?? -Infinity;
           if (now - last < 30000) continue;
           pairs.push({ a, b });
         }
@@ -599,12 +791,14 @@ export class WorldScene extends Phaser.Scene {
       const aId = wa.sprite.getData("npcId") as string;
       const bId = wb.sprite.getData("npcId") as string;
       rel = { a: aId, b: bId, kind: "friend", lines: [] };
+      const social = resolveNpcNpcSocial(s, aId, bId);
       beats = [
-        { who: "a", emoji: "💬", text: randomChatText(s) },
-        { who: "b", emoji: "💬", text: randomChatText(s) },
+        { who: "a", emoji: "💬", text: social.text },
+        { who: "b", emoji: "💬", text: social.reply },
         { who: "a", emoji: "💬", text: randomChatText(s) }
       ];
     }
+    if (!tryLock(s.world, rel.a, rel.b, "life", 60000)) return;
     const mid = Math.max(60, Math.min(width - 60, (wa.sprite.x + wb.sprite.x) / 2));
     const left = wa.sprite.x <= wb.sprite.x ? wa : wb;
     const right = left === wa ? wb : wa;
@@ -663,10 +857,11 @@ export class WorldScene extends Phaser.Scene {
       if (w) {
         const y = w.sprite.y;
         const em = this.add.text(w.sprite.x, y - 74, beat.emoji, { fontSize: "20px" }).setOrigin(0.5, 1);
+        getApp().ui.showNarrative(beat.text);
         const tx = this.add
           .text(w.sprite.x, y - 62, beat.text, {
             fontFamily: "Noto Serif SC, serif",
-            fontSize: "12px",
+            fontSize: "16px",
             color: "#f3e3bd",
             backgroundColor: "rgba(18,13,8,.78)",
             padding: { x: 6, y: 2 }
@@ -681,6 +876,20 @@ export class WorldScene extends Phaser.Scene {
     this.lifeCooldowns.set(relationPairKey(ls.aId, ls.bId), now);
     const s = getApp().state;
     const watched = ls.watched && this.player && Math.abs(this.player.x - ls.mid) < 300;
+    if (s) {
+      mutateRelation(
+        s,
+        ls.aId,
+        ls.bId,
+        {
+          friendliness: Math.floor(Math.random() * 14) - 4,
+          trust: Math.floor(Math.random() * 8) - 2,
+          respect: Math.floor(Math.random() * 5) - 1
+        },
+        "偶遇交谈"
+      );
+      releaseLock(s.world, ls.aId, ls.bId);
+    }
     this.lifeScript = null;
     if (watched && s) {
       if (Math.random() < 0.1) {
@@ -706,8 +915,16 @@ export class WorldScene extends Phaser.Scene {
     // 生活演出：区域切换/进出战斗时中止，气泡一并销毁
     if (this.lifeScript) {
       for (const b of this.lifeScript.bubbles) b.destroy();
+      const s = getApp().state;
+      if (s) releaseLock(s.world, this.lifeScript.aId, this.lifeScript.bId);
       this.lifeScript = null;
     }
+    const s2 = getApp().state;
+    for (const f of this.npcFights) {
+      for (const b of f.bubbles) b.destroy();
+      if (s2) releaseLock(s2.world, f.aId, f.bId);
+    }
+    this.npcFights = [];
     for (const h of this.holders) h.destroy();
     this.holders = [];
     this.npcSprites.clear();
@@ -733,6 +950,8 @@ export class WorldScene extends Phaser.Scene {
     this.thunderstorm = false;
     for (const c of this.collectibles) c.sprite.destroy();
     this.collectibles = [];
+    for (const [, entry] of this.dynamicSprites) entry.sprite.destroy();
+    this.dynamicSprites.clear();
     if (this.playerShadow) {
       this.playerShadow.destroy();
       this.playerShadow = null;
@@ -755,6 +974,10 @@ export class WorldScene extends Phaser.Scene {
     const darkish = theme === "dark" || theme === "cave";
     // 天空底为水平均匀渐变，平铺无拉伸变形
     const sky = this.add.tileSprite(0, 0, vw, 540, `sky-${theme}`).setOrigin(0, 0);
+    const av = getApp().state?.world.areaVariations[this.areaId];
+    if (av && mode === "area") {
+      this.add.rectangle(0, 0, vw, 540, parseInt(av.tint.replace("#", ""), 16), 0.06).setOrigin(0, 0);
+    }
     const far = this.add.container(0, 0);
     far.setScrollFactor(0.2, 1);
     const farG = this.add.graphics();
@@ -1072,6 +1295,7 @@ export class WorldScene extends Phaser.Scene {
 
   private renderArea(def: ReturnType<typeof areaDef>, width: number): void {
     const s = getApp().state;
+    if (!s) return;
     const objects = this.add.container(0, 0);
     for (let i = 40; i < width - 40; i += 220) {
       const r = Math.sin(i * 0.37 + def.id.length);
@@ -1153,6 +1377,18 @@ export class WorldScene extends Phaser.Scene {
       const nd = npcDef(npcId);
       if (!this.npcPresent(nd)) continue;
       this.spawnNpc(npcId, nd.x, nd.walk || 0, objects);
+    }
+    const present = new Set(this.npcSprites.keys());
+    const day = s.player.time.day;
+    const hour = s.player.time.hour;
+    for (const id of Object.keys(NPCS)) {
+      if (present.has(id)) continue;
+      const nd = npcDef(id);
+      if (!this.npcPresent(nd)) continue;
+      const loc = npcLocation(id, day, hour);
+      if (loc.area !== def.id) continue;
+      this.spawnNpc(id, loc.x, nd.walk || 0, objects);
+      present.add(id);
     }
     for (const fe of def.fixedEnemies || []) {
       if (!s || !enemyAvailable(s, fe.enemy)) continue;
@@ -1329,8 +1565,17 @@ export class WorldScene extends Phaser.Scene {
       const qt = getApp().state?.player.quests.qTaoHun;
       if (qt?.done) return false;
     }
+    const s = getApp().state;
+    if (!s) return true;
+    const h = s.player.time.hour;
+    const day = s.player.time.day;
+    const loc = npcLocation(nd.id, day, h);
+    if (s.player.room) {
+      if (loc.room !== s.player.room) return false;
+    } else {
+      if (loc.area !== s.player.area || loc.room !== null) return false;
+    }
     if (!nd.hours) return true;
-    const h = getApp().state?.player.time.hour ?? 8;
     return h >= nd.hours[0] && h < nd.hours[1];
   }
 
@@ -1503,27 +1748,12 @@ export class WorldScene extends Phaser.Scene {
         const npcId = npc.sprite.getData("npcId") as string;
         if (this.lifeScript && (this.lifeScript.aId === npcId || this.lifeScript.bId === npcId)) {
           for (const b of this.lifeScript.bubbles) b.destroy();
+          releaseLock(s.world, this.lifeScript.aId, this.lifeScript.bId);
           this.lifeScript = null;
         }
         app.dialogNpc = npcId;
         app.ui.dialogNpc = npcId;
-        const nd = npcDef(npcId);
-        const qBei = s.player.quests.qBeiFang;
-        if (nd.master && qBei && !qBei.done && qBei.stage === 0) {
-          // 同一掌门重复拜访不计数，须拜访三位不同的掌门
-          const visited = (s.player.flags["visited-masters"] as string[] | undefined) || [];
-          if (!visited.includes(npcId)) {
-            visited.push(npcId);
-            s.player.flags["visited-masters"] = visited;
-            s.player.task.visits = visited.length;
-            app.toast(`你拜访了${nd.name}（${visited.length}/3）。`);
-          } else {
-            app.toast(`你已拜访过${nd.name}，去其他门派走走吧。`);
-          }
-        }
-        const nodes = getNpcDialog(npcId, s);
-        if (nodes) app.ui.showDialog(nodes);
-        else app.toast(`${npc.sprite.getData("npcName")}看了你一眼，没有说话。`);
+        app.handleAction("social-menu:" + npcId);
         return;
       }
     }
@@ -1599,7 +1829,21 @@ export class WorldScene extends Phaser.Scene {
 
   private maybeIntro(): void {
     const s = getApp().state;
-    if (!s || s.player.room || s.player.flags[`seen-${this.areaId}`]) return;
+    if (!s) return;
+    if (!s.player.flags["intro-traveler"]) {
+      s.player.flags["intro-traveler"] = true;
+      getApp().ui.showDialog([
+        {
+          id: "r",
+          speaker: "穿越者天书",
+          text: "你在牛车上醒来，怀里多了一本不知从何而来的书。\n\n书皮泛黄，封面上歪歪扭扭写着「穿越者天书」。翻开第一页，只有一句话：\n\n「此界无任务、无主线，只有活着的江湖。你看到的武学，都会记在这里；你想改写的命数，也在这里。」\n\n平安镇的晨雾正在散去，你能听见远处有人说话，有人打铁，有人吵架——这个世界已经开始自己动了。",
+          opts: [{ text: "合上天书，走进江湖", node: "bye" }]
+        },
+        { id: "bye", speaker: "穿越者天书", text: "你收起天书，朝镇口走去。身后的风把书页吹得哗哗响。", opts: [] }
+      ]);
+      return;
+    }
+    if (s.player.room || s.player.flags[`seen-${this.areaId}`]) return;
     s.player.flags[`seen-${this.areaId}`] = true;
     const def = areaDef(this.areaId);
     getApp().ui.showDialog([
