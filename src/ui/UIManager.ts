@@ -234,7 +234,10 @@ export class UIManager {
       return;
     }
     dlg.classList.remove("hidden");
-    this.q("#dialog .dlg-name").textContent = node.speaker || "江湖传闻";
+    const questNpc = this.dialogNpc ? isQuestNpc(this.dialogNpc, getApp().state ?? undefined) : false;
+    const nameEl = this.q("#dialog .dlg-name");
+    nameEl.textContent = node.speaker || "江湖传闻";
+    nameEl.innerHTML = (node.speaker || "江湖传闻") + (questNpc ? '<span class="dlg-quest">任务</span>' : "");
     this.q("#dialog .dlg-text").textContent = node.text;
     const opts = this.q("#dialog .dlg-opts");
     opts.innerHTML = "";
@@ -278,9 +281,8 @@ export class UIManager {
       info.addEventListener("click", () => this.actions(`npc-status:${this.dialogNpc}`));
       opts.appendChild(info);
       const chat = document.createElement("button");
-      const questNpc = isQuestNpc(this.dialogNpc, getApp().state ?? undefined);
-      chat.className = questNpc ? "btn quest" : "btn";
-      chat.textContent = questNpc ? "对话（任务）" : "对话";
+      chat.className = "btn";
+      chat.textContent = "对话";
       chat.addEventListener("click", () => this.actions(`npc-talk:${this.dialogNpc}`));
       opts.appendChild(chat);
       const rom = ROMANCE[this.dialogNpc];

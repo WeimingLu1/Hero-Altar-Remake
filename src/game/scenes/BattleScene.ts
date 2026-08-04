@@ -28,6 +28,17 @@ export class BattleScene extends Phaser.Scene {
   private nextEventAt = 0; // 下一条事件允许播放的最早时刻
   private exitAt = 0;
   private exitSent = false;
+  private playerBaseY = 0;
+  private enemyBaseY = 0;
+  private playerDancePhase = 0;
+  private enemyDancePhase = 0;
+  private playerDanceAmp = 4;
+  private enemyDanceAmp = 4;
+  private playerHopUntil = 0;
+  private enemyHopUntil = 0;
+  private playerHopY = 0;
+  private enemyHopY = 0;
+  private nextDanceAt = 0;
 
   constructor() {
     super("Battle");
@@ -40,6 +51,11 @@ export class BattleScene extends Phaser.Scene {
     this.nextEventAt = 0;
     this.exitAt = 0;
     this.exitSent = false;
+    this.playerDancePhase = Math.random() * 6.28;
+    this.enemyDancePhase = Math.random() * 6.28;
+    this.playerDanceAmp = 3 + Math.random() * 5;
+    this.enemyDanceAmp = 3 + Math.random() * 5;
+    this.nextDanceAt = 0;
   }
 
   create(): void {
@@ -56,11 +72,13 @@ export class BattleScene extends Phaser.Scene {
     const pal = p?.gender === "female" ? "female" : "male";
     this.add.image(320, STAGE_FOOT - 2, "fx-shadow").setScale(1.6, 1.2);
     this.playerSprite = this.add.sprite(320, STAGE_FOOT - 36, `char-${pal}-idle`).setScale(3);
+    this.playerBaseY = this.playerSprite.y;
     const eDef = enemyDef(b.enemyId);
     this.enemyVisual = visualForBattleEnemy(b.enemyId);
     const escale = 3 * this.enemyVisual.scaleMul * (eDef.scale || 1);
     this.add.image(650, STAGE_FOOT - 2, "fx-shadow").setScale(1.6 * (this.enemyVisual.w / 16) * this.enemyVisual.scaleMul, 1.2);
     this.enemySprite = this.add.sprite(650, STAGE_FOOT - (this.enemyVisual.h * escale) / 2, this.enemyVisual.key("idle")).setScale(escale);
+    this.enemyBaseY = this.enemySprite.y;
     this.enemySprite.setFlipX(true);
     this.add.text(650, this.enemySprite.y - (this.enemyVisual.h * escale) / 2 - 18, eDef.title || eDef.name, {
       fontFamily: "Noto Serif SC, serif",
@@ -179,6 +197,7 @@ export class BattleScene extends Phaser.Scene {
       getApp().finishBattle();
       return;
     }
+    this.updateDanceAnimations();
   }
 
   // 战斗事件是否已全部播完（App 的退出判定同样以此为准）
@@ -405,17 +424,44 @@ export class BattleScene extends Phaser.Scene {
 
   // 角色上下翻飞：模拟激烈碰撞中的身法起伏
   private hopSprite(sprite: Phaser.GameObjects.Sprite): void {
-    const fromY = sprite.y;
-    const up = 18 + Math.random() * 18;
-    this.tweens.add({
-      targets: sprite,
-      y: fromY - up,
-      duration: 120,
-      yoyo: true,
-      onComplete: () => {
-        sprite.y = fromY;
+    const now = this.time.now;
+    if (sprite === this.playerSprite) {
+      this.playerHopUntil = now + 240;
+      this.playerHopY = 16 + Math.random() * 18;
+    } else {
+      this.enemyHopUntil = now + 240;
+      this.enemyHopY = 16 + Math.random() * 18;
+    }
+  }
+
+  // 战斗中持续随机舞动：上下浮动、偶发跳跃，出招时叠加更高跳跃
+  private updateDanceAnimations(): void {
+    if (this.battle?.over) return;
+    const now = this.time.now;
+    if (now >= this.nextDanceAt) {
+      this.nextDanceAt = now + 700 + Math.random() * 1400;
+      this.playerDanceAmp = 3 + Math.random() * 7;
+      this.enemyDanceAmp = 3 + Math.random() * 7;
+      if (Math.random() < 0.3) this.hopSprite(this.playerSprite);
+      if (Math.random() < 0.3) this.hopSprite(this.enemySprite);
+    }
+    const apply = (
+      sprite: Phaser.GameObjects.Sprite,
+      baseY: number,
+      amp: number,
+      phase: number,
+      hopUntil: number,
+      hopY: number
+    ): void => {
+      if (now < hopUntil) {
+        const t = 1 - (hopUntil - now) / 240;
+        sprite.y = baseY - Math.sin(t * Math.PI) * hopY;
+      } else {
+        sprite.y = baseY - Math.sin(now * 0.003 + phase) * amp;
       }
-    });
+    };
+    apply(this.playerSprite, this.playerBaseY, this.playerDanceAmp, this.playerDancePhase, this.playerHopUntil, this.playerHopY);
+    apply(this.enemySprite, this.enemyBaseY, this.enemyDanceAmp, this.enemyDancePhase, this.enemyHopUntil, this.enemyHopY);
   }
 
   // 绝招专属演出：剑气横斩 / 刀芒斜劈 / 拳劲冲击波 / 杖影竖劈 / 鞭影蛇形 / 内功光环爆发

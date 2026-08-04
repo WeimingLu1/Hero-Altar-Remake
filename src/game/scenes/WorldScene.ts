@@ -149,6 +149,7 @@ export class WorldScene extends Phaser.Scene {
     };
     kb.on("keydown-E", () => this.interact());
     kb.on("keydown-ENTER", () => this.interact());
+    kb.on("keydown-UP", () => this.interactRoom());
     kb.on("keydown-M", () => getApp().handleAction("map"));
     kb.on("keydown-ESC", () => {
       if (this.meditating) this.toggleMeditate();
@@ -317,6 +318,11 @@ export class WorldScene extends Phaser.Scene {
     for (const [id, n] of this.npcSprites) {
       n.label.x = n.sprite.x;
       n.label.y = n.sprite.y - 38;
+      if (getApp().dialogNpc === id) {
+        n.pauseUntil = this.time.now + 600;
+        n.sprite.setTexture(n.v.key("idle"));
+        continue;
+      }
       if (this.lifeScript && (this.lifeScript.aId === id || this.lifeScript.bId === id)) {
         // 参与生活演出：走近/归位途中播行走帧，对话阶段立定（位移由 tween 承担）
         const frame =
@@ -1406,7 +1412,7 @@ export class WorldScene extends Phaser.Scene {
     if (!hint) {
       for (const b of this.buildings) {
         if (b.def.doorX !== undefined && (b.def.room || b.def.id === "taohua") && Math.abs(this.player.x - b.def.doorX) < 44) {
-          hint = `[E] 进入${b.def.name}`;
+          hint = `[↑] 进入${b.def.name}`;
           glowX = b.def.doorX;
           glowY = 440;
           break;
@@ -1416,6 +1422,38 @@ export class WorldScene extends Phaser.Scene {
     ui.showHint(hint || null);
     if (glowX >= 0) this.ensureHintGlow(glowX, glowY);
     else if (this.hintGlow) this.hintGlow.setVisible(false);
+  }
+
+  // 上方向键进入房间：即使门口站着 NPC，也不会被 E 的交谈逻辑挡住
+  private interactRoom(): void {
+    const app = getApp();
+    const s = app.state;
+    if (!s || !this.player || this.fading) return;
+    const nowMs = this.time.now;
+    if (nowMs - this.lastInteractAt < 250) return;
+    this.lastInteractAt = nowMs;
+    for (const b of this.buildings) {
+      if (b.def.doorX !== undefined && (b.def.room || b.def.id === "taohua") && Math.abs(this.player.x - b.def.doorX) < 60) {
+        if (b.def.id === "taohua") {
+          if (s.player.house && b.def.room) {
+            s.player.doorX = b.def.doorX ?? 180;
+            s.player.room = b.def.room;
+            s.player.x = 180;
+            this.refreshWithFade();
+          } else {
+            app.handleAction("shrine");
+          }
+          return;
+        }
+        if (b.def.room) {
+          s.player.doorX = b.def.doorX ?? 180;
+          s.player.room = b.def.room;
+          s.player.x = 180;
+          this.refreshWithFade();
+          return;
+        }
+      }
+    }
   }
 
   private interact(): void {
@@ -1429,6 +1467,10 @@ export class WorldScene extends Phaser.Scene {
     for (const npc of this.npcSprites.values()) {
       if (Math.abs(this.player.x - npc.sprite.x) < 56) {
         const npcId = npc.sprite.getData("npcId") as string;
+        if (this.lifeScript && (this.lifeScript.aId === npcId || this.lifeScript.bId === npcId)) {
+          for (const b of this.lifeScript.bubbles) b.destroy();
+          this.lifeScript = null;
+        }
         app.dialogNpc = npcId;
         app.ui.dialogNpc = npcId;
         const nd = npcDef(npcId);

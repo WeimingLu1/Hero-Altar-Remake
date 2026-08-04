@@ -336,6 +336,18 @@ select {
   margin: 6px 0 12px;
 }
 
+.dlg-quest {
+  display: inline-block;
+  margin-left: 8px;
+  padding: 0 7px;
+  border: 1px solid #ffd98a;
+  border-radius: 3px;
+  background: rgba(201, 161, 58, 0.22);
+  color: #ffd98a;
+  font-size: 11px;
+  vertical-align: 2px;
+}
+
 #dialog .dlg-opts {
   display: flex;
   flex-wrap: wrap;

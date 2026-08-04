@@ -4,7 +4,7 @@ import { NPCS } from "../content/npcs";
 import { PLATE_SECTS, SECTS } from "../content/sects";
 import { SKILLS, skillDef } from "../content/skills";
 import type { EnemySkillDef, UltDef } from "../content/types";
-import { randomQteText } from "../content/story";
+import { randomEnemyMoveText, randomPlayerMoveText, randomQteText } from "../content/story";
 import {
   activeNeigongLevel,
   attackPower,
@@ -220,6 +220,7 @@ export function playerAttack(b: BattleState, s: GameState, qteSuccess?: boolean)
   const e = b.enemy;
   const skill = mainSkill(s);
   const jiali = payJiali(b, events);
+  events.push({ kind: "move", side: "player", text: randomPlayerMoveText() });
   const hitRoll = Math.random();
   const eDodge = Math.min(0.6, effectiveStat(e, "dodge", e.dodge));
   if (hitRoll > p.hit - eDodge * 0.5) {
@@ -255,8 +256,9 @@ export function playerAttack(b: BattleState, s: GameState, qteSuccess?: boolean)
     events.push({
       kind: crit ? "crit" : "hit",
       side: "player",
-      text: `${crit ? "会心一击！" : ""}你使出「${skill.name}」，对${e.name}造成 ${dmg} 点伤害。`,
-      dmg
+      text: `${crit ? "会心一击！" : ""}你这一记「${skill.name}」势如奔雷，${e.name}中招，受到 ${dmg} 点伤害。`,
+      dmg,
+      qte: qteSuccess
     });
     gainExpForSkill(s.player, skill.id, dmg);
     if (e.hp <= 0) {
@@ -592,6 +594,9 @@ function enemyTurn(b: BattleState, s: GameState): BattleEvent[] {
     tickBuffs(e);
     return events;
   }
+  if (action.kind === "attack") {
+    events.push({ kind: "move", side: "enemy", text: randomEnemyMoveText(e.name) });
+  }
   const skill = action.kind === "skill" ? action.skill : undefined;
   if (skill) {
     e.mp = Math.max(0, e.mp - (skill.mpCost || 0));
@@ -670,7 +675,7 @@ function enemyTurn(b: BattleState, s: GameState): BattleEvent[] {
     events.push({
       kind: crit ? "crit" : "hit",
       side: "enemy",
-      text: `${e.name}${skill ? "的攻势" : "的攻击"}命中，你受到 ${dmg} 点伤害${crit ? "（会心一击！）" : ""}。`,
+      text: `${e.name}的${skill ? skill.name : "攻势"}破空而至，你中招，受到 ${dmg} 点伤害${crit ? "（会心一击！）" : ""}。`,
       dmg
     });
     if (heavy) {
