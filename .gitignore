@@ -1,0 +1,7 @@
+node_modules/
+dist/
+dist-single/
+tsconfig.tsbuildinfo
+scripts/.balance-bundle.mjs
+.DS_Store
+-l
