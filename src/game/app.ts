@@ -6,6 +6,7 @@ import {
   isQuestNpc,
   randomNpcChatDialog,
   randomNpcTalkDialog,
+  randomBreakupText,
   randomRumor,
   randomTalkText,
   sparReaction
@@ -470,6 +471,11 @@ export class App {
         this.ui.showNpcStatus(action.split(":")[1], s);
         return;
       }
+      case action.startsWith("romance-menu:"): {
+        const npcId = action.split(":")[1];
+        if (NPCS[npcId]) this.ui.showRomanceMenu(npcId, s);
+        return;
+      }
       case action.startsWith("romance-gift:"): {
         this.ui.showGiftPanel(action.split(":")[1], s);
         return;
@@ -496,8 +502,16 @@ export class App {
         const aff = Math.min(100, (p.affections[npcId] || 0) + 3);
         p.affections[npcId] = aff;
         const npc = NPCS[npcId];
+        const partner = !!p.flags[`partner-${npcId}`];
+        const pet = partner
+          ? npc.gender === "female"
+            ? "相公"
+            : "娘子"
+          : "";
+        const text = pet ? `${pet}，` + randomTalkText() : randomTalkText();
+        this.ui.closePanels();
         this.ui.showDialog([
-          { id: "r", speaker: npc.name, text: randomTalkText(), opts: [] }
+          { id: "r", speaker: npc.name, text, opts: [] }
         ]);
         this.toast(`你与${npc.name}说了些体己话，好感 +3（${aff}）。`);
         this.refreshUi();
@@ -528,9 +542,34 @@ export class App {
         p.lastIntimacyDay = p.time.day;
         p.affections[npcId] = Math.min(100, aff + 3);
         p.flags[`intimate-${npcId}`] = true;
+        p.flags[`partner-${npcId}`] = true;
         advanceTime(s, 8);
+        this.ui.closePanels();
         this.ui.showIntimacy(npcId, this.intimacyTextFor(npc));
-        this.toast(`一夜好眠，你与${npc.name}的情意更浓。`);
+        this.toast(`良宵渐过，你与${npc.name}从此成了道侣。`);
+        this.refreshUi();
+        return;
+      }
+      case action.startsWith("romance-breakup:"): {
+        const npcId = action.split(":")[1];
+        const npc = NPCS[npcId];
+        if (!npc) return;
+        if (!p.flags[`partner-${npcId}`]) {
+          this.toast("你们尚未结为道侣，谈不上分道扬镳。");
+          return;
+        }
+        p.affections[npcId] = 0;
+        delete p.flags[`partner-${npcId}`];
+        delete p.flags[`intimate-${npcId}`];
+        if (p.spouse === npc.name) {
+          p.married = false;
+          p.spouse = null;
+        }
+        this.ui.closePanels();
+        this.ui.showDialog([
+          { id: "r", speaker: npc.name, text: "「" + randomBreakupText() + "」", opts: [] }
+        ]);
+        this.toast(`你与${npc.name}分道扬镳，好感已归零。`);
         this.refreshUi();
         return;
       }

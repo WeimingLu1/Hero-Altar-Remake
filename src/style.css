@@ -853,15 +853,20 @@ select {
 
 .bd-item {
   position: absolute;
-  left: 100%;
-  white-space: nowrap;
+  left: 50%;
+  top: 30%;
+  max-width: 82%;
+  white-space: normal;
+  text-align: center;
   font-family: "Ma Shan Zheng", "Noto Serif SC", serif;
   font-size: 27px;
   font-weight: 700;
   color: #fff3c8;
   text-shadow: 0 2px 0 rgba(26, 18, 10, 0.95), 0 0 14px rgba(201, 161, 58, 0.45);
-  animation: bdSlide linear forwards;
+  transform: translate(-50%, -50%);
+  animation: bdFade ease-out forwards;
   will-change: transform;
+  line-height: 1.65;
 }
 
 .bd-hit {
@@ -870,7 +875,7 @@ select {
 
 .bd-crit {
   color: #ffb84d;
-  font-size: 32px;
+  font-size: 34px;
 }
 
 .bd-hurt {
@@ -905,12 +910,21 @@ select {
   color: #ffe9c4;
 }
 
-@keyframes bdSlide {
-  from {
-    transform: translateX(0);
+@keyframes bdFade {
+  0% {
+    opacity: 0;
+    transform: translate(-50%, -50%) scale(0.92);
   }
-  to {
-    transform: translateX(calc(-100vw - 100%));
+  12% {
+    opacity: 1;
+    transform: translate(-50%, -50%) scale(1);
+  }
+  78% {
+    opacity: 0.92;
+  }
+  100% {
+    opacity: 0;
+    transform: translate(-50%, -62%) scale(1.02);
   }
 }
 

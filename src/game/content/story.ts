@@ -2198,6 +2198,21 @@ export function randomTalkText(): string {
   return "「" + pickText(TALK_FLAVOR) + "」";
 }
 
+const BREAKUP_TEXTS = [
+  "你沉默了很久，终于说：今日一别，各自珍重。",
+  "你解下信物，轻轻放在桌上，没有回头。",
+  "那句「江湖路远」说了无数遍，这一次却真的远了。",
+  "你与他（她）相顾无言，终究只留下一句「保重」。",
+  "风把旧日的誓言吹散，你们站在路的尽头，各选一边。",
+  "从今往后，江湖上少了一对眷侣，多了两个独行客。",
+  "你松开手，任那段情分像风里的纸鸢，越飞越远。",
+  "缘分尽了，不怨谁。只是往后再路过这里，不会再停留。"
+];
+
+export function randomBreakupText(): string {
+  return pickText(BREAKUP_TEXTS);
+}
+
 export function randomLookText(areaId: string): string {
   const pool = [...LOOK_TEXT_COMMON, ...(LOOK_TEXT_AREA[areaId] || [])];
   return pickText(pool);
