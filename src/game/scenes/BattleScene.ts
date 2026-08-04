@@ -207,6 +207,9 @@ export class BattleScene extends Phaser.Scene {
   }
 
   private playEvent(ev: BattleEvent): void {
+    if (ev.kind !== "info" && ev.kind !== "qte") {
+      getApp().ui.showBattleDanmaku(ev.text, ev.kind);
+    }
     if (ev.side === "player" && (ev.kind === "move" || ev.kind === "hit" || ev.kind === "crit")) {
       this.playerSprite.setTexture(`char-${this.playerPalette()}-walk`);
       this.tweens.add({

@@ -94,6 +94,7 @@ export class UIManager {
             <div class="qte-bar"></div>
             <div class="qte-hint">按对应字母</div>
           </div>
+          <div id="battle-danmaku"></div>
         </div>
       </div>
     `;
@@ -148,6 +149,18 @@ export class UIManager {
     const letter = this.q("#qte .qte-letter");
     letter.classList.add("qte-error");
     setTimeout(() => letter.classList.remove("qte-error"), 220);
+  }
+
+  showBattleDanmaku(text: string, kind?: string): void {
+    const wrap = this.el("battle-danmaku");
+    const d = document.createElement("div");
+    d.className = "bd-item" + (kind ? ` bd-${kind}` : "");
+    d.textContent = text;
+    d.style.top = 6 + Math.random() * 46 + "%";
+    const dur = 4 + Math.random() * 2.5;
+    d.style.animationDuration = dur.toFixed(2) + "s";
+    wrap.appendChild(d);
+    setTimeout(() => d.remove(), dur * 1000 + 150);
   }
 
   showHud(s: GameState): void {
