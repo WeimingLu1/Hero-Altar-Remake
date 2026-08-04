@@ -190,7 +190,7 @@ export interface AreaDef {
     x: number;
     w?: number;
     label: string;
-    action: "mine" | "herb" | "well" | "tree" | "sign" | "shrine" | "crack";
+    action: "mine" | "herb" | "well" | "tree" | "sign" | "shrine" | "crack" | "look";
   }[];
 }
 
@@ -205,7 +205,7 @@ export interface RoomDef {
     x: number;
     w?: number;
     label: string;
-    action: "rest" | "meditate" | "desk" | "chest" | "well" | "shrine" | "house-rest";
+    action: "rest" | "meditate" | "desk" | "chest" | "well" | "shrine" | "house-rest" | "look";
   }[];
 }
 
@@ -224,6 +224,8 @@ export interface NpcDef {
   martial?: string;
   hours?: [number, number];
   desc: string;
+  // 切磋/掌门挑战胜利后从该 NPC 身上掉落的随身物品
+  drops?: { item: string; chance: number }[];
   master?: boolean;
   enemy?: string;
   shop?: string[];

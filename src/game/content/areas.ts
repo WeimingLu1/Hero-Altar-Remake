@@ -31,7 +31,10 @@ export const AREAS: Record<string, AreaDef> = {
     interactables: [
       { x: 240, w: 60, label: "镇口老井", action: "well" },
       { x: 330, w: 70, label: "歪脖树", action: "tree" },
-      { x: 150, w: 80, label: "出镇告示", action: "sign" }
+      { x: 150, w: 80, label: "出镇告示", action: "sign" },
+      { x: 700, w: 70, label: "路边的石灯", action: "look" },
+      { x: 1900, w: 70, label: "墙角的旧旗", action: "look" },
+      { x: 2900, w: 70, label: "晒谷场的草垛", action: "look" }
     ]
   },
   wudang: {
@@ -46,7 +49,11 @@ export const AREAS: Record<string, AreaDef> = {
       { id: "taohua", name: "桃花源小筑", x: 1050, w: 180, kind: "home", doorX: 1140, room: "taohua" }
     ],
     exits: [{ x: 10, w: 90, area: "town", label: "东归平安镇" }],
-    interactables: [{ x: 700, w: 80, label: "山间石碑", action: "shrine" }]
+    interactables: [
+      { x: 700, w: 80, label: "山间石碑", action: "shrine" },
+      { x: 120, w: 70, label: "山门的青石", action: "look" },
+      { x: 850, w: 70, label: "古松下的石凳", action: "look" }
+    ]
   },
   shangjia: {
     id: "shangjia",
@@ -55,6 +62,10 @@ export const AREAS: Record<string, AreaDef> = {
     theme: "town",
     desc: "商家堡依河而建，堡墙高耸，门外刀枪架子排了两排，肃杀之气扑面而来。",
     npcs: ["shangJianMing"],
+    interactables: [
+      { x: 120, w: 70, label: "堡墙上的箭孔", action: "look" },
+      { x: 1100, w: 70, label: "兵器架的残影", action: "look" }
+    ],
     buildings: [{ id: "shangjiaHall", name: "商家堡正厅", x: 500, w: 260, kind: "hall", doorX: 630, room: "shangjiaHall" }],
     exits: [
       { x: 10, w: 90, area: "town", label: "西归平安镇" },
@@ -76,7 +87,11 @@ export const AREAS: Record<string, AreaDef> = {
       { x: 1900, w: 90, area: "dukou", label: "东南下渡口" },
       { x: 2300, w: 90, area: "wuzhi", label: "东往五指山" }
     ],
-    interactables: [{ x: 1200, w: 70, label: "官道路牌", action: "sign" }]
+    interactables: [
+      { x: 1200, w: 70, label: "官道路牌", action: "sign" },
+      { x: 420, w: 70, label: "褪色的路碑", action: "look" },
+      { x: 1750, w: 70, label: "官道边的草棚", action: "look" }
+    ]
   },
   houshan: {
     id: "houshan",
@@ -100,7 +115,9 @@ export const AREAS: Record<string, AreaDef> = {
     ],
     interactables: [
       { x: 900, w: 80, label: "废弃矿洞", action: "mine" },
-      { x: 1350, w: 80, label: "药草丛", action: "herb" }
+      { x: 1350, w: 80, label: "药草丛", action: "herb" },
+      { x: 350, w: 70, label: "山道的岔口", action: "look" },
+      { x: 1200, w: 70, label: "老树下的磨盘", action: "look" }
     ]
   },
   shiku: {
@@ -114,7 +131,9 @@ export const AREAS: Record<string, AreaDef> = {
     interactables: [
       { x: 480, w: 80, label: "废弃矿脉", action: "mine" },
       { x: 880, w: 80, label: "阴生药草", action: "herb" },
-      { x: 1420, w: 110, label: "深不见底的裂缝", action: "crack" }
+      { x: 1420, w: 110, label: "深不见底的裂缝", action: "crack" },
+      { x: 250, w: 70, label: "石壁上的刻痕", action: "look" },
+      { x: 1200, w: 70, label: "滴水的钟乳", action: "look" }
     ]
   },
   xueshan: {
@@ -125,6 +144,10 @@ export const AREAS: Record<string, AreaDef> = {
     desc: "千里冰封，万木披素。凌霄城矗立在雪线之上，梅树环城而植，花开如血。",
     npcs: ["xuewei", "xueshanDizi"],
     fixedEnemies: [{ enemy: "xueLang", x: 700, walk: 120 }],
+    interactables: [
+      { x: 250, w: 70, label: "雪里的脚印", action: "look" },
+      { x: 1100, w: 70, label: "冻住的梅枝", action: "look" }
+    ],
     buildings: [{ id: "lingxiao", name: "凌霄城", x: 600, w: 260, kind: "hall", doorX: 730, room: "lingxiao" }],
     exits: [{ x: 10, w: 90, area: "houshan", label: "南归后山" }]
   },
@@ -137,7 +160,11 @@ export const AREAS: Record<string, AreaDef> = {
     npcs: ["tangWanCi", "huaPopo", "huajianShinv"],
     buildings: [{ id: "sanhua", name: "散花亭", x: 520, w: 240, kind: "shrine", doorX: 640, room: "sanhua" }],
     exits: [{ x: 1300, w: 90, area: "guandao", label: "北出谷口·上官道" }],
-    interactables: [{ x: 950, w: 80, label: "花丛", action: "herb" }]
+    interactables: [
+      { x: 950, w: 80, label: "花丛", action: "herb" },
+      { x: 250, w: 70, label: "花丛边的竹篱", action: "look" },
+      { x: 1150, w: 70, label: "溪畔的石阶", action: "look" }
+    ]
   },
   dukou: {
     id: "dukou",
@@ -150,7 +177,11 @@ export const AREAS: Record<string, AreaDef> = {
       { x: 10, w: 90, area: "guandao", label: "上岸·西回官道" },
       { x: 1100, w: 90, area: "binghuo", label: "摆渡·冰火岛" }
     ],
-    interactables: [{ x: 560, w: 80, label: "渡口石碑", action: "sign" }]
+    interactables: [
+      { x: 560, w: 80, label: "渡口石碑", action: "sign" },
+      { x: 300, w: 70, label: "拴船的桩子", action: "look" },
+      { x: 900, w: 70, label: "芦苇荡", action: "look" }
+    ]
   },
   binghuo: {
     id: "binghuo",
@@ -160,6 +191,10 @@ export const AREAS: Record<string, AreaDef> = {
     desc: "岛上一半冰雪，一半熔岩。风雪与硫磺之气交汇，是东瀛武者远渡重洋后的落脚之处。",
     npcs: ["langren", "yinheXuetu"],
     fixedEnemies: [{ enemy: "xueLang", x: 300, walk: 100 }],
+    interactables: [
+      { x: 250, w: 70, label: "冒烟的礁石", action: "look" },
+      { x: 1150, w: 70, label: "融化的雪线", action: "look" }
+    ],
     buildings: [{ id: "renguan", name: "花讽院", x: 560, w: 240, kind: "hall", doorX: 680, room: "renguan" }],
     exits: [{ x: 10, w: 90, area: "dukou", label: "渡口·摆渡归岸" }]
   },
@@ -170,6 +205,10 @@ export const AREAS: Record<string, AreaDef> = {
     theme: "mountain",
     desc: "五座山峰如五指张开，红莲总坛藏在掌心般的山谷中，教众依岩穴而居，日夜燃着灯火。",
     npcs: ["xiangzhu", "honglianJiaotu"],
+    interactables: [
+      { x: 250, w: 70, label: "长明灯座", action: "look" },
+      { x: 1200, w: 70, label: "岩壁上的符", action: "look" }
+    ],
     buildings: [{ id: "honglianTang", name: "红莲总坛", x: 580, w: 260, kind: "shrine", doorX: 710, room: "honglianTang" }],
     exits: [{ x: 10, w: 90, area: "guandao", label: "西下官道" }]
   },
@@ -180,6 +219,10 @@ export const AREAS: Record<string, AreaDef> = {
     theme: "mountain",
     desc: "莲花山山势如莲，丐帮总舵就设在半山腰的破庙里。庙虽破，香火却旺，天下的叫花子都认得这条路。",
     npcs: ["zhanglao", "gaibangDizi"],
+    interactables: [
+      { x: 250, w: 70, label: "破庙的香炉", action: "look" },
+      { x: 1100, w: 70, label: "挂满布条的老树", action: "look" }
+    ],
     buildings: [{ id: "gaibangTang", name: "莲花山总舵", x: 540, w: 240, kind: "hall", doorX: 660, room: "gaibangTang" }],
     exits: [{ x: 10, w: 90, area: "guandao", label: "南归官道" }]
   },
@@ -194,6 +237,10 @@ export const AREAS: Record<string, AreaDef> = {
       { enemy: "zhaiTou", x: 760, walk: 90 },
       { enemy: "qingLongJingWei", x: 1180, walk: 70 }
     ],
+    interactables: [
+      { x: 250, w: 70, label: "铁蒺藜", action: "look" },
+      { x: 1000, w: 70, label: "寨墙上的豁口", action: "look" }
+    ],
     buildings: [{ id: "juyi", name: "聚义厅", x: 1280, w: 240, kind: "hall", doorX: 1400, room: "juyi" }],
     exits: [{ x: 10, w: 90, area: "houshan", label: "密林之外·后山" }]
   },
@@ -204,7 +251,11 @@ export const AREAS: Record<string, AreaDef> = {
     theme: "dark",
     desc: "六块石板在虚空中旋转、拼合，世界忽然安静下来。前方没有路，只有一面巨大的、映不出人影的镜子。",
     exits: [{ x: 1500, w: 90, area: "town", label: "返回平安镇" }],
-    interactables: [{ x: 600, w: 240, label: "巨大的铜镜", action: "shrine" }]
+    interactables: [
+      { x: 600, w: 240, label: "巨大的铜镜", action: "shrine" },
+      { x: 250, w: 70, label: "碎裂的石板", action: "look" },
+      { x: 1200, w: 70, label: "虚空的裂隙", action: "look" }
+    ]
   }
 };
 
@@ -218,7 +269,8 @@ export const ROOMS: Record<string, RoomDef> = {
     exits: [{ x: 820, w: 80, area: "town", label: "出门" }],
     interactables: [
       { x: 120, w: 90, label: "柜台·食宿", action: "rest" },
-      { x: 320, w: 90, label: "客房", action: "rest" }
+      { x: 320, w: 90, label: "客房", action: "rest" },
+      { x: 700, w: 70, label: "墙角的旧蓑衣", action: "look" }
     ]
   },
   hall: {
@@ -228,7 +280,10 @@ export const ROOMS: Record<string, RoomDef> = {
     theme: "hall",
     npcs: ["liZhenWei", "guYanWu"],
     exits: [{ x: 820, w: 80, area: "town", label: "出门" }],
-    interactables: [{ x: 430, w: 110, label: "木人桩", action: "meditate" }]
+    interactables: [
+      { x: 430, w: 110, label: "木人桩", action: "meditate" },
+      { x: 720, w: 70, label: "墙上的字画", action: "look" }
+    ]
   },
   smith: {
     id: "smith",
@@ -237,7 +292,10 @@ export const ROOMS: Record<string, RoomDef> = {
     theme: "smith",
     npcs: ["tiejiang"],
     exits: [{ x: 820, w: 80, area: "town", label: "出门" }],
-    interactables: [{ x: 300, w: 120, label: "铁砧", action: "desk" }]
+    interactables: [
+      { x: 300, w: 120, label: "铁砧", action: "desk" },
+      { x: 620, w: 70, label: "炉边的炭灰", action: "look" }
+    ]
   },
   drug: {
     id: "drug",
@@ -245,7 +303,8 @@ export const ROOMS: Record<string, RoomDef> = {
     width: 900,
     theme: "drug",
     npcs: ["pingYiZhi"],
-    exits: [{ x: 820, w: 80, area: "town", label: "出门" }]
+    exits: [{ x: 820, w: 80, area: "town", label: "出门" }],
+    interactables: [{ x: 640, w: 70, label: "药柜上的旧签", action: "look" }]
   },
   study: {
     id: "study",
@@ -254,7 +313,10 @@ export const ROOMS: Record<string, RoomDef> = {
     theme: "study",
     npcs: ["xiucai"],
     exits: [{ x: 820, w: 80, area: "town", label: "出门" }],
-    interactables: [{ x: 220, w: 130, label: "书架", action: "desk" }]
+    interactables: [
+      { x: 220, w: 130, label: "书架", action: "desk" },
+      { x: 600, w: 70, label: "砚台", action: "look" }
+    ]
   },
   yamen: {
     id: "yamen",
@@ -262,7 +324,8 @@ export const ROOMS: Record<string, RoomDef> = {
     width: 900,
     theme: "yamen",
     npcs: ["xunbu", "xianling"],
-    exits: [{ x: 820, w: 80, area: "town", label: "出门" }]
+    exits: [{ x: 820, w: 80, area: "town", label: "出门" }],
+    interactables: [{ x: 640, w: 70, label: "墙角的旧木牌", action: "look" }]
   },
   cunzhangHome: {
     id: "cunzhangHome",
@@ -270,7 +333,8 @@ export const ROOMS: Record<string, RoomDef> = {
     width: 900,
     theme: "home",
     npcs: ["cunzhang"],
-    exits: [{ x: 820, w: 80, area: "town", label: "出门" }]
+    exits: [{ x: 820, w: 80, area: "town", label: "出门" }],
+    interactables: [{ x: 640, w: 70, label: "灶台边的凉粥", action: "look" }]
   },
   popoHome: {
     id: "popoHome",
@@ -282,7 +346,8 @@ export const ROOMS: Record<string, RoomDef> = {
     interactables: [
       { x: 180, w: 90, label: "水缸", action: "well" },
       { x: 360, w: 90, label: "柴堆", action: "desk" },
-      { x: 540, w: 90, label: "院子", action: "meditate" }
+      { x: 540, w: 90, label: "院子", action: "meditate" },
+      { x: 700, w: 70, label: "窗台上的干花", action: "look" }
     ]
   },
   funvHome: {
@@ -292,7 +357,10 @@ export const ROOMS: Record<string, RoomDef> = {
     theme: "home",
     npcs: ["funv"],
     exits: [{ x: 820, w: 80, area: "town", label: "出门" }],
-    interactables: [{ x: 260, w: 120, label: "杂物箱", action: "chest" }]
+    interactables: [
+      { x: 260, w: 120, label: "杂物箱", action: "chest" },
+      { x: 640, w: 70, label: "墙上的旧画", action: "look" }
+    ]
   },
   zahuo: {
     id: "zahuo",
@@ -300,7 +368,8 @@ export const ROOMS: Record<string, RoomDef> = {
     width: 900,
     theme: "shop",
     npcs: ["huoji"],
-    exits: [{ x: 820, w: 80, area: "town", label: "出门" }]
+    exits: [{ x: 820, w: 80, area: "town", label: "出门" }],
+    interactables: [{ x: 640, w: 70, label: "门口的风铃", action: "look" }]
   },
   sanqing: {
     id: "sanqing",
@@ -308,7 +377,8 @@ export const ROOMS: Record<string, RoomDef> = {
     width: 900,
     theme: "shrine",
     npcs: ["qingXu"],
-    exits: [{ x: 820, w: 80, area: "wudang", label: "出门" }]
+    exits: [{ x: 820, w: 80, area: "wudang", label: "出门" }],
+    interactables: [{ x: 640, w: 70, label: "供桌上的馒头", action: "look" }]
   },
   shangjiaHall: {
     id: "shangjiaHall",
@@ -316,7 +386,8 @@ export const ROOMS: Record<string, RoomDef> = {
     width: 900,
     theme: "hall",
     npcs: ["wangWeiYang"],
-    exits: [{ x: 820, w: 80, area: "shangjia", label: "出门" }]
+    exits: [{ x: 820, w: 80, area: "shangjia", label: "出门" }],
+    interactables: [{ x: 640, w: 70, label: "墙上的匾额", action: "look" }]
   },
   lingxiao: {
     id: "lingxiao",
@@ -324,7 +395,8 @@ export const ROOMS: Record<string, RoomDef> = {
     width: 900,
     theme: "shrine",
     npcs: ["baiRuiDe"],
-    exits: [{ x: 820, w: 80, area: "xueshan", label: "出门" }]
+    exits: [{ x: 820, w: 80, area: "xueshan", label: "出门" }],
+    interactables: [{ x: 640, w: 70, label: "冰结的窗棂", action: "look" }]
   },
   sanhua: {
     id: "sanhua",
@@ -332,7 +404,8 @@ export const ROOMS: Record<string, RoomDef> = {
     width: 900,
     theme: "shrine",
     npcs: ["liQingZhao", "tangWanCi"],
-    exits: [{ x: 820, w: 80, area: "baihua", label: "出门" }]
+    exits: [{ x: 820, w: 80, area: "baihua", label: "出门" }],
+    interactables: [{ x: 640, w: 70, label: "满地的落花", action: "look" }]
   },
   renguan: {
     id: "renguan",
@@ -340,7 +413,8 @@ export const ROOMS: Record<string, RoomDef> = {
     width: 900,
     theme: "hall",
     npcs: ["heZhongYang"],
-    exits: [{ x: 820, w: 80, area: "binghuo", label: "出门" }]
+    exits: [{ x: 820, w: 80, area: "binghuo", label: "出门" }],
+    interactables: [{ x: 640, w: 70, label: "墙上的忍字", action: "look" }]
   },
   honglianTang: {
     id: "honglianTang",
@@ -348,7 +422,8 @@ export const ROOMS: Record<string, RoomDef> = {
     width: 900,
     theme: "shrine",
     npcs: ["yuHongRu"],
-    exits: [{ x: 820, w: 80, area: "wuzhi", label: "出门" }]
+    exits: [{ x: 820, w: 80, area: "wuzhi", label: "出门" }],
+    interactables: [{ x: 640, w: 70, label: "长明灯", action: "look" }]
   },
   gaibangTang: {
     id: "gaibangTang",
@@ -356,7 +431,8 @@ export const ROOMS: Record<string, RoomDef> = {
     width: 900,
     theme: "hall",
     npcs: ["qiaoSiHai", "zhanglao"],
-    exits: [{ x: 820, w: 80, area: "lianhua", label: "出门" }]
+    exits: [{ x: 820, w: 80, area: "lianhua", label: "出门" }],
+    interactables: [{ x: 640, w: 70, label: "破碗里的清水", action: "look" }]
   },
   taohua: {
     id: "taohua",
@@ -366,7 +442,8 @@ export const ROOMS: Record<string, RoomDef> = {
     exits: [{ x: 820, w: 80, area: "wudang", label: "出门" }],
     interactables: [
       { x: 170, w: 120, label: "卧榻", action: "house-rest" },
-      { x: 400, w: 120, label: "存物柜", action: "chest" }
+      { x: 400, w: 120, label: "存物柜", action: "chest" },
+      { x: 700, w: 70, label: "窗前的桃枝", action: "look" }
     ]
   },
   juyi: {
@@ -376,7 +453,10 @@ export const ROOMS: Record<string, RoomDef> = {
     theme: "hall",
     npcs: ["lengTieYi"],
     exits: [{ x: 820, w: 80, area: "heifeng", label: "出门" }],
-    interactables: [{ x: 300, w: 140, label: "寨主宝座", action: "desk" }]
+    interactables: [
+      { x: 300, w: 140, label: "寨主宝座", action: "desk" },
+      { x: 640, w: 70, label: "墙上的刀痕", action: "look" }
+    ]
   }
 };
 

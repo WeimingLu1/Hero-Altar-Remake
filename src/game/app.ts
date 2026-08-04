@@ -1,5 +1,13 @@
 import Phaser from "phaser";
-import { ENDINGS, HANG_TEXT, getNpcDialog, randomRumor } from "./content/story";
+import {
+  ENDINGS,
+  HANG_TEXT,
+  getNpcDialog,
+  randomNpcChatDialog,
+  randomRumor,
+  randomTalkText,
+  sparReaction
+} from "./content/story";
 import { AREAS } from "./content/areas";
 import { ENEMIES, sparEnemyId } from "./content/enemies";
 import { ITEMS, WEAPONS, ARMORS } from "./content/items";
@@ -433,6 +441,11 @@ export class App {
         this.toast(`阿绣对你的好感提升了（${p.affections.axiu}）。`);
         this.refreshDialog();
         return;
+      case action.startsWith("npc-chat:"): {
+        const npcId = action.split(":")[1];
+        if (NPCS[npcId]) this.ui.showDialog(randomNpcChatDialog(npcId, s));
+        return;
+      }
       case action.startsWith("npc-status:"): {
         this.ui.showNpcStatus(action.split(":")[1], s);
         return;
@@ -462,14 +475,22 @@ export class App {
         if (!NPCS[npcId]) return;
         const aff = Math.min(100, (p.affections[npcId] || 0) + 3);
         p.affections[npcId] = aff;
-        this.toast(`你与${NPCS[npcId]?.name || "对方"}说了些体己话，好感 +3（${aff}）。`);
-        this.refreshDialog();
+        const npc = NPCS[npcId];
+        this.ui.showDialog([
+          { id: "r", speaker: npc.name, text: randomTalkText(), opts: [] }
+        ]);
+        this.toast(`你与${npc.name}说了些体己话，好感 +3（${aff}）。`);
+        this.refreshUi();
         return;
       }
       case action.startsWith("romance-intimacy:"): {
         const npcId = action.split(":")[1];
         const npc = NPCS[npcId];
         if (!npc) return;
+        if (npc.gender && npc.gender === p.gender) {
+          this.toast(p.gender === "male" ? "你们同为男儿身，只可做知己，不可越礼。" : "你们同为女儿身，只可做知己，不可越礼。");
+          return;
+        }
         if ((npc.age ?? 18) < 16) {
           this.toast("对方年纪尚小，此事不可。");
           return;
@@ -497,6 +518,10 @@ export class App {
         const npcId = action.split(":")[1];
         const rom = ROMANCE[npcId];
         if (!rom || rom.gender !== "female") return;
+        if (p.gender !== "male") {
+          this.toast("女儿家去偷绣帕，成何体统。");
+          return;
+        }
         if (p.spouse === NPCS[npcId]?.name) {
           this.toast("枕边人面前，何必做贼。");
           return;
@@ -965,6 +990,11 @@ export class App {
         this.refreshUi();
         return;
       }
+      case action === "look": {
+        const msg = interactAction(s, "look");
+        this.toast(msg);
+        return;
+      }
       case action === "sign": {
         this.ui.showTravel(s);
         return;
@@ -1138,23 +1168,40 @@ export class App {
       if (!s) return;
       const b = this.battle;
       this.battle = null;
-      if (b && !b.victory && b.player.hp <= 0) {
+      const sparNpcId = b.sourceNpc || (b.enemyId.startsWith("spar-") ? b.enemyId.slice(5) : null);
+      const isSparBattle = !!sparNpcId && (!!b.sourceNpc || !!ENEMIES[b.enemyId]?.spar);
+      if (sparNpcId && isSparBattle) {
         // 切磋与掌门挑战（带 sourceNpc）死亡无惩罚，不轮回不扣钱
-        const spar = ENEMIES[b.enemyId]?.spar || b.sourceNpc;
-        if (spar) {
+        if (!b.victory) {
           s.player.hp = Math.max(1, s.player.hp);
-          this.toast("切磋点到为止，你败了一招。");
-          this.ui.showDialog([{ id: "r", speaker: "切磋", text: "「承让了。功夫还得多练，改日再来。」", opts: [] }]);
-        } else {
-          handleDeath(s);
-          this.toast("你倒在江湖路上……");
-          this.ui.showDialog([{ id: "r", speaker: "轮回", text: DEATH_TEXT, opts: [] }]);
         }
+      } else if (!b.victory && b.player.hp <= 0) {
+        handleDeath(s);
+        this.toast("你倒在江湖路上……");
+        this.ui.showDialog([{ id: "r", speaker: "轮回", text: DEATH_TEXT, opts: [] }]);
       }
       this.ui.el("combat-ui").classList.add("hidden");
       this.game.scene.stop("Battle");
       this.game.scene.start("World");
       this.refreshUi();
+      // 切磋/掌门战结束后的随机剧情反馈：输赢都有大量不同反应
+      if (isSparBattle) {
+        if (b.victory) {
+          const npc = NPCS[sparNpcId];
+          if (npc?.gender && npc.gender !== s.player.gender && (npc.age ?? 18) >= 16) {
+            const gain = ROMANCE[sparNpcId] ? 12 : 6;
+            s.player.affections[sparNpcId] = Math.min(100, (s.player.affections[sparNpcId] || 0) + gain);
+            this.toast(`${npc.name}看你的眼神，似乎有些不一样了。（好感 +${gain}）`);
+          }
+        }
+        this.ui.showDialog(sparReaction(sparNpcId, b.victory, s.player.gender));
+      }
+      if (b.victory) {
+        const itemLines = b.rewardLines.filter(
+          (l) => l.includes("捡到了") || l.includes("搜出了") || l.includes("三角石板") || l.includes("密信")
+        );
+        if (itemLines.length) this.toast("战利品：" + itemLines.join(" "));
+      }
       // 逃婚风波·甲线：击退家丁，护送阿沅抵达百花谷，任务就此了结
       if (b.victory && b.enemyId === "jiading") {
         const qt = s.player.quests.qTaoHun;
@@ -1229,6 +1276,7 @@ export class App {
     this.ui.closePanels();
     this.ui.showHint(null);
     this.ui.dialogNpc = null;
+    this.dialogNpc = null;
     this.world?.focusPlayer();
   }
 

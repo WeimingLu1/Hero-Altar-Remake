@@ -3,7 +3,8 @@ import { ITEMS, WEAPONS, ARMORS } from "../content/items";
 import { QUESTS, questDef } from "../content/quests";
 import { SECTS } from "../content/sects";
 import { SKILLS, skillDef } from "../content/skills";
-import { randomRumor } from "../content/story";
+import { randomLookText, randomRumor } from "../content/story";
+import { npcDrops } from "../content/npcs";
 import type { DialogNode, EnemyDef } from "../content/types";
 import {
   clamp,
@@ -505,6 +506,101 @@ const TEXT_EVENTS: TextEventDef[] = [
       s.player.potential += 8;
       return "风声穿林，你忽然听出几分招式的节奏，若有所悟。（潜能 +8）";
     }
+  },
+  // —— 随机文案扩容 ——
+  {
+    w: 2,
+    run: (s) => {
+      const v = 10 + Math.floor(Math.random() * 20);
+      s.player.exp += v;
+      return "你捡到一本被雨水泡皱的旧册子，翻了半天，倒也有几句能用的。（经验 +" + v + "）";
+    }
+  },
+  {
+    w: 2,
+    run: (s) => {
+      s.player.moral = clamp(s.player.moral + 1, -100, 100);
+      return "你替一个迷路的孩子指了回镇的路，他回头冲你笑出两颗豁牙。（善恶 +1）";
+    }
+  },
+  {
+    w: 2,
+    run: (s) => {
+      s.player.hunger = clamp(s.player.hunger + 10, 0, 100);
+      return "路边的野柿子正好熟了，你踮脚摘了两枚，涩中带甜。（饥饱 +10）";
+    }
+  },
+  {
+    w: 2,
+    run: (s) => {
+      const v = 6 + Math.floor(Math.random() * 10);
+      s.player.potential += v;
+      return "你对着墙上的一道旧剑痕比划了半炷香，忽然若有所悟。（潜能 +" + v + "）";
+    }
+  },
+  {
+    w: 1,
+    scenes: ["inn"],
+    run: () => "半夜有只老鼠拖着你的鞋带满屋跑，你追了半宿，它最终把鞋还到了门口。",
+  },
+  {
+    w: 2,
+    scenes: ["inn"],
+    run: (s) => {
+      const v = 15 + Math.floor(Math.random() * 15);
+      s.player.exp += v;
+      return "同屋的镖师半夜说梦话，把一趟镖的路线全说了，你迷迷糊糊记下几句。（经验 +" + v + "）";
+    }
+  },
+  {
+    w: 2,
+    scenes: ["inn"],
+    run: (s) => {
+      s.player.hunger = clamp(s.player.hunger + 8, 0, 100);
+      return "掌柜娘子见你面善，多送了一碟咸菜，就粥正好。（饥饱 +8）";
+    }
+  },
+  {
+    w: 2,
+    scenes: ["travel"],
+    run: (s) => {
+      const m = 8 + Math.floor(Math.random() * 18);
+      s.player.money += m;
+      return "一队镖车打身边经过，车尾掉下一只钱袋，你追上还了回去，镖师硬塞给你几个铜板。（银两 +" + m + "）";
+    }
+  },
+  {
+    w: 2,
+    scenes: ["travel"],
+    run: (s) => {
+      const v = 12 + Math.floor(Math.random() * 20);
+      s.player.exp += v;
+      return "山坳里有人比武，你躲在树后看了三招，回去路上比划了一路。（经验 +" + v + "）";
+    }
+  },
+  {
+    w: 2,
+    scenes: ["travel"],
+    run: (s) => {
+      s.player.thirst = clamp(s.player.thirst + 15, 0, 100);
+      return "你在山涧边掬水洗了把脸，水凉得人一激灵，人也清醒了。（口渴 +15）";
+    }
+  },
+  {
+    w: 2,
+    scenes: ["meditate"],
+    run: (s) => {
+      s.player.mp = Math.min(maxMp(s.player), s.player.mp + 8);
+      return "运功到一半，丹田里像开了口温泉，内力缓缓满上来。（内力 +8）";
+    }
+  },
+  {
+    w: 1,
+    scenes: ["meditate"],
+    run: (s) => {
+      s.player.exp += 6;
+      return "远处传来一声钟响，你数着余音入定，醒来时天色都变了。（经验 +6）";
+    }
   }
 ];
 
@@ -736,6 +832,20 @@ export function getRewards(s: GameState, enemy: EnemyDef, mult = 1): string[] {
   return msgs;
 }
 
+// 切磋/掌门挑战的随身掉落：从 NPC 身上搜出符合身份的物品
+export function applyNpcDrops(s: GameState, npcId: string, ownerName: string): string[] {
+  const msgs: string[] = [];
+  for (const drop of npcDrops(npcId)) {
+    if (!ITEMS[drop.item]) continue;
+    if (Math.random() * 100 < drop.chance) {
+      addItem(s, drop.item);
+      const itemName = ITEMS[drop.item]?.name || drop.item;
+      msgs.push(`从${ownerName}身上搜出了「${itemName}」！`);
+    }
+  }
+  return msgs;
+}
+
 export function handleDeath(s: GameState): void {
   const p = s.player;
   // 有效气血减半已在战斗结算（syncBack）做过，这里只把当前气血钳回有效值内
@@ -951,6 +1061,8 @@ export function interactAction(s: GameState, action: string): string {
       return "chest";
     case "meditate":
       return "meditate";
+    case "look":
+      return randomLookText(p.area);
     default:
       return "";
   }

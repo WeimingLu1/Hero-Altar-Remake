@@ -43,7 +43,9 @@ const KIND_EMOJI: Record<RelationKind, string[]> = {
   neighbor: ["💬", "🍵"],
   rival: ["⚔️", "😠"],
   friend: ["😂", "🍵"],
-  trade: ["💰", "😂"]
+  trade: ["💰", "😂"],
+  hate: ["😠", "🔥"],
+  crush: ["💕", "😳"]
 };
 
 const WEATHER_BEATS: Record<string, { emoji: string; lines: string[] }> = {

@@ -3,7 +3,7 @@ import { getApp } from "../bus";
 import { AREAS, ROOMS, areaDef, roomDef } from "../content/areas";
 import { enemyDef } from "../content/enemies";
 import { NPCS, npcDef } from "../content/npcs";
-import { getNpcDialog, randomRumor } from "../content/story";
+import { getNpcDialog, randomChatText } from "../content/story";
 import type { BuildingDef, RoomDef } from "../content/types";
 import { buildingTexSize, npcScaleHint, visualForEnemy, visualForNpc, type CharVisual } from "../view/art";
 import { dayTint, moonArc, nightness, sunArc } from "../view/daynight";
@@ -33,6 +33,9 @@ interface NpcWalker {
   dir: number;
   v: CharVisual;
   shadow: Phaser.GameObjects.Image;
+  label: Phaser.GameObjects.Text;
+  tx: number;
+  pauseUntil: number;
 }
 
 // NPC 生活引擎的一场互动演出状态机
@@ -92,6 +95,9 @@ export class WorldScene extends Phaser.Scene {
   private meditating = false;
   private meditateAcc = 0;
   private hudAcc = 0;
+  private dustAcc = 0;
+  private hintGlow: Phaser.GameObjects.Image | null = null;
+  private lastChatText = "";
   private battleCooldown = 0;
   private areaId = "";
   private roomId: string | null = null;
@@ -160,7 +166,7 @@ export class WorldScene extends Phaser.Scene {
       kb.on(`keydown-${key}`, () => getApp().handleAction(action));
     }
     this.cameras.main.fadeIn(300, 0, 0, 0);
-    this.lifeNext = this.time.now + 18000 + Math.random() * 12000;
+    this.lifeNext = this.time.now + 12000 + Math.random() * 8000;
     this.refresh();
   }
 
@@ -274,8 +280,25 @@ export class WorldScene extends Phaser.Scene {
       this.player.setFlipX(vx < 0);
       const frame = Math.floor(this.time.now / 180) % 2 === 0 ? "walk" : "walk2";
       this.player.setTexture(`char-${this.playerPalette}-${frame}`);
+      this.dustAcc += dt;
+      if (this.dustAcc > 0.14) {
+        this.dustAcc = 0;
+        const dust = this.add
+          .image(this.player.x + (Math.random() * 24 - 12), FOOT_Y - 3, "fx-sand")
+          .setScale(0.5 + Math.random() * 0.5)
+          .setAlpha(0.32);
+        this.tweens.add({
+          targets: dust,
+          x: dust.x + (Math.random() * 30 - 15),
+          y: dust.y - 14,
+          alpha: 0,
+          duration: 480 + Math.random() * 280,
+          onComplete: () => dust.destroy()
+        });
+      }
     } else {
       this.player.setTexture(`char-${this.playerPalette}-idle`);
+      this.dustAcc = 0;
     }
     for (const w of this.enemyWalkers) {
       w.sprite.x += w.dir * w.speed * dt;
@@ -292,6 +315,8 @@ export class WorldScene extends Phaser.Scene {
       }
     }
     for (const [id, n] of this.npcSprites) {
+      n.label.x = n.sprite.x;
+      n.label.y = n.sprite.y - 38;
       if (this.lifeScript && (this.lifeScript.aId === id || this.lifeScript.bId === id)) {
         // 参与生活演出：走近/归位途中播行走帧，对话阶段立定（位移由 tween 承担）
         const frame =
@@ -299,10 +324,17 @@ export class WorldScene extends Phaser.Scene {
         n.sprite.setTexture(n.v.key(frame));
         continue;
       }
-      if (n.speed > 0) {
+      if (n.speed <= 0 || this.time.now < n.pauseUntil) {
+        n.sprite.setTexture(n.v.key("idle"));
+        continue;
+      }
+      const dx = n.tx - n.sprite.x;
+      if (Math.abs(dx) < 4) {
+        n.pauseUntil = this.time.now + 700 + Math.random() * 1500;
+        this.pickNpcTarget(n);
+      } else {
+        n.dir = dx > 0 ? 1 : -1;
         n.sprite.x += n.dir * n.speed * dt;
-        if (n.sprite.x > n.defX + 70) n.dir = -1;
-        if (n.sprite.x < n.defX - 70) n.dir = 1;
         n.sprite.setFlipX(n.dir < 0);
         n.shadow.x = n.sprite.x;
         const frame = Math.floor(this.time.now / 240) % 2 === 0 ? "walk" : "walk2";
@@ -364,9 +396,11 @@ export class WorldScene extends Phaser.Scene {
             const m = 10 + Math.floor(Math.random() * 31);
             s.player.money += m;
             getApp().toast(`你拾到 ${m} 两散碎银两。`);
+            this.sparkleAt(c.sprite.x, 456, 0xffd86a);
           } else {
             s.player.items.yaocai = (s.player.items.yaocai || 0) + 1;
             getApp().toast("你拾到一株药草。");
+            this.sparkleAt(c.sprite.x, 456, 0x8ae08a);
           }
           c.sprite.setVisible(false);
           c.respawnAt = this.time.now + 40000;
@@ -384,7 +418,10 @@ export class WorldScene extends Phaser.Scene {
       const arr = [...this.npcSprites.values()];
       if (arr.length) {
         const n = arr[Math.floor(Math.random() * arr.length)];
-        const t = this.add.text(n.sprite.x, n.sprite.y - 58, randomRumor(s), {
+        let chat = randomChatText(s);
+        for (let i = 0; i < 5 && chat === this.lastChatText; i++) chat = randomChatText(s);
+        this.lastChatText = chat;
+        const t = this.add.text(n.sprite.x, n.sprite.y - 58, chat, {
           fontFamily: "Noto Serif SC, serif",
           fontSize: "12px",
           color: "#f3e3bd",
@@ -400,9 +437,10 @@ export class WorldScene extends Phaser.Scene {
         });
       }
     }
+    this.checkDialogDistance();
     // NPC 生活引擎：每 25-45 秒尝试触发一场互动演出
     if (!this.lifeScript && now >= this.lifeNext) {
-      this.lifeNext = now + 25000 + Math.random() * 20000;
+      this.lifeNext = now + 10000 + Math.random() * 10000;
       this.tryStartLife();
     }
     this.updateLife(now);
@@ -481,10 +519,10 @@ export class WorldScene extends Phaser.Scene {
       const wa = this.npcSprites.get(rel.a);
       const wb = this.npcSprites.get(rel.b);
       if (!wa || !wb) continue;
-      if (Math.abs(wa.sprite.x - wb.sprite.x) >= 500) continue;
+      if (Math.abs(wa.sprite.x - wb.sprite.x) >= 800) continue;
       // 同一对 10 分钟内不重复演出
       const last = this.lifeCooldowns.get(relationPairKey(rel.a, rel.b)) ?? -Infinity;
-      if (now - last < 600000) continue;
+      if (now - last < 180000) continue;
       cands.push({ rel, wa, wb });
     }
     if (!cands.length) return;
@@ -495,8 +533,8 @@ export class WorldScene extends Phaser.Scene {
     const dist = Math.abs(wa.sprite.x - wb.sprite.x);
     const dur = Math.min(2600, 500 + dist * 2);
     // 1) 互相走近到相距 60px，面对面
-    this.tweens.add({ targets: [left.sprite, left.shadow], x: mid - 30, duration: dur, ease: "Sine.easeInOut" });
-    this.tweens.add({ targets: [right.sprite, right.shadow], x: mid + 30, duration: dur, ease: "Sine.easeInOut" });
+    this.tweens.add({ targets: [left.sprite, left.shadow, left.label], x: mid - 30, duration: dur, ease: "Sine.easeInOut" });
+    this.tweens.add({ targets: [right.sprite, right.shadow, right.label], x: mid + 30, duration: dur, ease: "Sine.easeInOut" });
     left.sprite.setFlipX(false);
     right.sprite.setFlipX(true);
     this.lifeScript = {
@@ -535,8 +573,8 @@ export class WorldScene extends Phaser.Scene {
           return;
         }
         const dur = 900;
-        this.tweens.add({ targets: [wa.sprite, wa.shadow], x: wa.defX, duration: dur, ease: "Sine.easeInOut" });
-        this.tweens.add({ targets: [wb.sprite, wb.shadow], x: wb.defX, duration: dur, ease: "Sine.easeInOut" });
+        this.tweens.add({ targets: [wa.sprite, wa.shadow, wa.label], x: wa.defX, duration: dur, ease: "Sine.easeInOut" });
+        this.tweens.add({ targets: [wb.sprite, wb.shadow, wb.label], x: wb.defX, duration: dur, ease: "Sine.easeInOut" });
         ls.phase = "return";
         ls.nextAt = now + dur + 150;
         return;
@@ -567,7 +605,7 @@ export class WorldScene extends Phaser.Scene {
     const watched = ls.watched && this.player && Math.abs(this.player.x - ls.mid) < 300;
     this.lifeScript = null;
     if (watched && s && Math.random() < 0.1) {
-      getApp().toast("👂 你无意间听到……" + randomRumor(s));
+      getApp().toast("👂 你无意间听到……" + randomChatText(s));
     }
   }
 
@@ -618,6 +656,10 @@ export class WorldScene extends Phaser.Scene {
     if (this.player) {
       this.player.destroy();
       this.player = null;
+    }
+    if (this.hintGlow) {
+      this.hintGlow.destroy();
+      this.hintGlow = null;
     }
   }
 
@@ -988,6 +1030,24 @@ export class WorldScene extends Phaser.Scene {
       this.tweens.add({ targets: spr, alpha: 0.5, scale: 0.7, duration: 720, yoyo: true, repeat: -1, ease: "Sine.easeInOut" });
       this.collectibles.push({ sprite: spr, defX: x, kind, respawnAt: 0 });
     }
+    // 环境漂浮星光：让世界更亮、更有生气
+    for (let i = 0; i < 7; i++) {
+      const sp = this.add
+        .image(40 + Math.random() * Math.max(200, width - 80), 120 + Math.random() * 260, "fx-spark")
+        .setScale(0.22 + Math.random() * 0.3)
+        .setTint(0xfff0c8)
+        .setAlpha(0.28);
+      objects.add(sp);
+      this.tweens.add({
+        targets: sp,
+        y: sp.y - 26,
+        alpha: 0.05,
+        duration: 1400 + Math.random() * 1200,
+        yoyo: true,
+        repeat: -1,
+        ease: "Sine.easeInOut"
+      });
+    }
     for (const b of def.buildings || []) {
       const img = this.add.image(b.x + b.w / 2, 470, `bld-${b.kind}`).setOrigin(0.5, 1).setScale(b.w / 180);
       objects.add(img);
@@ -1000,6 +1060,7 @@ export class WorldScene extends Phaser.Scene {
       else if (it.action === "tree") icon = this.add.image(it.x, 470, "hangtree").setOrigin(0.5, 1);
       else if (it.action === "sign") icon = this.add.image(it.x, 470, "sign").setOrigin(0.5, 1);
       else if (it.action === "mine" || it.action === "herb" || it.action === "crack") icon = this.add.image(it.x, 470, "rock").setOrigin(0.5, 1).setScale(1.4);
+      else if (it.action === "look") icon = this.add.image(it.x, 470, "rock").setOrigin(0.5, 1).setScale(1);
       else icon = this.add.image(it.x, 470, "sign").setOrigin(0.5, 1);
       objects.add(icon);
       this.interactables.push({ x: it.x, w: it.w || 70, label: it.label, action: it.action });
@@ -1157,7 +1218,25 @@ export class WorldScene extends Phaser.Scene {
     objects.add(spr);
     spr.setData("npcId", npcId);
     spr.setData("npcName", nd.name);
-    this.npcSprites.set(npcId, { sprite: spr, defX: x, speed: walk * 0.08, dir: 1, v, shadow });
+    const label = this.add.text(x, y - 36, nd.name, {
+      fontFamily: "Noto Serif SC, serif",
+      fontSize: "11px",
+      color: "#f3e3bd",
+      backgroundColor: "rgba(18,13,8,.68)",
+      padding: { x: 4, y: 2 }
+    }).setOrigin(0.5);
+    objects.add(label);
+    this.npcSprites.set(npcId, {
+      sprite: spr,
+      defX: x,
+      speed: walk * 0.08,
+      dir: 1,
+      v,
+      shadow,
+      label,
+      tx: x,
+      pauseUntil: 0
+    });
   }
 
   private npcPresent(nd: ReturnType<typeof npcDef>): boolean {
@@ -1169,6 +1248,62 @@ export class WorldScene extends Phaser.Scene {
     if (!nd.hours) return true;
     const h = getApp().state?.player.time.hour ?? 8;
     return h >= nd.hours[0] && h < nd.hours[1];
+  }
+
+  // 宽范围游荡：大概率原地附近，小概率走远，甚至可能跑到区域另一端
+  private pickNpcTarget(n: NpcWalker): void {
+    const width = this.areaDefWidth();
+    if (Math.random() < 0.85) {
+      n.tx = Math.max(40, Math.min(width - 40, n.defX + (Math.random() * 240 - 120)));
+    } else {
+      n.tx = 40 + Math.random() * Math.max(80, width - 80);
+    }
+  }
+
+  // 玩家走开超过一段距离，NPC 对话框自动关闭
+  private checkDialogDistance(): void {
+    const app = getApp();
+    if (!app.dialogNpc || !this.player || app.ui.el("dialog").classList.contains("hidden")) return;
+    const n = this.npcSprites.get(app.dialogNpc);
+    if (!n || Math.abs(this.player.x - n.sprite.x) > 140) app.closeUi();
+  }
+
+  private sparkleAt(x: number, y: number, color: number, count = 6): void {
+    for (let i = 0; i < count; i++) {
+      const sp = this.add
+        .image(x, y, "fx-spark")
+        .setTint(color)
+        .setScale(0.5 + Math.random() * 0.6)
+        .setAlpha(0.9);
+      const angle = Math.random() * Math.PI * 2;
+      const dist = 18 + Math.random() * 30;
+      this.tweens.add({
+        targets: sp,
+        x: x + Math.cos(angle) * dist,
+        y: y + Math.sin(angle) * dist - 12,
+        alpha: 0,
+        scale: 0.2,
+        duration: 420 + Math.random() * 260,
+        onComplete: () => sp.destroy()
+      });
+    }
+  }
+
+  private ensureHintGlow(x: number, y: number): void {
+    if (!this.hintGlow) {
+      this.hintGlow = this.add.image(x, y, "fx-glow").setScale(1.15).setAlpha(0.32);
+      this.tweens.add({
+        targets: this.hintGlow,
+        alpha: 0.16,
+        scale: 0.9,
+        duration: 700,
+        yoyo: true,
+        repeat: -1,
+        ease: "Sine.easeInOut"
+      });
+    } else {
+      this.hintGlow.setPosition(x, y).setVisible(true);
+    }
   }
 
   private areaDefWidth(): number {
@@ -1188,6 +1323,8 @@ export class WorldScene extends Phaser.Scene {
     if (!s || !this.player) return;
     const ui = getApp().ui;
     let hint = "";
+    let glowX = -1;
+    let glowY = -1;
     for (const npc of this.npcSprites.values()) {
       if (Math.abs(this.player.x - npc.sprite.x) < 52) {
         hint = `${npc.sprite.getData("npcName")} · [E]交谈`;
@@ -1206,6 +1343,8 @@ export class WorldScene extends Phaser.Scene {
       for (const ex of this.exits) {
         if (Math.abs(this.player.x - (ex.x + 45)) < 60) {
           hint = `[E] ${ex.label}`;
+          glowX = ex.x + 45;
+          glowY = 420;
           break;
         }
       }
@@ -1214,6 +1353,8 @@ export class WorldScene extends Phaser.Scene {
       for (const it of this.interactables) {
         if (Math.abs(this.player.x - it.x) < it.w / 2 + 24) {
           hint = `[E] ${it.label}`;
+          glowX = it.x;
+          glowY = 440;
           break;
         }
       }
@@ -1222,11 +1363,15 @@ export class WorldScene extends Phaser.Scene {
       for (const b of this.buildings) {
         if (b.def.doorX !== undefined && (b.def.room || b.def.id === "taohua") && Math.abs(this.player.x - b.def.doorX) < 44) {
           hint = `[E] 进入${b.def.name}`;
+          glowX = b.def.doorX;
+          glowY = 440;
           break;
         }
       }
     }
     ui.showHint(hint || null);
+    if (glowX >= 0) this.ensureHintGlow(glowX, glowY);
+    else if (this.hintGlow) this.hintGlow.setVisible(false);
   }
 
   private interact(): void {
@@ -1341,7 +1486,7 @@ export class WorldScene extends Phaser.Scene {
       {
         id: "r",
         speaker: def.name,
-        text: `${def.desc}\n\n${randomRumor(s)}`,
+        text: `${def.desc}\n\n${randomChatText(s)}`,
         opts: [{ text: "四处看看", node: "bye" }]
       },
       { id: "bye", speaker: def.name, text: "你收拾心情，迈步向前。", opts: [] }
@@ -1428,6 +1573,7 @@ function roomFurniture(roomId: string, theme: RoomDef["theme"]): { key: string; 
 function furnitureIcon(action: string, roomId: string, theme: RoomDef["theme"], label: string): string {
   if (action === "rest") return label.includes("柜台") ? "furn-counter" : "furn-bed";
   if (action === "chest") return "furn-cabinet";
+  if (action === "look") return "furn-shelf";
   if (action === "well") return "furn-jar";
   if (action === "shrine") return "furn-shrine";
   if (action === "meditate") return theme === "hall" ? "furn-dummy" : "furn-table";

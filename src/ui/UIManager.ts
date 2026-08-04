@@ -248,9 +248,15 @@ export class UIManager {
       info.textContent = "查看状态";
       info.addEventListener("click", () => this.actions(`npc-status:${this.dialogNpc}`));
       opts.appendChild(info);
+      const chat = document.createElement("button");
+      chat.className = "btn secondary";
+      chat.textContent = "打听闲话";
+      chat.addEventListener("click", () => this.actions(`npc-chat:${this.dialogNpc}`));
+      opts.appendChild(chat);
       const rom = ROMANCE[this.dialogNpc];
       const s = getApp().state;
       const npcAge = npcDef(this.dialogNpc).age ?? 18;
+      const canIntimacy = s ? s.player.gender !== npcDef(this.dialogNpc).gender : false;
       if (rom) {
         const gift = document.createElement("button");
         gift.className = "btn";
@@ -262,22 +268,26 @@ export class UIManager {
         talk.textContent = "谈心";
         talk.addEventListener("click", () => this.actions(`romance-talk:${this.dialogNpc}`));
         opts.appendChild(talk);
-        const close = document.createElement("button");
-        close.className = "btn jade";
-        close.textContent = "亲近（需18岁）";
-        close.addEventListener("click", () => this.actions(`romance-intimacy:${this.dialogNpc}`));
-        opts.appendChild(close);
+        if (canIntimacy) {
+          const close = document.createElement("button");
+          close.className = "btn jade";
+          close.textContent = "亲近（需18岁）";
+          close.addEventListener("click", () => this.actions(`romance-intimacy:${this.dialogNpc}`));
+          opts.appendChild(close);
+        }
       } else if (s && npcAge >= 18) {
         const talk = document.createElement("button");
         talk.className = "btn";
         talk.textContent = "谈心";
         talk.addEventListener("click", () => this.actions(`romance-talk:${this.dialogNpc}`));
         opts.appendChild(talk);
-        const close = document.createElement("button");
-        close.className = "btn jade";
-        close.textContent = "亲近（需18岁）";
-        close.addEventListener("click", () => this.actions(`romance-intimacy:${this.dialogNpc}`));
-        opts.appendChild(close);
+        if (canIntimacy) {
+          const close = document.createElement("button");
+          close.className = "btn jade";
+          close.textContent = "亲近（需18岁）";
+          close.addEventListener("click", () => this.actions(`romance-intimacy:${this.dialogNpc}`));
+          opts.appendChild(close);
+        }
       }
       if (s && rom?.gender === "female") {
         const steal = document.createElement("button");
@@ -765,7 +775,7 @@ export class UIManager {
     const pct = (v: number, max: number) => Math.max(0, Math.min(100, (v / Math.max(1, max)) * 100));
     const log = this.el("cb-log");
     const rewardBlock = b.over && b.victory && b.rewardLines.length
-      ? `<div style="border:1px solid #c9a13a;background:rgba(201,161,58,.14);border-radius:5px;padding:6px 10px;margin-bottom:6px;color:#ffd98a;font-weight:700">战利品：${b.rewardLines.join(" ")}</div>`
+      ? `<div class="reward-banner">战利品：${b.rewardLines.join(" ")}</div>`
       : "";
     log.innerHTML = rewardBlock + b.log.map((e) => {
       const cls = e.kind === "crit" || e.kind === "hit" && e.side === "player" ? "hit" : e.kind === "hit" && e.side === "enemy" ? "hurt" : e.kind === "heal" ? "heal" : e.kind === "death" ? "hurt" : "info";

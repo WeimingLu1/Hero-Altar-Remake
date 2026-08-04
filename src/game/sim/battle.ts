@@ -20,7 +20,7 @@ import {
   weaponOf
 } from "./formulas";
 import type { GameState } from "./state";
-import { getRewards } from "./actions";
+import { applyNpcDrops, getRewards } from "./actions";
 
 export interface Buff {
   stat: "atk" | "def" | "spd" | "dodge" | "parry";
@@ -688,6 +688,15 @@ function endBattle(b: BattleState, s: GameState, victory: boolean): void {
     if (b.rewardHalf && msgs.length) msgs[0] += "（敌人落荒而逃，所得减半）";
     for (const m of msgs) b.log.push({ kind: "info", side: "player", text: m });
     b.rewardLines.push(...msgs);
+    const lootNpcId = b.sourceNpc || (b.enemyId.startsWith("spar-") ? b.enemyId.slice(5) : null);
+    if (lootNpcId) {
+      const owner = NPCS[lootNpcId]?.name || "对方";
+      const drops = applyNpcDrops(s, lootNpcId, owner);
+      for (const m of drops) {
+        b.log.push({ kind: "info", side: "player", text: m });
+        b.rewardLines.push(m);
+      }
+    }
     const src = b.sourceNpc;
     if (src && isPlateMaster(src) && !s.player.flags[`plate-${src}`]) {
       const masterEnemy = ENEMIES[src];

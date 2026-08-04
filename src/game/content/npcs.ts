@@ -680,7 +680,261 @@ for (const id of Object.keys(NPCS)) {
       ? "一派掌门，武功深不可测。"
       : n.learn || n.learnBasic
         ? "身怀武艺，寻常人近不得身。"
-        : "看不出深浅，或许深藏不露。");
+    : "看不出深浅，或许深藏不露。");
+}
+
+const LOW_DROPS: { item: string; chance: number }[] = [
+  { item: "mantou", chance: 45 },
+  { item: "jingcha", chance: 35 },
+  { item: "yaocai", chance: 25 }
+];
+
+const MID_DROPS: { item: string; chance: number }[] = [
+  { item: "jinchuang", chance: 45 },
+  { item: "huichun", chance: 20 },
+  { item: "tiekuang", chance: 25 },
+  { item: "pijia", chance: 10 }
+];
+
+const HIGH_DROPS: { item: string; chance: number }[] = [
+  { item: "daHuan", chance: 22 },
+  { item: "huichun", chance: 55 },
+  { item: "xuantie", chance: 35 },
+  { item: "jinSuoZi", chance: 12 },
+  { item: "heiyanZhao", chance: 20 }
+];
+
+// 显式随身物品：符合各自身份；未列出的 NPC 按身份兜底生成
+const NPC_DROPS: Record<string, { item: string; chance: number }[]> = {
+  axiu: [
+    { item: "shanChaHua", chance: 70 },
+    { item: "jingcha", chance: 25 }
+  ],
+  xiaoer: [
+    { item: "baozi", chance: 55 },
+    { item: "huangjiu", chance: 40 },
+    { item: "mantou", chance: 30 }
+  ],
+  liZhenWei: [
+    { item: "jinchuang", chance: 50 },
+    { item: "mudao", chance: 20 },
+    { item: "pijia", chance: 15 }
+  ],
+  guYanWu: [
+    { item: "maobi", chance: 60 },
+    { item: "shouChaoBen", chance: 30 }
+  ],
+  tiejiang: [
+    { item: "tiekuang", chance: 60 },
+    { item: "xuantie", chance: 25 },
+    { item: "tiejian", chance: 10 }
+  ],
+  pingYiZhi: [
+    { item: "huichun", chance: 50 },
+    { item: "jieDu", chance: 45 },
+    { item: "daHuan", chance: 15 }
+  ],
+  xiucai: [
+    { item: "maobi", chance: 60 },
+    { item: "shouChaoBen", chance: 35 }
+  ],
+  xunbu: [
+    { item: "jinchuang", chance: 40 },
+    { item: "jingcha", chance: 30 },
+    { item: "mafeng", chance: 20 }
+  ],
+  xianling: [
+    { item: "jingcha", chance: 50 },
+    { item: "maobi", chance: 30 },
+    { item: "jinchuang", chance: 20 }
+  ],
+  cunzhang: [
+    { item: "yaocai", chance: 45 },
+    { item: "mantou", chance: 35 },
+    { item: "jingcha", chance: 25 }
+  ],
+  popo: [
+    { item: "mantou", chance: 55 },
+    { item: "yaocai", chance: 25 }
+  ],
+  funv: [
+    { item: "maobi", chance: 45 },
+    { item: "mantou", chance: 30 },
+    { item: "jingcha", chance: 20 }
+  ],
+  huoji: [
+    { item: "mantou", chance: 45 },
+    { item: "mafeng", chance: 30 },
+    { item: "huangjiu", chance: 25 }
+  ],
+  heiren: [
+    { item: "shouChaoBen", chance: 40 },
+    { item: "heiyanZhao", chance: 25 },
+    { item: "jinchuang", chance: 30 }
+  ],
+  yuexia: [
+    { item: "jingcha", chance: 50 },
+    { item: "shanChaHua", chance: 25 }
+  ],
+  shuoshu: [
+    { item: "jingcha", chance: 50 },
+    { item: "huangjiu", chance: 30 }
+  ],
+  tiaofu: [
+    { item: "mantou", chance: 50 },
+    { item: "baozi", chance: 35 }
+  ],
+  xiaoqigai: [
+    { item: "mantou", chance: 60 },
+    { item: "baozi", chance: 20 }
+  ],
+  langzhong: [
+    { item: "jieDu", chance: 50 },
+    { item: "jinchuang", chance: 45 },
+    { item: "huichun", chance: 25 }
+  ],
+  chapeng: [
+    { item: "qingcha", chance: 55 },
+    { item: "mantou", chance: 35 },
+    { item: "huangjiu", chance: 25 }
+  ],
+  xingjiao: [
+    { item: "shiliao", chance: 45 },
+    { item: "mafeng", chance: 30 },
+    { item: "jinchuang", chance: 30 }
+  ],
+  luopo: [
+    { item: "huangjiu", chance: 40 },
+    { item: "mudao", chance: 20 },
+    { item: "jinchuang", chance: 30 }
+  ],
+  taohun: [
+    { item: "shanChaHua", chance: 35 },
+    { item: "mantou", chance: 30 }
+  ],
+  shoumu: [
+    { item: "shiliao", chance: 55 },
+    { item: "mantou", chance: 30 }
+  ],
+  daotong: [
+    { item: "yaocai", chance: 55 },
+    { item: "mantou", chance: 30 }
+  ],
+  gaibangDizi: [
+    { item: "mantou", chance: 55 },
+    { item: "baozi", chance: 30 }
+  ],
+  xueshanDizi: [
+    { item: "jinchuang", chance: 40 },
+    { item: "jingcha", chance: 25 }
+  ],
+  huajianShinv: [
+    { item: "shanChaHua", chance: 50 },
+    { item: "jingcha", chance: 25 }
+  ],
+  honglianJiaotu: [
+    { item: "mantou", chance: 40 },
+    { item: "jinchuang", chance: 25 },
+    { item: "jieDu", chance: 20 }
+  ],
+  yinheXuetu: [
+    { item: "jingcha", chance: 40 },
+    { item: "mantou", chance: 30 }
+  ],
+  gusong: [
+    { item: "jinchuang", chance: 45 },
+    { item: "maobi", chance: 25 },
+    { item: "shouChaoBen", chance: 20 }
+  ],
+  cangyue: [
+    { item: "jingcha", chance: 40 },
+    { item: "maobi", chance: 25 }
+  ],
+  shangJianMing: [
+    { item: "jinchuang", chance: 50 },
+    { item: "huangjiu", chance: 30 },
+    { item: "pijia", chance: 15 }
+  ],
+  xuewei: [
+    { item: "jinchuang", chance: 45 },
+    { item: "jingcha", chance: 25 }
+  ],
+  langren: [
+    { item: "huangjiu", chance: 40 },
+    { item: "jinchuang", chance: 30 }
+  ],
+  xiangzhu: [
+    { item: "jinchuang", chance: 40 },
+    { item: "jieDu", chance: 25 }
+  ],
+  zhanglao: [
+    { item: "mantou", chance: 45 },
+    { item: "baozi", chance: 30 },
+    { item: "jinchuang", chance: 20 }
+  ],
+  qingXu: [
+    { item: "daHuan", chance: 28 },
+    { item: "huichun", chance: 55 },
+    { item: "xuantie", chance: 40 },
+    { item: "jinSuoZi", chance: 15 },
+    { item: "heiyanZhao", chance: 20 }
+  ],
+  wangWeiYang: [
+    { item: "daHuan", chance: 28 },
+    { item: "huichun", chance: 55 },
+    { item: "xuantie", chance: 40 },
+    { item: "jinSuoZi", chance: 15 },
+    { item: "heiyanZhao", chance: 20 }
+  ],
+  baiRuiDe: [
+    { item: "daHuan", chance: 30 },
+    { item: "huichun", chance: 55 },
+    { item: "xuantie", chance: 40 },
+    { item: "qingfeng", chance: 15 },
+    { item: "heiyanZhao", chance: 20 }
+  ],
+  liQingZhao: [
+    { item: "daHuan", chance: 30 },
+    { item: "huichun", chance: 55 },
+    { item: "xuantie", chance: 40 },
+    { item: "sahuaXie", chance: 15 },
+    { item: "heiyanZhao", chance: 20 }
+  ],
+  heZhongYang: [
+    { item: "daHuan", chance: 30 },
+    { item: "huichun", chance: 55 },
+    { item: "xuantie", chance: 40 },
+    { item: "ruanbian", chance: 15 },
+    { item: "heiyanZhao", chance: 20 }
+  ],
+  yuHongRu: [
+    { item: "daHuan", chance: 30 },
+    { item: "huichun", chance: 55 },
+    { item: "xuantie", chance: 40 },
+    { item: "jinSuoZi", chance: 15 },
+    { item: "heiyanZhao", chance: 20 }
+  ],
+  qiaoSiHai: [
+    { item: "daHuan", chance: 30 },
+    { item: "huichun", chance: 55 },
+    { item: "dagouBang", chance: 10 },
+    { item: "heiyanZhao", chance: 20 }
+  ]
+};
+
+export function npcDrops(npcId: string): { item: string; chance: number }[] {
+  const explicit = NPC_DROPS[npcId];
+  if (explicit) return explicit;
+  const n = NPCS[npcId];
+  if (!n) return LOW_DROPS;
+  if (n.master) return HIGH_DROPS;
+  if (n.shop?.length) {
+    return n.shop
+      .slice(0, 4)
+      .map((item, i) => ({ item, chance: Math.max(15, 50 - i * 10) }));
+  }
+  if (n.learn || n.learnBasic) return MID_DROPS;
+  return LOW_DROPS;
 }
 
 export function npcDef(id: string): NpcDef {
