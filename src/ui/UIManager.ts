@@ -2,7 +2,7 @@ import { AREAS, ROOMS } from "../game/content/areas";
 import { ARMORS, ITEMS, WEAPONS } from "../game/content/items";
 import { NPCS, npcDef } from "../game/content/npcs";
 import { QUESTS, questDef } from "../game/content/quests";
-import { ROMANCE } from "../game/content/romance";
+import { ROMANCE, randomRelationshipStatus } from "../game/content/romance";
 import { SECTS } from "../game/content/sects";
 import { SKILLS, skillDef } from "../game/content/skills";
 import { enemyDef } from "../game/content/enemies";
@@ -181,7 +181,7 @@ export class UIManager {
     const loc = p.room ? ROOMS[p.room]?.name : AREAS[p.area]?.name || p.area;
     this.q(".hud-loc").textContent = loc || "";
     const shichen = ["子", "丑", "寅", "卯", "辰", "巳", "午", "未", "申", "酉", "戌", "亥"][Math.floor(p.time.hour / 2) % 12];
-    const titleTag = p.titles.includes("采花大盗") ? "采花大盗" : p.sect ? SECTS[p.sect].name : "散人";
+    const titleTag = p.sect ? SECTS[p.sect].name : "散人";
     this.q(".hud-day").textContent = `第${p.time.day}日 ${shichen}时${p.time.hour % 2 ? "半" : ""} · ${titleTag}`;
     this.q(".hud-life").textContent = `饥 ${Math.floor(p.hunger)} · 渴 ${Math.floor(p.thirst)}`;
     const weatherIcon: Record<string, string> = { sunny: "☀️", rain: "🌧️", snow: "❄️", fog: "🌫️", wind: "💨" };
@@ -300,8 +300,9 @@ export class UIManager {
       chat.addEventListener("click", () => this.actions(`npc-talk:${this.dialogNpc}`));
       opts.appendChild(chat);
       const s = getApp().state;
-      const npcAge = npcDef(this.dialogNpc).age ?? 18;
-      if (s && npcAge >= 16) {
+      const nd = npcDef(this.dialogNpc);
+      const npcAge = nd.age ?? 18;
+      if (s && npcAge >= 16 && nd.gender && nd.gender !== s.player.gender) {
         const love = document.createElement("button");
         love.className = "btn jade";
         love.textContent = "情缘";
@@ -320,6 +321,28 @@ export class UIManager {
     const acc = ARMORS[p.accessory];
     const fw = p.forgeWeapon && p.forgeEquipped ? p.forgeWeapon : null;
     const ng = activeNeigongLevel(p);
+    const romanceRows = Object.keys(NPCS)
+      .filter((id) => {
+        if (!NPCS[id]) return false;
+        const aff = p.affections[id] || 0;
+        return aff > 0 || p.flags[`everIntimate-${id}`] || p.flags[`intimate-${id}`] || p.flags[`casual-${id}`];
+      })
+      .map((id) => {
+        const n = NPCS[id];
+        const tags: string[] = [];
+        if (p.spouse === n.name) tags.push("已结连理");
+        if (p.flags[`partner-${id}`]) tags.push("道侣");
+        if (p.flags[`everIntimate-${id}`] || p.flags[`intimate-${id}`]) tags.push("共度良宵");
+        if (p.flags[`casual-${id}`]) {
+          const times = Number(p.flags[`casualTimes-${id}`] || 1);
+          tags.push(times > 1 ? `一夜偷香 ×${times}` : "一夜偷香");
+        }
+        const aff = p.affections[id] || 0;
+        if (aff > 0) tags.push(`好感 ${aff}`);
+        const tagHtml = tags.map((t) => `<span class="tag">${t}</span>`).join("");
+        return `<div class="itemrow"><button class="btn" data-act="npc-status:${id}">${n.name}</button>${tagHtml}</div>`;
+      })
+      .join("");
     const body = `
       <div class="kv">
         <div><b>姓名</b> ${p.name}</div>
@@ -353,6 +376,7 @@ export class UIManager {
         ${p.cheatLock ? `<span class="tag purple">锁血作弊中</span>` : ""}
         ${p.yobdc ? `<span class="tag">经典黑白模式</span>` : ""}
       </div>
+      ${romanceRows ? `<div class="sectline"><b>情缘录</b>${romanceRows}</div>` : ""}
     `;
     this.openPanel("人物状态", body);
   }
@@ -675,13 +699,28 @@ export class UIManager {
   showNpcStatus(npcId: string, s: GameState): void {
     const n = npcDef(npcId);
     const aff = Math.round(s.player.affections[npcId] ?? 0);
-    const relation = s.player.spouse === n.name
-      ? `<span class="tag red">已结连理</span>`
-      : s.player.sect && n.area === s.player.area && n.master
-        ? `<span class="tag jade">同门前辈</span>`
-        : aff > 0
-          ? `<span class="tag purple">好感 ${aff}</span>`
-          : `<span class="tag">初识</span>`;
+    const flags = s.player.flags;
+    const partner = !!flags[`partner-${npcId}`];
+    const everIntimate = !!flags[`everIntimate-${npcId}`] || !!flags[`intimate-${npcId}`];
+    const casual = !!flags[`casual-${npcId}`];
+    const casualTimes = Number(flags[`casualTimes-${npcId}`] || (casual ? 1 : 0));
+    const intimateTimes = Number(flags[`intimateTimes-${npcId}`] || 0);
+    const tags: string[] = [];
+    if (s.player.spouse === n.name) tags.push("已结连理");
+    if (partner) tags.push("道侣");
+    if (everIntimate) tags.push("共度良宵");
+    if (casual) tags.push(casualTimes > 1 ? `一夜偷香 ×${casualTimes}` : "一夜偷香");
+    if (s.player.sect && n.area === s.player.area && n.master) tags.push("同门前辈");
+    if (aff > 0) tags.push(`好感 ${aff}`);
+    if (!tags.length) tags.push("初识");
+    const relation = tags.map((t) => `<span class="tag">${t}</span>`).join("");
+    const relDesc = partner
+      ? randomRelationshipStatus(n.name, "partner", intimateTimes)
+      : casual
+        ? randomRelationshipStatus(n.name, "casual", casualTimes)
+        : aff >= 50
+          ? randomRelationshipStatus(n.name, "close", 0)
+          : "";
     this.openPanel(`${n.name} · 人物志`, `
       <div class="kv">
         <div><b>姓名</b> ${n.name}</div>
@@ -692,7 +731,7 @@ export class UIManager {
       </div>
       <div class="sectline"><b>容貌</b><br>${n.looks || "只见寻常面目。"}</div>
       <div class="sectline"><b>武艺</b><br>${n.martial || "看不出深浅。"}</div>
-      <div class="sectline"><b>近况</b><br>${n.desc}</div>
+      <div class="sectline"><b>近况</b><br>${n.desc}${relDesc ? `<br><br><span style="opacity:.92">${relDesc}</span>` : ""}</div>
     `);
   }
 
@@ -703,13 +742,15 @@ export class UIManager {
     const married = s.player.spouse === npc.name;
     const threshold = married ? 40 : 60;
     const partner = !!s.player.flags[`partner-${npcId}`];
+    const casualMark = !!s.player.flags[`casual-${npcId}`] ? " · 一夜情缘" : "";
     const canIntimacy =
-      s.player.gender !== npc.gender &&
+      !!npc.gender &&
+      npc.gender !== s.player.gender &&
       (npc.age ?? 18) >= 16 &&
       s.player.age >= 16 &&
       aff >= threshold;
     const body = `
-      <div class="sectline"><b>${npc.name}</b> 好感 ${aff}/100${partner ? ' · 道侣' : ''}</div>
+      <div class="sectline"><b>${npc.name}</b> 好感 ${aff}/100${partner ? " · 道侣" : ""}${casualMark}</div>
       ${rom ? `<div class="itemrow"><b>送礼</b><button class="btn" data-act="romance-gift:${npcId}">挑选礼物</button></div>` : ""}
       <div class="itemrow"><b>谈心</b><button class="btn" data-act="romance-talk:${npcId}">说说心里话</button></div>
       <div class="itemrow"><b>亲近</b>${
@@ -718,7 +759,9 @@ export class UIManager {
           : `<span class="tag">好感达到 ${threshold} 后解锁</span>`
       }</div>
       ${partner ? `<div class="itemrow"><b>情分</b><button class="btn danger" data-act="romance-breakup:${npcId}">分道扬镳</button></div>` : ""}
-      ${rom?.gender === "female" ? `<div class="itemrow"><b>恶行</b><button class="btn danger" data-act="romance-steal:${npcId}">偷香</button></div>` : ""}
+      ${rom?.gender === "female" && s.player.gender === "male" && s.player.spouse !== npc.name
+        ? `<div class="itemrow"><b>偷香</b><button class="btn" data-act="romance-steal:${npcId}">偷香</button></div>`
+        : ""}
     `;
     this.openPanel(`情缘 · ${npc.name}`, body);
   }
@@ -737,37 +780,28 @@ export class UIManager {
     this.openPanel(`赠礼 · ${npcDef(npcId).name}`, rows || "暂时没有拿得出手的东西。");
   }
 
-  showIntimacy(npcId: string, customText?: string): void {
-    const rom = ROMANCE[npcId];
-    const text = customText || rom?.intimateText;
-    if (!text) return;
-    const old = this.root.querySelector("#intimacy");
-    if (old) old.remove();
-    const div = document.createElement("div");
-    div.id = "intimacy";
-    div.innerHTML = `
-      <div class="intimacy-inner">
-        <div class="candles"><span></span><span></span><span></span></div>
-        <div class="intimacy-text">${text.replace(/\n/g, "<br>")}</div>
-        <div class="intimacy-foot">红烛渐熄，窗外月落。你与她（他）相拥而眠。</div>
-      </div>
-    `;
-    this.root.appendChild(div);
-    setTimeout(() => div.remove(), 9000);
-    div.addEventListener("click", () => div.remove());
-  }
-
   showCheat(s: GameState): void {
     const p = s.player;
     const skillOpts = Object.keys(SKILLS).map((id) => `<option value="${id}">${skillDef(id).name}</option>`).join("");
     const itemOpts = Object.keys(ITEMS).map((id) => `<option value="${id}">${ITEMS[id].name}</option>`).join("");
     const areaOpts = Object.keys(AREAS).map((id) => `<option value="${id}">${AREAS[id].name}</option>`).join("");
     const questOpts = Object.keys(QUESTS).map((id) => `<option value="${id}">${QUESTS[id].name}</option>`).join("");
+    const sectOpts = `<option value="">无门派</option>` + Object.keys(SECTS).map((id) => `<option value="${id}">${SECTS[id].name}</option>`).join("");
+    const npcOpts = Object.keys(NPCS).map((id) => `<option value="${id}">${NPCS[id].name}</option>`).join("");
+    const weatherOpts = ([
+      ["sunny", "晴"],
+      ["rain", "雨"],
+      ["snow", "雪"],
+      ["fog", "雾"],
+      ["wind", "风"]
+    ] as const).map(([v, n]) => `<option value="${v}"${p.weather === v ? " selected" : ""}>${n}</option>`).join("");
+    const genderOpts = `<option value="male"${p.gender === "male" ? " selected" : ""}>男</option><option value="female"${p.gender === "female" ? " selected" : ""}>女</option>`;
+    const firstNpc = Object.keys(NPCS)[0] || "";
     const row = (label: string, id: string, value: string | number, action: string) => `
       <div class="cheat-row"><label>${label}</label><input id="${id}" value="${value}"><span class="now">当前 ${value}</span>
       <button class="btn" data-act="${action}">应用</button></div>`;
     const body = `
-      <div class="cheat-row"><label>四项天赋</label>
+      <div class="cheat-row"><label>四项天赋 (10-60)</label>
         <span class="now">膂力</span><input id="ch-li" value="${p.attrs.li}">
         <span class="now">悟性</span><input id="ch-wu" value="${p.attrs.wu}">
         <span class="now">敏捷</span><input id="ch-min" value="${p.attrs.min}">
@@ -776,15 +810,29 @@ export class UIManager {
       ${row("银两", "ch-money", p.money, "cheat-money")}
       ${row("潜能", "ch-potential", p.potential, "cheat-potential")}
       ${row("经验", "ch-exp", p.exp, "cheat-exp")}
-      ${row("善恶", "ch-moral", p.moral, "cheat-moral")}
-      ${row("内力强度", "ch-strength", p.neiliStrength, "cheat-strength")}
-      ${row("年龄", "ch-age", p.age, "cheat-age")}
+      ${row("善恶 (-100~100)", "ch-moral", p.moral, "cheat-moral")}
+      ${row("内力强度 (0-999)", "ch-strength", p.neiliStrength, "cheat-strength")}
+      ${row("年龄 (14-99)", "ch-age", p.age, "cheat-age")}
+      ${row(`气血 (1~${maxHp(p)})`, "ch-hp", p.hp, "cheat-hp")}
+      ${row(`内力 (0~${maxMp(p)})`, "ch-mp", p.mp, "cheat-mp")}
+      ${row("饥饱 (0-100)", "ch-hunger", Math.floor(p.hunger), "cheat-hunger")}
+      ${row("口渴 (0-100)", "ch-thirst", Math.floor(p.thirst), "cheat-thirst")}
+      ${row("中毒回合 (0-20)", "ch-poison", p.poison, "cheat-poison")}
+      ${row("容貌 (1-100)", "ch-looks", p.looks, "cheat-looks")}
+      <div class="cheat-row"><label>日期时辰</label><input id="ch-day" value="${p.time.day}"><span class="now">日</span><input id="ch-hour" value="${Math.floor(p.time.hour)}"><span class="now">时</span><button class="btn" data-act="cheat-time">设置</button></div>
+      <div class="cheat-row"><label>天气</label><select id="ch-weather">${weatherOpts}</select><button class="btn" data-act="cheat-weather">设置</button></div>
+      <div class="cheat-row"><label>性别</label><select id="ch-gender">${genderOpts}</select><button class="btn" data-act="cheat-gender">设置</button></div>
+      <div class="cheat-row"><label>门派</label><select id="ch-sect">${sectOpts}</select><button class="btn" data-act="cheat-sect">设置</button></div>
+      <div class="cheat-row"><label>宅邸</label><select id="ch-house"><option value="1"${p.house ? " selected" : ""}>已购</option><option value="0"${!p.house ? " selected" : ""}>未购</option></select><button class="btn" data-act="cheat-house">设置</button></div>
+      <div class="cheat-row"><label>好感 (0-100)</label><select id="ch-npc">${npcOpts}</select><input id="ch-aff" value="${p.affections[firstNpc] || 0}"><button class="btn" data-act="cheat-affection">设置</button></div>
       <div class="cheat-row"><label>武功等级</label>
         <select id="ch-skill">${skillOpts}</select><input id="ch-skill-lv" value="100">
         <button class="btn" data-act="cheat-skill">设置</button></div>
+      <div class="cheat-row"><label>全部武功等级 (按各武功上限)</label><input id="ch-all-lv" value="100"><button class="btn" data-act="cheat-allskills">设置全部</button></div>
       <div class="cheat-row"><label>添加物品</label>
         <select id="ch-item">${itemOpts}</select><input id="ch-item-n" value="1">
-        <button class="btn" data-act="cheat-item">添加</button></div>
+        <button class="btn" data-act="cheat-item">添加</button>
+        <button class="btn secondary" data-act="cheat-item-set">设为数量</button></div>
       <div class="cheat-row"><label>瞬移</label>
         <select id="ch-area">${areaOpts}</select>
         <button class="btn" data-act="cheat-area">前往</button></div>
@@ -793,12 +841,11 @@ export class UIManager {
         <button class="btn" data-act="cheat-quest">完成</button></div>
       <div class="cheat-actions">
         <button class="btn jade" data-act="cheat-heal">满血满蓝</button>
-        <button class="btn" data-act="cheat-allskills">全武功 100 级</button>
         <button class="btn" data-act="cheat-lock">${p.cheatLock ? "解除锁血" : "锁血无敌"}</button>
         <button class="btn" data-act="cheat-classic">${p.yobdc ? "关闭经典模式" : "经典黑白模式"}</button>
         <button class="btn danger" data-act="cheat-reset">重置存档（慎用）</button>
       </div>
-      <div class="cheat-note">老夫当年在文曲星上，只输入一个密码，按一下 F3，便神功大成。你如今有了这一方作弊器，倒也不必再背那句咒语了。改了属性之后，记得存档。全武功 100 级会覆盖现有武功等级，慎用。</div>
+      <div class="cheat-note">所有数值都会按江湖上限截断；改完记得存档。老夫当年在文曲星上，只输入一个密码，按一下 F3，便神功大成。</div>
     `;
     this.el("cheat").classList.remove("hidden");
     this.q("#cheat .panel-body").innerHTML = body;
@@ -811,6 +858,8 @@ export class UIManager {
     ui.classList.remove("hidden");
     const ults = availableUts(s);
     const enemy = enemyDef(b.enemyId);
+    const intimacy = !!b.intimacyNpc;
+    const enemyTitle = intimacy ? b.enemy.title || `${enemy.name} · 良宵` : enemy.title || enemy.name;
     const pct = (v: number, max: number) => Math.max(0, Math.min(100, (v / Math.max(1, max)) * 100));
     const log = this.el("cb-log");
     const rewardBlock = b.over && b.victory && b.rewardLines.length
@@ -825,26 +874,26 @@ export class UIManager {
     const over = b.over;
     menu.innerHTML = `
       <div style="width:100%;display:flex;justify-content:space-between;gap:10px;padding:0 14px;color:#f0e2c0;font-size:13px;flex-wrap:wrap">
-        <span>你：${b.player.hp}/${b.player.maxHp} 气血 · ${b.player.mp}/${b.player.maxMp} 内力</span>
-        <span style="text-align:right">${enemy.title || enemy.name}：${b.enemy.hp}/${b.enemy.maxHp} 气血</span>
+        <span>你：${b.player.hp}/${b.player.maxHp} ${intimacy ? "心意" : "气血"} · ${b.player.mp}/${b.player.maxMp} ${intimacy ? "心神" : "内力"}</span>
+        <span style="text-align:right">${enemyTitle}：${b.enemy.hp}/${b.enemy.maxHp} ${intimacy ? "情意" : "气血"}</span>
       </div>
       <div style="width:100%;display:flex;gap:6px;height:7px;padding:0 14px">
         <div style="flex:1;background:#241a10;border:1px solid #6b4f2a"><div style="width:${pct(b.player.hp, b.player.maxHp)}%;height:100%;background:linear-gradient(#e5484d,#a71d22)"></div></div>
         <div style="flex:1;background:#241a10;border:1px solid #6b4f2a"><div style="width:${pct(b.enemy.hp, b.enemy.maxHp)}%;height:100%;background:linear-gradient(#c9a13a,#8a5a2a)"></div></div>
       </div>
       <div id="cb-btns" style="display:flex;gap:7px;flex-wrap:wrap;justify-content:center">
-        ${over ? `<button class="btn jade" data-act="battle-close">${b.victory ? "收下战利品" : b.fled ? "返回" : enemy.spar ? "切磋结束" : "轮回转生"}</button>` : `
-          <button class="btn" data-act="battle-attack">攻击</button>
-          <button class="btn" data-act="battle-ult-menu">绝招</button>
-          <button class="btn secondary" data-act="battle-defend">运功防御</button>
-          <button class="btn" data-act="battle-item-menu">物品</button>
-          <button class="btn ghost" data-act="battle-flee">逃跑</button>
+        ${over ? `<button class="btn jade" data-act="battle-close">${intimacy ? (b.victory ? "尽兴而归" : "灯下相对") : b.victory ? "收下战利品" : b.fled ? "返回" : enemy.spar ? "切磋结束" : "轮回转生"}</button>` : `
+          <button class="btn" data-act="battle-attack">${intimacy ? "温存" : "攻击"}</button>
+          ${intimacy ? "" : `<button class="btn" data-act="battle-ult-menu">绝招</button>`}
+          <button class="btn secondary" data-act="battle-defend">${intimacy ? "低语" : "运功防御"}</button>
+          <button class="btn" data-act="battle-item-menu">${intimacy ? "小酌" : "物品"}</button>
+          ${intimacy ? "" : `<button class="btn ghost" data-act="battle-flee">逃跑</button>`}
         `}
       </div>
       ${!over ? `
         <div id="cb-sub" style="width:100%;text-align:center"></div>
         <div id="cb-jiali">
-          <span>加力</span>
+          <span>${intimacy ? "心意" : "加力"}</span>
           <input type="range" min="0" max="10" value="${b.jiali}" data-act="battle-jiali">
           <b id="cb-jiali-v">${b.jiali}</b>
         </div>
@@ -944,7 +993,7 @@ export class UIManager {
     const panel = document.createElement("div");
     panel.className = "panel";
     panel.innerHTML = `<div class="panel-title">游戏说明</div><div class="panel-body">
-      <div class="sectline"><b>移动</b> 方向键 / A D　<b>交互</b> E 或 回车　<b>菜单</b> 1-6　<b>作弊器</b> F8</div>
+      <div class="sectline"><b>移动</b> 方向键 / A D　<b>交互</b> E 或 回车　<b>入室</b> W　<b>菜单</b> 1-6　<b>作弊器</b> F8</div>
       <div class="sectline"><b>江湖基础</b> 潜能与经验是成长的柴火：打坐把潜能化为内力强度，向师父请教把潜能化为武功等级。武功练到火候，方能悟出绝招。</div>
       <div class="sectline"><b>门派</b> 太极、八卦、雪山、花间、尹贺、红莲，外加黄金版新增的丐帮。每派各有内功、轻功、兵器功夫与独门绝招，拜师有门槛。</div>
       <div class="sectline"><b>主线</b> 从平安镇出发，查黑风寨、破青龙坛、败六大掌门取六块三角石板，最终打开时空尽头，直面「我是谁」。</div>

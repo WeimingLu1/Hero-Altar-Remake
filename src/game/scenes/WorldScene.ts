@@ -74,6 +74,25 @@ interface FrontFog {
   phase: number;
 }
 
+const WEATHER_TINTS: Record<string, { day: { r: number; g: number; b: number; a: number }; night: { r: number; g: number; b: number; a: number } }> = {
+  rain: {
+    day: { r: 85, g: 120, b: 170, a: 0.28 },
+    night: { r: 10, g: 18, b: 38, a: 0.45 }
+  },
+  snow: {
+    day: { r: 235, g: 243, b: 252, a: 0.16 },
+    night: { r: 60, g: 82, b: 116, a: 0.34 }
+  },
+  fog: {
+    day: { r: 205, g: 212, b: 224, a: 0.28 },
+    night: { r: 40, g: 48, b: 64, a: 0.42 }
+  },
+  wind: {
+    day: { r: 160, g: 132, b: 98, a: 0.2 },
+    night: { r: 30, g: 34, b: 50, a: 0.36 }
+  }
+};
+
 export class WorldScene extends Phaser.Scene {
   private keys!: {
     left: Phaser.Input.Keyboard.Key;
@@ -149,7 +168,7 @@ export class WorldScene extends Phaser.Scene {
     };
     kb.on("keydown-E", () => this.interact());
     kb.on("keydown-ENTER", () => this.interact());
-    kb.on("keydown-UP", () => this.interactRoom());
+    kb.on("keydown-W", () => this.interactRoom());
     kb.on("keydown-M", () => getApp().handleAction("map"));
     kb.on("keydown-ESC", () => {
       if (this.meditating) this.toggleMeditate();
@@ -489,6 +508,7 @@ export class WorldScene extends Phaser.Scene {
       const t = this.caveMode ? { color: 0x050310, alpha: 0.5 } : dayTint(h);
       this.tintRect.setFillStyle(t.color, t.alpha);
     }
+    this.updateWeatherOverlay(h);
     if (this.sun) {
       const p = sunArc(h);
       this.sun.setPosition(p.x, p.y);
@@ -510,6 +530,20 @@ export class WorldScene extends Phaser.Scene {
     for (const l of this.nightLights) {
       l.img.setAlpha(night * (l.base + 0.18 * Math.sin(now * 0.004 + l.phase)));
     }
+  }
+
+  // 天气罩按昼夜浓度动态变色：雨天夜里更沉、雪天夜里更冷、雾天夜里更浓
+  private updateWeatherOverlay(h: number): void {
+    if (!this.weatherOverlay) return;
+    const w = getApp().state?.player.weather || "sunny";
+    const cfg = WEATHER_TINTS[w];
+    if (!cfg) return;
+    const n = nightness(h);
+    const r = Math.round(cfg.day.r + (cfg.night.r - cfg.day.r) * n);
+    const g = Math.round(cfg.day.g + (cfg.night.g - cfg.day.g) * n);
+    const b = Math.round(cfg.day.b + (cfg.night.b - cfg.day.b) * n);
+    const alpha = cfg.day.a + (cfg.night.a - cfg.day.a) * n;
+    this.weatherOverlay.setFillStyle((r << 16) | (g << 8) | b, alpha);
   }
 
   // 从在场且同屏（|Δx|<500）的 NPC 中挑一对有关系的，开始互动演出
@@ -1231,15 +1265,15 @@ export class WorldScene extends Phaser.Scene {
     for (const f of roomFurniture(def.id, def.theme)) {
       objects.add(this.add.image(f.x, 470, f.key).setOrigin(0.5, 1).setScale(f.scale || 1));
     }
-    for (const npcId of def.npcs || []) {
-      const nd = npcDef(npcId);
-      if (!this.npcPresent(nd)) continue;
-      this.spawnNpc(npcId, nd.x, nd.walk || 0, objects);
-    }
     for (const it of def.interactables || []) {
       const icon = this.add.image(it.x, 470, furnitureIcon(it.action, def.id, def.theme, it.label)).setOrigin(0.5, 1);
       objects.add(icon);
       this.interactables.push({ x: it.x, w: it.w || 70, label: it.label, action: it.action });
+    }
+    for (const npcId of def.npcs || []) {
+      const nd = npcDef(npcId);
+      if (!this.npcPresent(nd)) continue;
+      this.spawnNpc(npcId, nd.x, nd.walk || 0, objects);
     }
     for (const ex of def.exits || []) {
       this.exits.push({ ...ex, x: ex.x, w: 90 });
@@ -1424,7 +1458,7 @@ export class WorldScene extends Phaser.Scene {
     else if (this.hintGlow) this.hintGlow.setVisible(false);
   }
 
-  // 上方向键进入房间：即使门口站着 NPC，也不会被 E 的交谈逻辑挡住
+  // W 键进入房间：即使门口站着 NPC，也不会被 E 的交谈逻辑挡住
   private interactRoom(): void {
     const app = getApp();
     const s = app.state;

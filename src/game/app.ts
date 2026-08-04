@@ -7,6 +7,7 @@ import {
   randomNpcChatDialog,
   randomNpcTalkDialog,
   randomBreakupText,
+  randomRelationTalkText,
   randomRumor,
   randomTalkText,
   sparReaction
@@ -29,7 +30,8 @@ import {
   playerItem,
   playerUlt,
   setJiali,
-  startBattle
+  startBattle,
+  startIntimacyBattle
 } from "./sim/battle";
 import {
   acceptQuest,
@@ -473,15 +475,32 @@ export class App {
       }
       case action.startsWith("romance-menu:"): {
         const npcId = action.split(":")[1];
-        if (NPCS[npcId]) this.ui.showRomanceMenu(npcId, s);
+        const npc = NPCS[npcId];
+        if (!npc) return;
+        if (!npc.gender || npc.gender === p.gender) {
+          this.toast("情缘只存在于异性之间。");
+          return;
+        }
+        this.ui.showRomanceMenu(npcId, s);
         return;
       }
       case action.startsWith("romance-gift:"): {
-        this.ui.showGiftPanel(action.split(":")[1], s);
+        const npcId = action.split(":")[1];
+        const npc = NPCS[npcId];
+        if (!npc || !npc.gender || npc.gender === p.gender) {
+          this.toast("情缘只存在于异性之间。");
+          return;
+        }
+        this.ui.showGiftPanel(npcId, s);
         return;
       }
       case action.startsWith("romance-give:"): {
         const [, npcId, item] = action.split(":");
+        const npc = NPCS[npcId];
+        if (!npc || !npc.gender || npc.gender === p.gender) {
+          this.toast("情缘只存在于异性之间。");
+          return;
+        }
         const rom = ROMANCE[npcId];
         const gift = rom?.gifts.find((g) => g.item === item);
         if (!rom || !gift || (p.items[item] || 0) <= 0) {
@@ -498,17 +517,32 @@ export class App {
       }
       case action.startsWith("romance-talk:"): {
         const npcId = action.split(":")[1];
-        if (!NPCS[npcId]) return;
+        const npc = NPCS[npcId];
+        if (!npc) return;
+        if (!npc.gender || npc.gender === p.gender) {
+          this.toast("情缘只存在于异性之间。");
+          return;
+        }
         const aff = Math.min(100, (p.affections[npcId] || 0) + 3);
         p.affections[npcId] = aff;
-        const npc = NPCS[npcId];
         const partner = !!p.flags[`partner-${npcId}`];
         const pet = partner
           ? npc.gender === "female"
             ? "相公"
             : "娘子"
           : "";
-        const text = pet ? `${pet}，` + randomTalkText() : randomTalkText();
+        const relKind = partner
+          ? "partner"
+          : p.flags[`casual-${npcId}`]
+            ? "casual"
+            : aff >= 50
+              ? "close"
+              : null;
+        const text = pet
+          ? `${pet}，` + (relKind ? randomRelationTalkText(relKind) : randomTalkText())
+          : relKind
+            ? randomRelationTalkText(relKind)
+            : randomTalkText();
         this.ui.closePanels();
         this.ui.showDialog([
           { id: "r", speaker: npc.name, text, opts: [] }
@@ -521,8 +555,8 @@ export class App {
         const npcId = action.split(":")[1];
         const npc = NPCS[npcId];
         if (!npc) return;
-        if (npc.gender && npc.gender === p.gender) {
-          this.toast(p.gender === "male" ? "你们同为男儿身，只可做知己，不可越礼。" : "你们同为女儿身，只可做知己，不可越礼。");
+        if (!npc.gender || npc.gender === p.gender) {
+          this.toast("情缘只存在于异性之间。");
           return;
         }
         if ((npc.age ?? 18) < 16) {
@@ -540,14 +574,12 @@ export class App {
           return;
         }
         p.lastIntimacyDay = p.time.day;
-        p.affections[npcId] = Math.min(100, aff + 3);
+        p.flags[`everIntimate-${npcId}`] = true;
         p.flags[`intimate-${npcId}`] = true;
         p.flags[`partner-${npcId}`] = true;
         advanceTime(s, 8);
         this.ui.closePanels();
-        this.ui.showIntimacy(npcId, this.intimacyTextFor(npc));
-        this.toast(`良宵渐过，你与${npc.name}从此成了道侣。`);
-        this.refreshUi();
+        this.startIntimacyBattle(npcId);
         return;
       }
       case action.startsWith("romance-breakup:"): {
@@ -577,28 +609,46 @@ export class App {
         const npcId = action.split(":")[1];
         const rom = ROMANCE[npcId];
         if (!rom || rom.gender !== "female") return;
+        const npc = NPCS[npcId];
+        if (!npc) return;
         if (p.gender !== "male") {
-          this.toast("女儿家去偷绣帕，成何体统。");
+          this.toast("偷香是女儿家的私事，你一个姑娘家，还是去寻些正经营生吧。");
           return;
         }
-        if (p.spouse === NPCS[npcId]?.name) {
-          this.toast("枕边人面前，何必做贼。");
+        if ((npc.age ?? 18) < 16) {
+          this.toast("对方年纪尚小，此事不可。");
           return;
         }
-        if ((p.skills.jibenQingGong || 0) < 30) {
-          this.toast("轻功不够，还是先练到基本轻功 30 级再说。");
+        if (p.age < 16) {
+          this.toast(`你今年才 ${p.age} 岁，年纪尚小。可在客栈「闭关七日」快快长大，或去作弊器里调龄。`);
           return;
         }
-        p.affections[npcId] = Math.max(0, (p.affections[npcId] || 0) - 30);
-        p.moral = Math.max(-100, p.moral - 15);
-        addItem(s, "xiuPa");
-        p.flags.steals = (Number(p.flags.steals) || 0) + 1;
-        this.toast("月色掩映，你以轻功潜入香闺，只取走一方绣帕便抽身离去，不曾惊动芳驾。");
-        if (p.flags.steals === 3 && !p.titles.includes("采花大盗")) {
-          p.titles.push("采花大盗");
-          this.toast("江湖上开始流传你的名号：「采花大盗」！镇口的告示上，也多了你的名字。");
+        if (p.spouse === npc.name) {
+          this.toast("枕边人面前，不必偷香；你们早已相守。");
+          return;
         }
-        this.refreshUi();
+        this.ui.closePanels();
+        this.ui.showDialog([
+          {
+            id: "r",
+            speaker: npc.name,
+            text: `夜色正浓，你叩了叩${npc.name}的窗。\n\n窗纸后静了片刻，灯影一晃，门闩轻轻拨开——\n\n「……就今晚。」`,
+            opts: [
+              { text: "应邀入内", action: `steal-confirm:${npcId}` },
+              { text: "改日再来", action: "ui-close" }
+            ]
+          }
+        ]);
+        return;
+      }
+      case action.startsWith("steal-confirm:"): {
+        const npcId = action.split(":")[1];
+        if (!ROMANCE[npcId]) return;
+        const npc = NPCS[npcId];
+        if (!npc || p.gender !== "male" || (npc.age ?? 18) < 16 || p.age < 16 || p.spouse === npc.name) return;
+        advanceTime(s, 8);
+        this.ui.closePanels();
+        this.startIntimacyBattle(npcId, true);
         return;
       }
       case action === "give-baozi": {
@@ -1206,6 +1256,20 @@ export class App {
     }, 210);
   }
 
+  private startIntimacyBattle(npcId: string, casual = false): void {
+    const s = this.state;
+    if (!s) return;
+    this.battle = startIntimacyBattle(s, npcId, casual);
+    this.ui.closePanels();
+    this.ui.showCombat(s, this.battle);
+    const cam = this.game.scene.getScene("World")?.cameras?.main;
+    if (cam) cam.fadeOut(200, 0, 0, 0);
+    const battle = this.battle;
+    setTimeout(() => {
+      if (this.battle === battle) this.game.scene.start("Battle", { battle, theme: "room" });
+    }, 210);
+  }
+
   private randomQteKey(): string {
     const keys = ["A", "S", "D", "F", "J", "K", "L", "W"];
     return keys[Math.floor(Math.random() * keys.length)];
@@ -1292,7 +1356,12 @@ export class App {
       this.battle = null;
       const sparNpcId = b.sourceNpc || (b.enemyId.startsWith("spar-") ? b.enemyId.slice(5) : null);
       const isSparBattle = !!sparNpcId && (!!b.sourceNpc || !!ENEMIES[b.enemyId]?.spar);
-      if (sparNpcId && isSparBattle) {
+      const intimacyNpc = b.intimacyNpc;
+      if (intimacyNpc) {
+        if (!b.victory && b.player.hp <= 0) {
+          s.player.hp = Math.max(1, s.player.hp);
+        }
+      } else if (sparNpcId && isSparBattle) {
         // 切磋与掌门挑战（带 sourceNpc）死亡无惩罚，不轮回不扣钱
         if (!b.victory) {
           s.player.hp = Math.max(1, s.player.hp);
@@ -1306,6 +1375,68 @@ export class App {
       this.game.scene.stop("Battle");
       this.game.scene.start("World");
       this.refreshUi();
+      if (intimacyNpc) {
+        const npc = NPCS[intimacyNpc];
+        const casual = !!b.casualIntimacy;
+        const pet = npc?.gender === "female" ? "相公" : "娘子";
+        const name = npc?.name || "对方";
+        if (casual) {
+          s.player.flags[`casual-${intimacyNpc}`] = true;
+          s.player.flags[`casualTimes-${intimacyNpc}`] = Number(s.player.flags[`casualTimes-${intimacyNpc}`] || 0) + 1;
+        } else {
+          s.player.flags[`intimateTimes-${intimacyNpc}`] = Number(s.player.flags[`intimateTimes-${intimacyNpc}`] || 0) + 1;
+        }
+        if (b.victory) {
+          if (casual) {
+            this.ui.showDialog([
+              {
+                id: "r",
+                speaker: name,
+                text: `红烛摇影，帐幔低垂。\n\n一夜春风过，天光未亮时你们各自披衣起身，相视一笑。\n\n（一场春风，两不相欠。）`,
+                opts: []
+              }
+            ]);
+            this.toast("一夜春风过，各作天涯客。");
+          } else {
+            const gain = 5;
+            s.player.affections[intimacyNpc] = Math.min(100, (s.player.affections[intimacyNpc] || 0) + gain);
+            this.ui.showDialog([
+              {
+                id: "r",
+                speaker: name,
+                text: `红烛摇影，帐幔低垂。\n\n一夜过去，${name}披衣坐在床边，声音带着笑意：\n\n「${pet}，明日还来么。」\n\n（良宵尽兴，好感 +${gain}）`,
+                opts: []
+              }
+            ]);
+            this.toast(`${name}很满意，你们已是道侣。`);
+          }
+        } else {
+          if (casual) {
+            this.ui.showDialog([
+              {
+                id: "r",
+                speaker: name,
+                text: `烛花啪地一响，${name}背过身去，半晌才闷声道：\n\n「……你呀。」\n\n（这一夜不算尽兴，你被埋怨了几句。）`,
+                opts: []
+              }
+            ]);
+            this.toast(`${name}不大满意，埋怨了你几句。`);
+          } else {
+            const loss = 5;
+            s.player.affections[intimacyNpc] = Math.max(0, (s.player.affections[intimacyNpc] || 0) - loss);
+            this.ui.showDialog([
+              {
+                id: "r",
+                speaker: name,
+                text: `烛花啪地一响，${name}背过身去，声音闷闷的：\n\n「……就知道逞强。」\n\n（这一夜对方不大满意，好感 -${loss}）`,
+                opts: []
+              }
+            ]);
+            this.toast(`${name}不大满意，埋怨了你几句。`);
+          }
+        }
+        return;
+      }
       // 切磋/掌门战结束后的随机剧情反馈：输赢都有大量不同反应
       if (isSparBattle) {
         if (b.victory) {
@@ -1558,16 +1689,67 @@ export class App {
       case "cheat-moral": cheat.cheatSetMoral(s, this.inputVal("ch-moral")); this.toast("善恶已改。"); break;
       case "cheat-strength": cheat.cheatSetStrength(s, this.inputVal("ch-strength")); this.toast("内力强度已改。"); break;
       case "cheat-age": cheat.cheatSetAge(s, this.inputVal("ch-age")); this.toast("年龄已改。"); break;
+      case "cheat-hp": cheat.cheatSetHp(s, this.inputVal("ch-hp")); this.toast("气血已改。"); break;
+      case "cheat-mp": cheat.cheatSetMp(s, this.inputVal("ch-mp")); this.toast("内力已改。"); break;
+      case "cheat-hunger": cheat.cheatSetHunger(s, this.inputVal("ch-hunger")); this.toast("饥饱已改。"); break;
+      case "cheat-thirst": cheat.cheatSetThirst(s, this.inputVal("ch-thirst")); this.toast("口渴已改。"); break;
+      case "cheat-poison": cheat.cheatSetPoison(s, this.inputVal("ch-poison")); this.toast("中毒已改。"); break;
+      case "cheat-looks": cheat.cheatSetLooks(s, this.inputVal("ch-looks")); this.toast("容貌已改。"); break;
+      case "cheat-time": {
+        cheat.cheatSetTime(s, this.inputVal("ch-day"), this.inputVal("ch-hour"));
+        this.world.refresh();
+        this.toast("日期时辰已改。");
+        break;
+      }
+      case "cheat-weather": {
+        const w = (this.ui.q("#ch-weather") as HTMLSelectElement).value;
+        cheat.cheatSetWeather(s, w);
+        this.world.refresh();
+        this.toast("天气已改。");
+        break;
+      }
+      case "cheat-gender": {
+        const g = (this.ui.q("#ch-gender") as HTMLSelectElement).value;
+        cheat.cheatSetGender(s, g);
+        this.world.refresh();
+        this.toast("性别已改。");
+        break;
+      }
+      case "cheat-sect": {
+        const id = (this.ui.q("#ch-sect") as HTMLSelectElement).value;
+        cheat.cheatSetSect(s, id);
+        this.toast(id ? "门派已改。" : "已还俗，无门无派。");
+        break;
+      }
+      case "cheat-house": {
+        const v = (this.ui.q("#ch-house") as HTMLSelectElement).value === "1";
+        cheat.cheatSetHouse(s, v);
+        this.world.refresh();
+        this.toast(v ? "桃花源小筑已是你的产业。" : "宅邸已售出。");
+        break;
+      }
+      case "cheat-affection": {
+        const id = (this.ui.q("#ch-npc") as HTMLSelectElement).value;
+        cheat.cheatSetAffection(s, id, this.inputVal("ch-aff"));
+        this.toast("好感已改。");
+        break;
+      }
       case "cheat-skill": {
         const id = (this.ui.q("#ch-skill") as HTMLSelectElement).value;
         cheat.cheatSetSkill(s, id, this.inputVal("ch-skill-lv"));
-        this.toast(`「${requireSkill(id).name}」已改为 ${this.inputVal("ch-skill-lv")} 级。`);
+        this.toast(`「${requireSkill(id).name}」已改为 ${p.skills[id] || 0} 级。`);
         break;
       }
       case "cheat-item": {
         const id = (this.ui.q("#ch-item") as HTMLSelectElement).value;
         cheat.cheatAddItem(s, id, this.inputVal("ch-item-n"));
         this.toast(`物品已添加（${id}）。`);
+        break;
+      }
+      case "cheat-item-set": {
+        const id = (this.ui.q("#ch-item") as HTMLSelectElement).value;
+        cheat.cheatSetItem(s, id, this.inputVal("ch-item-n"));
+        this.toast(`物品数量已设为 ${this.inputVal("ch-item-n")}（按 999 上限截断）。`);
         break;
       }
       case "cheat-area": {
@@ -1588,8 +1770,8 @@ export class App {
         this.toast("气血精神尽复。");
         break;
       case "cheat-allskills":
-        cheat.cheatAllSkills(s, 100);
-        this.toast("全部武功已至 100 级。");
+        cheat.cheatAllSkills(s, this.inputVal("ch-all-lv") || 100);
+        this.toast("全部武功已按各自上限设置。");
         break;
       case "cheat-lock":
         this.toast(cheat.cheatToggleLock(s) ? "已开启锁血无敌。" : "已解除锁血。");
@@ -1626,12 +1808,6 @@ export class App {
     if (canvas) canvas.style.filter = this.state?.player.yobdc ? "grayscale(1) contrast(1.08)" : "";
   }
 
-  private intimacyTextFor(npc: { name: string; gender?: "male" | "female" }): string {
-    if (npc.gender === "female") {
-      return `红烛摇影，纱帐低垂。\n\n你与${npc.name}相拥而眠，一夜无言。\n\n窗外月色正好，屋内灯火渐熄。`;
-    }
-    return `灯影幢幢，长夜温柔。\n\n你与${npc.name}并肩而坐，又并肩而卧。\n\n一夜风轻，晨光未至。`;
-  }
 }
 
 function requireSkill(id: string) {

@@ -80,7 +80,7 @@ export class BattleScene extends Phaser.Scene {
     this.enemySprite = this.add.sprite(650, STAGE_FOOT - (this.enemyVisual.h * escale) / 2, this.enemyVisual.key("idle")).setScale(escale);
     this.enemyBaseY = this.enemySprite.y;
     this.enemySprite.setFlipX(true);
-    this.add.text(650, this.enemySprite.y - (this.enemyVisual.h * escale) / 2 - 18, eDef.title || eDef.name, {
+    this.add.text(650, this.enemySprite.y - (this.enemyVisual.h * escale) / 2 - 18, b.enemy.title || eDef.title || eDef.name, {
       fontFamily: "Noto Serif SC, serif",
       fontSize: "18px",
       color: "#ffe9c4"
@@ -97,7 +97,8 @@ export class BattleScene extends Phaser.Scene {
 
   // 按区域主题搭建战斗舞台，并同步当前时辰色温
   private buildBackdrop(theme: string, hour: number): void {
-    this.add.tileSprite(0, 0, 960, 540, `sky-${theme}`).setOrigin(0, 0);
+    const skyKey = theme === "room" ? "sky-dark" : `sky-${theme}`;
+    this.add.tileSprite(0, 0, 960, 540, skyKey).setOrigin(0, 0);
     const farG = this.add.graphics();
     const hillColor = theme === "snow" ? 0xdbe7ef : theme === "dark" || theme === "cave" || theme === "cloud" ? 0x262233 : 0x9bb0a8;
     farG.fillStyle(hillColor, 0.85);
@@ -122,9 +123,21 @@ export class BattleScene extends Phaser.Scene {
     midG.fillRect(0, 300, 960, 110);
     midG.fillStyle(midBot, 1);
     midG.fillRect(0, 410, 960, 80);
-    this.add.tileSprite(0, 460, 960, 80, `ground-${theme}`).setOrigin(0, 0);
+    this.add.tileSprite(0, 460, 960, 80, theme === "room" ? "ground-town" : `ground-${theme}`).setOrigin(0, 0);
     // 主题装饰（避开 320/650 战斗位）
-    if (theme === "forest" || theme === "temple" || theme === "mountain") {
+    if (theme === "room") {
+      const wall = this.add.graphics();
+      wall.fillStyle(0x24171f, 1);
+      wall.fillRect(0, 0, 960, 300);
+      wall.fillStyle(0x2a1d24, 1);
+      wall.fillRect(0, 300, 960, 160);
+      this.add.rectangle(480, 306, 760, 6, 0x8a5a3a, 0.55).setOrigin(0.5, 0);
+      this.add.image(135, 462, "furn-lamp").setOrigin(0.5, 1).setScale(1.7).setAlpha(0.96);
+      this.add.image(838, 462, "furn-bed").setOrigin(0.5, 1).setScale(2.25).setAlpha(0.96);
+      const glow = this.add.image(135, 395, "fx-glow").setScale(2.1).setAlpha(0.7);
+      this.tweens.add({ targets: glow, alpha: 0.4, scale: 1.8, duration: 700, yoyo: true, repeat: -1, ease: "Sine.easeInOut" });
+      this.add.rectangle(0, 0, 960, 540, 0x5a1520, 0.16).setOrigin(0, 0);
+    } else if (theme === "forest" || theme === "temple" || theme === "mountain") {
       for (const tx of [70, 200, 780, 900]) {
         this.add.image(tx + Math.random() * 30, 462, `tree-${theme}`).setOrigin(0.5, 1).setScale(1.1 + Math.random() * 0.5).setAlpha(0.92);
       }

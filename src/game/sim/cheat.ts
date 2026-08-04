@@ -1,23 +1,25 @@
 import { SKILLS } from "../content/skills";
 import { AREAS } from "../content/areas";
 import { ITEMS } from "../content/items";
-import type { GameState } from "./state";
+import { NPCS } from "../content/npcs";
+import { SECTS } from "../content/sects";
+import type { GameState, PlayerState } from "./state";
 import { clamp, maxHp, maxMp } from "./formulas";
 
 export function cheatSetAttr(s: GameState, key: "li" | "wu" | "min" | "gen", v: number): void {
-  s.player.attrs[key] = clamp(Math.round(v), 1, 99);
+  s.player.attrs[key] = clamp(Math.round(v), 10, 60);
 }
 
 export function cheatSetMoney(s: GameState, v: number): void {
-  s.player.money = Math.max(0, Math.round(v));
+  s.player.money = Math.max(0, Math.min(999999999, Math.round(v)));
 }
 
 export function cheatSetPotential(s: GameState, v: number): void {
-  s.player.potential = Math.max(0, Math.round(v));
+  s.player.potential = Math.max(0, Math.min(999999999, Math.round(v)));
 }
 
 export function cheatSetExp(s: GameState, v: number): void {
-  s.player.exp = Math.max(0, Math.round(v));
+  s.player.exp = Math.max(0, Math.min(999999999, Math.round(v)));
 }
 
 export function cheatSetMoral(s: GameState, v: number): void {
@@ -55,8 +57,69 @@ export function cheatSetSkill(s: GameState, skillId: string, level: number): voi
 
 export function cheatAddItem(s: GameState, itemId: string, n: number): void {
   if (!ITEMS[itemId]) return;
-  s.player.items[itemId] = Math.max(0, (s.player.items[itemId] || 0) + Math.round(n));
+  s.player.items[itemId] = Math.max(0, Math.min(999, (s.player.items[itemId] || 0) + Math.round(n)));
   if (s.player.items[itemId] <= 0) delete s.player.items[itemId];
+}
+
+export function cheatSetItem(s: GameState, itemId: string, n: number): void {
+  if (!ITEMS[itemId]) return;
+  const qty = Math.max(0, Math.min(999, Math.round(n)));
+  if (qty <= 0) delete s.player.items[itemId];
+  else s.player.items[itemId] = qty;
+}
+
+export function cheatSetHp(s: GameState, v: number): void {
+  const p = s.player;
+  p.hp = clamp(Math.round(v), 1, maxHp(p));
+  p.effHp = Math.max(p.effHp, p.hp);
+}
+
+export function cheatSetMp(s: GameState, v: number): void {
+  s.player.mp = clamp(Math.round(v), 0, maxMp(s.player));
+}
+
+export function cheatSetHunger(s: GameState, v: number): void {
+  s.player.hunger = clamp(Math.round(v), 0, 100);
+}
+
+export function cheatSetThirst(s: GameState, v: number): void {
+  s.player.thirst = clamp(Math.round(v), 0, 100);
+}
+
+export function cheatSetPoison(s: GameState, v: number): void {
+  s.player.poison = clamp(Math.round(v), 0, 20);
+}
+
+export function cheatSetLooks(s: GameState, v: number): void {
+  s.player.looks = clamp(Math.round(v), 1, 100);
+}
+
+export function cheatSetWeather(s: GameState, w: string): void {
+  const valid: PlayerState["weather"][] = ["sunny", "rain", "snow", "fog", "wind"];
+  if (valid.includes(w as PlayerState["weather"])) s.player.weather = w as PlayerState["weather"];
+}
+
+export function cheatSetTime(s: GameState, day: number, hour: number): void {
+  s.player.time.day = Math.max(1, Math.round(day));
+  s.player.time.hour = ((Math.round(hour) % 24) + 24) % 24;
+}
+
+export function cheatSetGender(s: GameState, g: string): void {
+  if (g === "male" || g === "female") s.player.gender = g;
+}
+
+export function cheatSetSect(s: GameState, sectId: string): void {
+  if (!sectId) s.player.sect = null;
+  else if (SECTS[sectId]) s.player.sect = sectId;
+}
+
+export function cheatSetHouse(s: GameState, v: boolean): void {
+  s.player.house = v;
+}
+
+export function cheatSetAffection(s: GameState, npcId: string, v: number): void {
+  if (!NPCS[npcId]) return;
+  s.player.affections[npcId] = clamp(Math.round(v), 0, 100);
 }
 
 export function cheatTeleport(s: GameState, area: string): void {

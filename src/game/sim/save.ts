@@ -101,6 +101,8 @@ function fillDefaults(s: GameState): void {
   if (!s.player.affections) s.player.affections = {};
   if (!s.player.lastIntimacyDay) s.player.lastIntimacyDay = 0;
   if (!s.player.titles) s.player.titles = [];
+  // 旧版偷香恶行线已移除，老档里的玩家称号一并清理
+  s.player.titles = s.player.titles.filter((t) => t !== "采花大盗");
   if (s.player.weapon && !s.player.weaponsOwned.includes(s.player.weapon)) s.player.weaponsOwned.push(s.player.weapon);
   if (s.player.armor && !s.player.armorsOwned.includes(s.player.armor)) s.player.armorsOwned.push(s.player.armor);
   if (s.player.accessory && !s.player.accessoriesOwned.includes(s.player.accessory)) s.player.accessoriesOwned.push(s.player.accessory);

@@ -1393,10 +1393,6 @@ const RUMORS_STATE: { when: (s: GameState) => boolean; lines: string[] }[] = [
     lines: ["「镇上那位少侠，日行一善，难得。」"]
   },
   {
-    when: (s) => s.player.titles.includes("采花大盗"),
-    lines: ["「镇上出了个采花大盗，姑娘家夜里都闩紧了门。」"]
-  },
-  {
     when: (s) => !!s.player.married,
     lines: ["「那对新人成亲那天，满镇的桃花都开了。」"]
   },
@@ -1467,6 +1463,41 @@ const TALK_FLAVOR = [
   "这话我只对你一个人说，别传出去。",
   "跟你说话，我连喝水都忘了。",
   "要是每天都能这样聊两句，日子就有盼头了。"
+];
+
+const PARTNER_TALK = [
+  "今晚的灯，给你留着。",
+  "你走江湖，记得回来。",
+  "外头风大，衣领子拢紧些。",
+  "你不在的时候，我把茶温了三遍。",
+  "别人问我几时成家，我只当没听见。",
+  "我信你，胜过信这江湖。",
+  "你回来得正好，饭刚熟。",
+  "别总逞强，你还有我。",
+  "路上捡到好看的石子，我都想带回来给你看。",
+  "你睡着的样子，比醒着老实多了。"
+];
+
+const CASUAL_TALK = [
+  "又来了？今晚我可没等你。",
+  "天一亮就各自走路，这话还算数么？",
+  "你这个人，总在不该来的时候来。",
+  "今夜的话，出了这门就不作数。",
+  "我可没留你，是你自己来的。",
+  "别问以后，我只看今晚。",
+  "你脚步倒是轻，门闩却响了。",
+  "窗纸薄，你敲两下我就听见了。",
+  "这盏灯，我只点给来的人。",
+  "天亮以前，你哪也不许去。"
+];
+
+const CLOSE_TALK = [
+  "我总觉得，你还会再来。",
+  "你说话的时候，我总想再听一句。",
+  "镇子不大，可你路过时，我偏偏看见了。",
+  "有些话我不说，你也能懂吧？",
+  "你若再走慢些，我就敢追上去了。",
+  "今日风好，适合说些没头没尾的话。"
 ];
 
 const SPAR_WIN = [
@@ -2144,6 +2175,166 @@ export function randomQteText(success: boolean, techName?: string): string {
   return success ? pickText(QTE_SUCCESS_TEXTS)(name) : pickText(QTE_FAIL_TEXTS);
 }
 
+const INTIMACY_PLAYER_MOVES = [
+  "你放轻脚步靠近床沿，帐幔垂下来，把月色挡在窗外。",
+  "你替对方拢了拢衣领，指尖停了一瞬，又轻轻收回去。",
+  "你们不说话，只有烛芯偶尔哔剥一声，像替谁数着心跳。",
+  "你伸手握住对方的手，掌心相贴，谁也没有先松开。",
+  "你压低声音说了句什么，对方没答，耳根却红了。",
+  "你吹熄半盏灯，屋里暗下来，反倒只剩两个人的呼吸声。",
+  "你缓缓靠近，近得能数清对方眼睫上跳动的烛光。",
+  "你把外衫搭在床栏上，动作很轻，像怕惊落一屋子的月色。",
+  "你伸手掠过灯影，烛焰一晃，满屋子的影子都跟着乱了。",
+  "你替对方摘下耳坠，指尖擦过耳廓，呼吸都轻了半分。",
+  "你们隔着半臂距离，谁都没有再退，只等烛芯先败下阵来。",
+  "你侧身让月光落在对方肩上，像替这一夜铺了一层薄纱。"
+];
+
+const INTIMACY_PLAYER_HITS = [
+  (dmg: number, crit: boolean, name: string) =>
+    `${name}的呼吸快了几分，情意被拨动 ${dmg} 分${crit ? "，这一下教对方心头一颤" : ""}。`,
+  (dmg: number, crit: boolean, name: string) =>
+    `这一下温存来得急，${name}心神一荡，乱了 ${dmg} 分${crit ? "，几乎失了方寸" : ""}。`,
+  (dmg: number, crit: boolean, name: string) =>
+    `${name}气息一乱，情意又失守 ${dmg} 分${crit ? "，连指尖都绞紧了被角" : ""}。`,
+  (dmg: number, crit: boolean, name: string) =>
+    `${name}的心跳撞进你掌心，情意又软了 ${dmg} 分${crit ? "，连指尖都在发抖" : ""}。`
+];
+
+const INTIMACY_ENEMY_MOVES = [
+  "别过脸，声音闷在枕间，听不太真切。",
+  "轻轻推了你一把，力道却比春风还软。",
+  "把脸埋进你肩窝，呼吸渐渐乱了。",
+  "不答话，只把手指慢慢扣进你的指缝。",
+  "仰起脸，眼里的光忽明忽灭，像一盏将熄的灯。",
+  "低低笑了一声，又忽然咬住唇，不肯再出声。",
+  "的衣角擦过你的手背，像一片落花落在水面。",
+  "把烛台往床头挪了挪，又回头看你一眼。",
+  "隔着衣料都能感觉到的心跳，就这样贴了过来。",
+  "忽然不出声了，只把呼吸一点一点放轻。"
+];
+
+const INTIMACY_ENEMY_HITS = [
+  (dmg: number, crit: boolean) =>
+    `对方的温存反扑过来，你心神一乱，失守 ${dmg} 分${crit ? "，几乎把持不住" : ""}。`,
+  (dmg: number, crit: boolean) =>
+    `对方缠上来，你招架不及，心意又乱 ${dmg} 分${crit ? "，连耳根都烧透了" : ""}。`,
+  (dmg: number, crit: boolean) =>
+    `对方的手落在你后颈，你浑身一僵，乱了 ${dmg} 分${crit ? "，险些缴械" : ""}。`,
+  (dmg: number, crit: boolean) =>
+    `对方顺势一靠，你半边身子都麻了，乱了 ${dmg} 分${crit ? "，险些站不稳" : ""}。`
+];
+
+const INTIMACY_PLAYER_DODGE = [
+  "你侧过头，躲开了对方的目光。",
+  "你往后退了半步，却被床沿挡住了去路。",
+  "你避开这一记温存，衣角却还是被对方攥住了。",
+  "你偏过脸，让这一下落在空处，心口却跳得更快了。",
+  "你退得慢了一步，腰后正好抵上桌沿。"
+];
+
+const INTIMACY_ENEMY_DODGE = [
+  "对方别过脸，躲开了你的亲近。",
+  "对方笑着避开，衣角从你指间滑走。",
+  "对方往后缩了缩，眼里的笑意却藏不住。",
+  "对方轻轻一闪，发梢从你指缝里溜过去。",
+  "对方把脸埋进枕间，只留给你一片红透的耳廓。"
+];
+
+const INTIMACY_PLAYER_OPEN = [
+  "你心神一荡，反被对方占了先机。",
+  "你这一迟疑，把分寸让了出去。",
+  "你顾着看灯影里的侧脸，反倒慢了半拍。",
+  "你手上一顿，先露了怯，被对方寻到空隙。"
+];
+
+const INTIMACY_ENEMY_OPEN = [
+  "对方眼波一荡，情意露出破绽。",
+  "对方躲闪之间慢了半拍，恰好让你寻到空隙。",
+  "对方这一退，反倒把心门敞开了一线。",
+  "对方呼吸一乱，衣领也松了半寸。"
+];
+
+const INTIMACY_DEFEND = [
+  "你放慢呼吸，稳住心神，让这一夜从从容容。",
+  "你按住心口，把乱跳的心绪一点点压回原处。",
+  "你闭了闭眼，再睁开时，连手都稳了许多。",
+  "你往后让了让，先把自己的气沉下去。",
+  "你拢了拢衣襟，把分寸重新收回到自己手里。"
+];
+
+const INTIMACY_STANCE = [
+  "对方侧过身，欲拒还迎地稳住呼吸。",
+  "对方把脸别到枕畔，半晌才肯转回来。",
+  "对方按着被角不动，眼里却分明在等。",
+  "对方垂下眼帘，把话咽了回去，只留下心跳声。"
+];
+
+const INTIMACY_PLAYER_DEATH = [
+  "灯花一爆，你竟先败下阵来，红着脸退到床边。",
+  "你手脚发软，连耳根都烧透了，只能缴械认输。",
+  "你这一夜撑不过三更，先自低了头。",
+  "你被逼到墙角，连呼吸都乱了，只能笑着讨饶。",
+  "你败得彻底，连耳根到颈子都红成了一片。"
+];
+
+const INTIMACY_ENEMY_DEATH = [
+  "对方伏在你肩头，半晌说不出话，只有呼吸轻轻颤着。",
+  "对方彻底软了情意，把脸埋进你怀里，再不肯抬头。",
+  "对方贴着你的心口，终于不再躲，只低低应了一声。",
+  "对方把脸藏进你颈侧，声音闷闷的，却带着笑意。",
+  "对方指尖攥着你的衣襟，好半天才肯松开。"
+];
+
+const INTIMACY_QTE_SUCCESS = [
+  "你这一下恰到好处，对方几乎没忍住笑出声。",
+  "你把握住了分寸，对方的呼吸也跟着乱了半拍。",
+  "你慢半拍又急半拍，反倒撞进对方心坎里。",
+  "你这一手又准又稳，对方连拒绝的话都忘了说。",
+  "灯影一晃，你恰好接住对方移过来的目光。"
+];
+
+const INTIMACY_QTE_FAIL = [
+  "你手忙脚乱，差点把灯台碰倒，两人都忍不住笑。",
+  "你这一下急了些，对方别过脸去，耳根却红得更厉害。",
+  "你力道没拿稳，对方轻轻哼了一声，又假装没有。",
+  "你指尖一滑，话到嘴边也散了，两人都笑出了声。",
+  "你慢了半拍，对方没忍住，先自己笑弯了腰。"
+];
+
+export function randomIntimacyPlayerMove(name: string): string {
+  const line = pickText(INTIMACY_PLAYER_MOVES);
+  return Math.random() < 0.4 ? `${name}的气息近在咫尺，` + line : line;
+}
+
+export function randomIntimacyPlayerHit(name: string, dmg: number, crit: boolean): string {
+  return pickText(INTIMACY_PLAYER_HITS)(dmg, crit, name);
+}
+
+export function randomIntimacyEnemyMove(name: string): string {
+  return `${name}${pickText(INTIMACY_ENEMY_MOVES)}`;
+}
+
+export function randomIntimacyEnemyHit(name: string, dmg: number, crit: boolean): string {
+  return pickText(INTIMACY_ENEMY_HITS)(dmg, crit);
+}
+
+export function randomIntimacyText(pool: "dodgePlayer" | "dodgeEnemy" | "openPlayer" | "openEnemy" | "defend" | "stance" | "deathPlayer" | "deathEnemy" | "qteSuccess" | "qteFail"): string {
+  const pools: Record<string, string[]> = {
+    dodgePlayer: INTIMACY_PLAYER_DODGE,
+    dodgeEnemy: INTIMACY_ENEMY_DODGE,
+    openPlayer: INTIMACY_PLAYER_OPEN,
+    openEnemy: INTIMACY_ENEMY_OPEN,
+    defend: INTIMACY_DEFEND,
+    stance: INTIMACY_STANCE,
+    deathPlayer: INTIMACY_PLAYER_DEATH,
+    deathEnemy: INTIMACY_ENEMY_DEATH,
+    qteSuccess: INTIMACY_QTE_SUCCESS,
+    qteFail: INTIMACY_QTE_FAIL
+  };
+  return pickText(pools[pool] || INTIMACY_PLAYER_MOVES);
+}
+
 const PLAYER_MOVE_TEXTS = [
   "你足下生风，抢入中宫，拳影如雨点般洒落。",
   "你沉肩坠肘，气息一沉，身子已贴着地面滑到对方身前。",
@@ -2196,6 +2387,11 @@ export function randomEnemyMoveText(enemyName: string): string {
 
 export function randomTalkText(): string {
   return "「" + pickText(TALK_FLAVOR) + "」";
+}
+
+export function randomRelationTalkText(kind: "partner" | "casual" | "close"): string {
+  const pool = kind === "partner" ? PARTNER_TALK : kind === "casual" ? CASUAL_TALK : CLOSE_TALK;
+  return "「" + pickText(pool) + "」";
 }
 
 const BREAKUP_TEXTS = [

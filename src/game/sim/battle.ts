@@ -1,10 +1,19 @@
-import { ENEMIES, enemyDef } from "../content/enemies";
+import { ENEMIES, enemyDef, sparEnemyId } from "../content/enemies";
 import { ITEMS } from "../content/items";
 import { NPCS } from "../content/npcs";
 import { PLATE_SECTS, SECTS } from "../content/sects";
 import { SKILLS, skillDef } from "../content/skills";
 import type { EnemySkillDef, UltDef } from "../content/types";
-import { randomEnemyMoveText, randomPlayerMoveText, randomQteText } from "../content/story";
+import {
+  randomEnemyMoveText,
+  randomIntimacyEnemyHit,
+  randomIntimacyEnemyMove,
+  randomIntimacyPlayerHit,
+  randomIntimacyPlayerMove,
+  randomIntimacyText,
+  randomPlayerMoveText,
+  randomQteText
+} from "../content/story";
 import {
   activeNeigongLevel,
   attackPower,
@@ -67,6 +76,8 @@ export interface BattleState {
   enemy: BattleEntity;
   enemyId: string;
   sourceNpc?: string;
+  intimacyNpc?: string;
+  casualIntimacy?: boolean;
   jiali: number;
   log: BattleEvent[];
   rewardLines: string[];
@@ -152,6 +163,26 @@ export function startBattle(s: GameState, enemyId: string, sourceNpc?: string): 
   };
 }
 
+export function startIntimacyBattle(s: GameState, npcId: string, casual = false): BattleState {
+  const b = startBattle(s, sparEnemyId(npcId), npcId);
+  b.intimacyNpc = npcId;
+  b.casualIntimacy = casual;
+  b.enemy.title = `${NPCS[npcId]?.name || "对方"} · 良宵`;
+  const e = b.enemy;
+  e.maxHp = Math.max(260, Math.min(650, Math.round(b.player.maxHp * 0.62)));
+  e.hp = e.maxHp;
+  e.mp = 0;
+  e.maxMp = 0;
+  e.atk = Math.max(12, Math.round(b.player.def * 0.45));
+  e.def = Math.max(8, Math.round(b.player.atk * 0.35));
+  e.spd = Math.max(5, b.player.spd);
+  e.hit = 0.85;
+  e.dodge = 18;
+  e.crit = 10;
+  e.buffs = [];
+  return b;
+}
+
 function effectiveStat(e: BattleEntity, stat: string, base: number): number {
   let v = base;
   for (const b of e.buffs) if (b.stat === stat) v += b.value;
@@ -218,15 +249,20 @@ export function playerAttack(b: BattleState, s: GameState, qteSuccess?: boolean)
   b.turn += 1;
   const p = b.player;
   const e = b.enemy;
+  const it = !!b.intimacyNpc;
   const skill = mainSkill(s);
   const jiali = payJiali(b, events);
-  events.push({ kind: "move", side: "player", text: randomPlayerMoveText() });
+  events.push({ kind: "move", side: "player", text: it ? randomIntimacyPlayerMove(e.name) : randomPlayerMoveText() });
   const hitRoll = Math.random();
   const eDodge = Math.min(0.6, effectiveStat(e, "dodge", e.dodge));
   if (hitRoll > p.hit - eDodge * 0.5) {
     // 攻击被闪避，自己露出破绽
     b.opening.player = true;
-    events.push({ kind: "dodge", side: "enemy", text: `${e.name}身形一闪，避开了你的攻击。` });
+    events.push({
+      kind: "dodge",
+      side: "enemy",
+      text: it ? randomIntimacyText("dodgeEnemy") : `${e.name}身形一闪，避开了你的攻击。`
+    });
   } else {
     const crit = Math.random() < p.crit;
     // 暴击加成只在 damageCalc 内部乘一次，与绝招保持一致
@@ -242,13 +278,13 @@ export function playerAttack(b: BattleState, s: GameState, qteSuccess?: boolean)
     if (b.opening.enemy) {
       dmg = Math.round(dmg * 1.5);
       b.opening.enemy = false;
-      events.push({ kind: "opening", side: "enemy", text: `${e.name}门户大开，破绽毕露！` });
+      events.push({ kind: "opening", side: "enemy", text: it ? randomIntimacyText("openEnemy") : `${e.name}门户大开，破绽毕露！` });
     }
     if (qteSuccess) {
       const tech = qteTechName(s);
       const bonus = 0.5 + Math.min(0.4, b.qteStreak * 0.06);
       dmg = Math.round(dmg * (1 + bonus));
-      events.push({ kind: "qte", side: "player", text: randomQteText(true, tech), qte: true });
+      events.push({ kind: "qte", side: "player", text: it ? randomIntimacyText("qteSuccess") : randomQteText(true, tech), qte: true });
     }
     dmg = capDamage(dmg, e.maxHp);
     e.hp -= dmg;
@@ -256,14 +292,14 @@ export function playerAttack(b: BattleState, s: GameState, qteSuccess?: boolean)
     events.push({
       kind: crit ? "crit" : "hit",
       side: "player",
-      text: `${crit ? "会心一击！" : ""}你这一记「${skill.name}」势如奔雷，${e.name}中招，受到 ${dmg} 点伤害。`,
+      text: it ? randomIntimacyPlayerHit(e.name, dmg, crit) : `${crit ? "会心一击！" : ""}你这一记「${skill.name}」势如奔雷，${e.name}中招，受到 ${dmg} 点伤害。`,
       dmg,
       qte: qteSuccess
     });
-    gainExpForSkill(s.player, skill.id, dmg);
+    if (!it) gainExpForSkill(s.player, skill.id, dmg);
     if (e.hp <= 0) {
       e.hp = 0;
-      events.push({ kind: "death", side: "enemy", text: `${e.name}轰然倒地！` });
+      events.push({ kind: "death", side: "enemy", text: it ? randomIntimacyText("deathEnemy") : `${e.name}轰然倒地！` });
       endBattle(b, s, true);
       return events;
     }
@@ -375,7 +411,11 @@ export function playerDefend(b: BattleState, s: GameState): BattleEvent[] {
   const mpRegen = Math.max(1, Math.floor(p.maxMp * 0.05));
   p.hp = Math.min(p.maxHp, p.hp + heal);
   p.mp = Math.min(p.maxMp, p.mp + mpRegen);
-  events.push({ kind: "buff", side: "player", text: `你运功防御，恢复 ${heal} 点气血、${mpRegen} 点内力。` });
+  events.push({
+    kind: "buff",
+    side: "player",
+    text: b.intimacyNpc ? randomIntimacyText("defend") : `你运功防御，恢复 ${heal} 点气血、${mpRegen} 点内力。`
+  });
   events.push(...enemyTurn(b, s));
   return events;
 }
@@ -432,6 +472,11 @@ export function playerFlee(b: BattleState, s: GameState): BattleEvent[] {
   const events: BattleEvent[] = [];
   if (b.over) return events;
   b.turn += 1;
+  if (b.intimacyNpc) {
+    events.push({ kind: "info", side: "player", text: "你刚要起身，又被对方轻轻拉回帐中。" });
+    events.push(...enemyTurn(b, s));
+    return events;
+  }
   const pSpd = effectiveStat(b.player, "spd", b.player.spd);
   const eSpd = effectiveStat(b.enemy, "spd", b.enemy.spd);
   const chance = clamp(0.55 + (pSpd - eSpd) * 0.02, 0.25, 0.92);
@@ -546,6 +591,7 @@ function enemyTurn(b: BattleState, s: GameState): BattleEvent[] {
   if (b.over) return events;
   const p = b.player;
   const e = b.enemy;
+  const it = !!b.intimacyNpc;
   if (p.poison > 0) {
     if (s.player.cheatLock) {
       events.push({ kind: "info", side: "player", text: "锁血护体，毒气近不了身。" });
@@ -589,13 +635,13 @@ function enemyTurn(b: BattleState, s: GameState): BattleEvent[] {
   }
   if (action.kind === "stance") {
     e.defending = true;
-    events.push({ kind: "stance", side: "enemy", text: `${e.name}凝神蓄势，摆开守势。` });
+    events.push({ kind: "stance", side: "enemy", text: it ? randomIntimacyText("stance") : `${e.name}凝神蓄势，摆开守势。` });
     tickBuffs(p);
     tickBuffs(e);
     return events;
   }
   if (action.kind === "attack") {
-    events.push({ kind: "move", side: "enemy", text: randomEnemyMoveText(e.name) });
+    events.push({ kind: "move", side: "enemy", text: it ? randomIntimacyEnemyMove(e.name) : randomEnemyMoveText(e.name) });
   }
   const skill = action.kind === "skill" ? action.skill : undefined;
   if (skill) {
@@ -648,7 +694,7 @@ function enemyTurn(b: BattleState, s: GameState): BattleEvent[] {
   if (dodgeRoll < pDodge + 0.08) {
     // 攻击被闪避，敌方露出破绽
     b.opening.enemy = true;
-    events.push({ kind: "dodge", side: "player", text: `你闪身避开了${e.name}的攻击。` });
+    events.push({ kind: "dodge", side: "player", text: it ? randomIntimacyText("dodgePlayer") : `你闪身避开了${e.name}的攻击。` });
   } else {
     const parryRoll = Math.random();
     // 招架基础概率 6% 起、上限 30%；招架 buff 为概率加成
@@ -657,14 +703,14 @@ function enemyTurn(b: BattleState, s: GameState): BattleEvent[] {
       dmg = Math.floor(dmg * 0.5);
       // 攻击被招架，敌方露出破绽
       b.opening.enemy = true;
-      events.push({ kind: "parry", side: "player", text: `你举臂格挡，化解了大部分伤害。` });
+      events.push({ kind: "parry", side: "player", text: it ? "你捉住对方的手腕，轻轻按回枕边。" : `你举臂格挡，化解了大部分伤害。` });
     }
     const crit = Math.random() < e.crit;
     dmg = Math.round(dmg * (crit ? 1.6 : 1));
     if (b.opening.player) {
       dmg = Math.round(dmg * 1.5);
       b.opening.player = false;
-      events.push({ kind: "opening", side: "player", text: "你门户大开，破绽毕露！" });
+      events.push({ kind: "opening", side: "player", text: it ? randomIntimacyText("openPlayer") : "你门户大开，破绽毕露！" });
     }
     if (s.player.cheatLock) {
       dmg = 0;
@@ -675,7 +721,7 @@ function enemyTurn(b: BattleState, s: GameState): BattleEvent[] {
     events.push({
       kind: crit ? "crit" : "hit",
       side: "enemy",
-      text: `${e.name}的${skill ? skill.name : "攻势"}破空而至，你中招，受到 ${dmg} 点伤害${crit ? "（会心一击！）" : ""}。`,
+      text: it ? randomIntimacyEnemyHit(p.name, dmg, crit) : `${e.name}的${skill ? skill.name : "攻势"}破空而至，你中招，受到 ${dmg} 点伤害${crit ? "（会心一击！）" : ""}。`,
       dmg
     });
     if (heavy) {
@@ -685,7 +731,7 @@ function enemyTurn(b: BattleState, s: GameState): BattleEvent[] {
     }
     if (p.hp <= 0) {
       p.hp = 0;
-      events.push({ kind: "death", side: "player", text: "你倒下了……" });
+      events.push({ kind: "death", side: "player", text: it ? randomIntimacyText("deathPlayer") : "你倒下了……" });
       endBattle(b, s, false);
       return events;
     }
@@ -728,6 +774,7 @@ function endBattle(b: BattleState, s: GameState, victory: boolean): void {
   b.over = true;
   b.victory = victory;
   syncBack(b, s, victory);
+  if (b.intimacyNpc) return;
   if (victory) {
     const msgs = getRewards(s, enemyDef(b.enemyId), b.rewardHalf ? 0.5 : 1);
     if (b.rewardHalf && msgs.length) msgs[0] += "（敌人落荒而逃，所得减半）";
@@ -799,7 +846,7 @@ function syncBack(b: BattleState, s: GameState, victory: boolean): void {
   p.mp = b.player.mp;
   p.poison = b.player.poison;
   // 切磋与掌门挑战（sourceNpc）死亡无惩罚，不减有效气血
-  if (!victory && b.player.hp <= 0 && !ENEMIES[b.enemyId]?.spar && !b.sourceNpc) {
+  if (!victory && b.player.hp <= 0 && !b.intimacyNpc && !ENEMIES[b.enemyId]?.spar && !b.sourceNpc) {
     p.effHp = Math.max(1, Math.floor(p.effHp * 0.5));
   }
 }

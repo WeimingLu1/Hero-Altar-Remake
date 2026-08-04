@@ -16,18 +16,18 @@ interface Key {
 
 // 全天色温关键帧：黎明橙粉 → 清晨淡金 → 正午青蓝 → 黄昏金红 → 入夜 → 深夜 → 黎明前微亮
 const KEYS: Key[] = [
-  { h: 0, r: 10, g: 18, b: 38, a: 0.36 },
-  { h: 4, r: 16, g: 26, b: 48, a: 0.3 },
-  { h: 5, r: 217, g: 122, b: 78, a: 0.16 },
-  { h: 7, r: 255, g: 217, b: 160, a: 0.08 },
-  { h: 10, r: 255, g: 242, b: 216, a: 0.03 },
-  { h: 12, r: 207, g: 228, b: 240, a: 0.02 },
-  { h: 15, r: 255, g: 224, b: 176, a: 0.05 },
-  { h: 17, r: 232, g: 147, b: 79, a: 0.16 },
-  { h: 19, r: 53, g: 64, b: 106, a: 0.22 },
-  { h: 20, r: 14, g: 24, b: 48, a: 0.3 },
-  { h: 22, r: 10, g: 18, b: 38, a: 0.34 },
-  { h: 24, r: 10, g: 18, b: 38, a: 0.36 }
+  { h: 0, r: 6, g: 10, b: 26, a: 0.56 },
+  { h: 4, r: 10, g: 16, b: 34, a: 0.46 },
+  { h: 5, r: 225, g: 112, b: 62, a: 0.3 },
+  { h: 7, r: 255, g: 205, b: 145, a: 0.16 },
+  { h: 10, r: 255, g: 240, b: 210, a: 0.06 },
+  { h: 12, r: 188, g: 220, b: 236, a: 0.05 },
+  { h: 15, r: 255, g: 215, b: 160, a: 0.12 },
+  { h: 17, r: 240, g: 128, b: 60, a: 0.28 },
+  { h: 19, r: 54, g: 64, b: 112, a: 0.4 },
+  { h: 20, r: 10, g: 18, b: 40, a: 0.52 },
+  { h: 22, r: 6, g: 10, b: 26, a: 0.58 },
+  { h: 24, r: 6, g: 10, b: 26, a: 0.56 }
 ];
 
 export function dayTint(hour: number): DayTint {
@@ -47,7 +47,7 @@ export function dayTint(hour: number): DayTint {
 // 夜色浓度 0..1：驱动星空、灯光、云变淡
 export function nightness(hour: number): number {
   const { alpha } = dayTint(hour);
-  return Math.max(0, Math.min(1, (alpha - 0.14) / 0.16));
+  return Math.max(0, Math.min(1, (alpha - 0.12) / 0.3));
 }
 
 export interface ArcPos {
