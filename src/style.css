@@ -111,6 +111,21 @@ select {
   border-color: #541712;
 }
 
+.btn.quest {
+  background: linear-gradient(180deg, #c9a13a, #8a6a2a);
+  border-color: #6b4f2a;
+  animation: questGlow 1.4s ease-in-out infinite alternate;
+}
+
+@keyframes questGlow {
+  from {
+    box-shadow: 0 0 4px rgba(201, 161, 58, 0.45);
+  }
+  to {
+    box-shadow: 0 0 14px rgba(255, 217, 138, 0.9);
+  }
+}
+
 .btn small {
   opacity: 0.65;
   font-size: 11px;

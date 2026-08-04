@@ -3,7 +3,9 @@ import {
   ENDINGS,
   HANG_TEXT,
   getNpcDialog,
+  isQuestNpc,
   randomNpcChatDialog,
+  randomNpcTalkDialog,
   randomRumor,
   randomTalkText,
   sparReaction
@@ -444,6 +446,21 @@ export class App {
       case action.startsWith("npc-chat:"): {
         const npcId = action.split(":")[1];
         if (NPCS[npcId]) this.ui.showDialog(randomNpcChatDialog(npcId, s));
+        return;
+      }
+      case action.startsWith("npc-talk:"): {
+        const npcId = action.split(":")[1];
+        if (!NPCS[npcId]) return;
+        if (isQuestNpc(npcId, s)) {
+          const nodes = getNpcDialog(npcId, s);
+          if (nodes) {
+            this.ui.showDialog(nodes);
+          } else {
+            this.ui.showDialog(randomNpcTalkDialog(npcId, s));
+          }
+        } else {
+          this.ui.showDialog(randomNpcTalkDialog(npcId, s));
+        }
         return;
       }
       case action.startsWith("npc-status:"): {

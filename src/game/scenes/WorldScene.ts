@@ -3,7 +3,7 @@ import { getApp } from "../bus";
 import { AREAS, ROOMS, areaDef, roomDef } from "../content/areas";
 import { enemyDef } from "../content/enemies";
 import { NPCS, npcDef } from "../content/npcs";
-import { getNpcDialog, randomChatText } from "../content/story";
+import { getNpcDialog, randomChatText, randomEncounterEvent } from "../content/story";
 import type { BuildingDef, RoomDef } from "../content/types";
 import { buildingTexSize, npcScaleHint, visualForEnemy, visualForNpc, type CharVisual } from "../view/art";
 import { dayTint, moonArc, nightness, sunArc } from "../view/daynight";
@@ -166,7 +166,7 @@ export class WorldScene extends Phaser.Scene {
       kb.on(`keydown-${key}`, () => getApp().handleAction(action));
     }
     this.cameras.main.fadeIn(300, 0, 0, 0);
-    this.lifeNext = this.time.now + 12000 + Math.random() * 8000;
+    this.lifeNext = this.time.now + 6000 + Math.random() * 8000;
     this.refresh();
   }
 
@@ -330,7 +330,7 @@ export class WorldScene extends Phaser.Scene {
       }
       const dx = n.tx - n.sprite.x;
       if (Math.abs(dx) < 4) {
-        n.pauseUntil = this.time.now + 700 + Math.random() * 1500;
+        n.pauseUntil = this.time.now + 300 + Math.random() * 900;
         this.pickNpcTarget(n);
       } else {
         n.dir = dx > 0 ? 1 : -1;
@@ -440,7 +440,7 @@ export class WorldScene extends Phaser.Scene {
     this.checkDialogDistance();
     // NPC 生活引擎：每 25-45 秒尝试触发一场互动演出
     if (!this.lifeScript && now >= this.lifeNext) {
-      this.lifeNext = now + 10000 + Math.random() * 10000;
+      this.lifeNext = now + 6000 + Math.random() * 8000;
       this.tryStartLife();
     }
     this.updateLife(now);
@@ -519,14 +519,52 @@ export class WorldScene extends Phaser.Scene {
       const wa = this.npcSprites.get(rel.a);
       const wb = this.npcSprites.get(rel.b);
       if (!wa || !wb) continue;
-      if (Math.abs(wa.sprite.x - wb.sprite.x) >= 800) continue;
+      if (Math.abs(wa.sprite.x - wb.sprite.x) >= 950) continue;
       // 同一对 10 分钟内不重复演出
       const last = this.lifeCooldowns.get(relationPairKey(rel.a, rel.b)) ?? -Infinity;
-      if (now - last < 180000) continue;
+      if (now - last < 90000) continue;
       cands.push({ rel, wa, wb });
     }
-    if (!cands.length) return;
-    const { rel, wa, wb } = cands[Math.floor(Math.random() * cands.length)];
+    let wa: NpcWalker;
+    let wb: NpcWalker;
+    let rel: NpcRelation;
+    let beats: LifeBeat[];
+    if (cands.length) {
+      const pick = cands[Math.floor(Math.random() * cands.length)];
+      wa = pick.wa;
+      wb = pick.wb;
+      rel = pick.rel;
+      beats = pickRelationBeats(rel, lifeCtxFrom(s));
+    } else {
+      // 没有专属关系时，任意两位附近的 NPC 也可能相遇闲聊，让世界更活
+      const ids = [...this.npcSprites.keys()];
+      const pairs: { a: NpcWalker; b: NpcWalker }[] = [];
+      for (let i = 0; i < ids.length; i++) {
+        for (let j = i + 1; j < ids.length; j++) {
+          const a = this.npcSprites.get(ids[i]);
+          const b = this.npcSprites.get(ids[j]);
+          if (!a || !b) continue;
+          if (Math.abs(a.sprite.x - b.sprite.x) >= 950) continue;
+          const aId = a.sprite.getData("npcId") as string;
+          const bId = b.sprite.getData("npcId") as string;
+          const last = this.lifeCooldowns.get(relationPairKey(aId, bId)) ?? -Infinity;
+          if (now - last < 30000) continue;
+          pairs.push({ a, b });
+        }
+      }
+      if (!pairs.length) return;
+      const pair = pairs[Math.floor(Math.random() * pairs.length)];
+      wa = pair.a;
+      wb = pair.b;
+      const aId = wa.sprite.getData("npcId") as string;
+      const bId = wb.sprite.getData("npcId") as string;
+      rel = { a: aId, b: bId, kind: "friend", lines: [] };
+      beats = [
+        { who: "a", emoji: "💬", text: randomChatText(s) },
+        { who: "b", emoji: "💬", text: randomChatText(s) },
+        { who: "a", emoji: "💬", text: randomChatText(s) }
+      ];
+    }
     const mid = Math.max(60, Math.min(width - 60, (wa.sprite.x + wb.sprite.x) / 2));
     const left = wa.sprite.x <= wb.sprite.x ? wa : wb;
     const right = left === wa ? wb : wa;
@@ -541,7 +579,7 @@ export class WorldScene extends Phaser.Scene {
       rel,
       aId: rel.a,
       bId: rel.b,
-      beats: pickRelationBeats(rel, lifeCtxFrom(s)),
+      beats,
       idx: 0,
       phase: "approach",
       nextAt: now + dur + 150,
@@ -604,8 +642,14 @@ export class WorldScene extends Phaser.Scene {
     const s = getApp().state;
     const watched = ls.watched && this.player && Math.abs(this.player.x - ls.mid) < 300;
     this.lifeScript = null;
-    if (watched && s && Math.random() < 0.1) {
-      getApp().toast("👂 你无意间听到……" + randomChatText(s));
+    if (watched && s) {
+      if (Math.random() < 0.1) {
+        getApp().toast("👂 你无意间听到……" + randomChatText(s));
+      } else if (Math.random() < 0.07) {
+        const aName = NPCS[ls.aId]?.name || "有人";
+        const bName = NPCS[ls.bId]?.name || "有人";
+        getApp().toast(randomEncounterEvent(aName, bName));
+      }
     }
   }
 
@@ -1229,7 +1273,7 @@ export class WorldScene extends Phaser.Scene {
     this.npcSprites.set(npcId, {
       sprite: spr,
       defX: x,
-      speed: walk * 0.08,
+      speed: walk * 0.18,
       dir: 1,
       v,
       shadow,

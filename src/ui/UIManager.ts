@@ -6,7 +6,7 @@ import { ROMANCE } from "../game/content/romance";
 import { SECTS } from "../game/content/sects";
 import { SKILLS, skillDef } from "../game/content/skills";
 import { enemyDef } from "../game/content/enemies";
-import { PROLOGUE } from "../game/content/story";
+import { PROLOGUE, isQuestNpc } from "../game/content/story";
 import type { DialogNode } from "../game/content/types";
 import type { BattleState } from "../game/sim/battle";
 import { availableUts } from "../game/sim/battle";
@@ -249,9 +249,10 @@ export class UIManager {
       info.addEventListener("click", () => this.actions(`npc-status:${this.dialogNpc}`));
       opts.appendChild(info);
       const chat = document.createElement("button");
-      chat.className = "btn secondary";
-      chat.textContent = "打听闲话";
-      chat.addEventListener("click", () => this.actions(`npc-chat:${this.dialogNpc}`));
+      const questNpc = isQuestNpc(this.dialogNpc, getApp().state ?? undefined);
+      chat.className = questNpc ? "btn quest" : "btn";
+      chat.textContent = questNpc ? "对话（任务）" : "对话";
+      chat.addEventListener("click", () => this.actions(`npc-talk:${this.dialogNpc}`));
       opts.appendChild(chat);
       const rom = ROMANCE[this.dialogNpc];
       const s = getApp().state;
@@ -263,11 +264,6 @@ export class UIManager {
         gift.textContent = "送礼物";
         gift.addEventListener("click", () => this.actions(`romance-gift:${this.dialogNpc}`));
         opts.appendChild(gift);
-        const talk = document.createElement("button");
-        talk.className = "btn";
-        talk.textContent = "谈心";
-        talk.addEventListener("click", () => this.actions(`romance-talk:${this.dialogNpc}`));
-        opts.appendChild(talk);
         if (canIntimacy) {
           const close = document.createElement("button");
           close.className = "btn jade";
@@ -276,11 +272,6 @@ export class UIManager {
           opts.appendChild(close);
         }
       } else if (s && npcAge >= 18) {
-        const talk = document.createElement("button");
-        talk.className = "btn";
-        talk.textContent = "谈心";
-        talk.addEventListener("click", () => this.actions(`romance-talk:${this.dialogNpc}`));
-        opts.appendChild(talk);
         if (canIntimacy) {
           const close = document.createElement("button");
           close.className = "btn jade";
