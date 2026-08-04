@@ -745,6 +745,91 @@ select {
   width: 110px;
 }
 
+/* ---------- QTE 微操 ---------- */
+#qte {
+  position: absolute;
+  left: 50%;
+  top: 38%;
+  transform: translate(-50%, -50%);
+  z-index: 60;
+  text-align: center;
+  pointer-events: none;
+}
+
+.qte-letter {
+  font-family: "Ma Shan Zheng", "STKaiti", cursive;
+  font-size: 84px;
+  line-height: 1;
+  color: #fff3c8;
+  text-shadow: 0 0 24px rgba(255, 217, 138, 0.9), 0 4px 0 #5a3a12;
+  animation: qtePop 0.18s ease-out;
+}
+
+.qte-letter.qte-error {
+  color: #ff6b5e;
+  animation: qteShake 0.18s ease-in-out;
+}
+
+.qte-bar {
+  width: 180px;
+  height: 8px;
+  margin: 10px auto 0;
+  border: 1px solid #ffd98a;
+  border-radius: 4px;
+  background: #241a10;
+  overflow: hidden;
+}
+
+.qte-bar i {
+  display: block;
+  height: 100%;
+  width: 100%;
+  background: linear-gradient(90deg, #c9a13a, #ffd98a);
+  transform-origin: left;
+  animation: qteDrain 1.8s linear forwards;
+}
+
+.qte-hint {
+  margin-top: 8px;
+  color: #ffe9c4;
+  font-size: 14px;
+  letter-spacing: 4px;
+  text-shadow: 0 1px 2px rgba(0, 0, 0, 0.8);
+}
+
+@keyframes qtePop {
+  from {
+    transform: scale(1.6);
+    opacity: 0;
+  }
+  to {
+    transform: scale(1);
+    opacity: 1;
+  }
+}
+
+@keyframes qteShake {
+  0%,
+  100% {
+    transform: translateX(0);
+  }
+  25% {
+    transform: translateX(-8px);
+  }
+  75% {
+    transform: translateX(8px);
+  }
+}
+
+@keyframes qteDrain {
+  from {
+    transform: scaleX(1);
+  }
+  to {
+    transform: scaleX(0);
+  }
+}
+
 .cb-ult-list {
   display: flex;
   flex-wrap: wrap;

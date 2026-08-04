@@ -89,9 +89,20 @@ export class UIManager {
           <div id="title"></div>
           <div id="ending" class="hidden"><div class="inner"></div></div>
           <div id="toast"></div>
+          <div id="qte" class="hidden">
+            <div class="qte-letter"></div>
+            <div class="qte-bar"></div>
+            <div class="qte-hint">按对应字母</div>
+          </div>
         </div>
       </div>
     `;
+    window.addEventListener("keydown", (e) => {
+      const t = e.target as HTMLElement | null;
+      if (t && (t.tagName === "INPUT" || t.tagName === "SELECT" || t.tagName === "TEXTAREA")) return;
+      const k = e.key;
+      if (k.length === 1 && /^[a-zA-Z]$/.test(k)) this.actions(`qte-key:${k.toUpperCase()}`);
+    });
     this.root.querySelectorAll("[data-act]").forEach((b) => {
       b.addEventListener("click", () => this.actions((b as HTMLElement).dataset.act || ""));
     });
@@ -119,6 +130,24 @@ export class UIManager {
     d.textContent = msg;
     t.appendChild(d);
     setTimeout(() => d.remove(), 3100);
+  }
+
+  showQte(key: string): void {
+    const q = this.el("qte");
+    q.classList.remove("hidden");
+    this.q("#qte .qte-letter").textContent = key;
+    this.q("#qte .qte-letter").classList.remove("qte-error");
+    this.q("#qte .qte-bar").innerHTML = "<i></i>";
+  }
+
+  hideQte(): void {
+    this.el("qte").classList.add("hidden");
+  }
+
+  flashQteError(): void {
+    const letter = this.q("#qte .qte-letter");
+    letter.classList.add("qte-error");
+    setTimeout(() => letter.classList.remove("qte-error"), 220);
   }
 
   showHud(s: GameState): void {

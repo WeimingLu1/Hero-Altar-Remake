@@ -81,6 +81,9 @@ export class App {
   world!: WorldScene;
   private battleExitTimer: number | null = null;
   private finishingBattle = false;
+  private qteTimer: number | null = null;
+  private pendingQteKind: "attack" | "ult" | null = null;
+  private pendingQteUlt: string | null = null;
 
   constructor(root: HTMLElement) {
     this.ui = new UIManager(root);
@@ -1035,22 +1038,25 @@ export class App {
       case action === "meditate3":
         this.world.toggleMeditate();
         return;
-      case action === "battle-attack":
-        if (this.battle) {
-          this.battle.log = [...this.battle.log, ...playerAttack(this.battle, s)].slice(-60);
-          this.ui.showCombat(s, this.battle);
-          this.scheduleBattleExit();
+      case action.startsWith("qte-key:"): {
+        if (this.battle?.qteActive) {
+          const key = action.split(":")[1]?.toUpperCase();
+          if (key && key === this.battle.qteKey) this.resolveQte(true);
+          else this.ui.flashQteError();
         }
         return;
+      }
+      case action === "qte-timeout":
+        this.resolveQte(false);
+        return;
+      case action === "battle-attack":
+        if (this.battle && !this.battle.over && !this.battle.qteActive) this.startQte("attack");
+        return;
       case action.startsWith("battle-ult:"): {
-        if (this.battle) {
+        if (this.battle && !this.battle.over && !this.battle.qteActive) {
           const ultId = action.split(":")[1];
           const ult = availableUts(s).find((u) => u.id === ultId);
-          if (ult) {
-            this.battle.log = [...this.battle.log, ...playerUlt(this.battle, s, ult)].slice(-60);
-            this.ui.showCombat(s, this.battle);
-            this.scheduleBattleExit();
-          }
+          if (ult) this.startQte("ult", ultId);
         }
         return;
       }
@@ -1161,8 +1167,68 @@ export class App {
     }, 210);
   }
 
+  private randomQteKey(): string {
+    const keys = ["A", "S", "D", "F", "J", "K", "L", "W"];
+    return keys[Math.floor(Math.random() * keys.length)];
+  }
+
+  // QTE 微操：攻击/绝招前约 75% 概率弹出随机字母，按对后大幅强化本次出招
+  private startQte(kind: "attack" | "ult", ultId?: string): void {
+    if (!this.battle || this.battle.over || this.battle.qteActive) return;
+    if (Math.random() < 0.25) {
+      this.doBattleAction(kind, false, ultId);
+      return;
+    }
+    this.battle.qteActive = true;
+    this.battle.qteKey = this.randomQteKey();
+    this.battle.qteSuccess = false;
+    this.pendingQteKind = kind;
+    this.pendingQteUlt = ultId || null;
+    this.ui.showQte(this.battle.qteKey);
+    if (this.qteTimer) clearTimeout(this.qteTimer);
+    this.qteTimer = window.setTimeout(() => this.resolveQte(false), 1800);
+  }
+
+  private resolveQte(success: boolean): void {
+    if (this.qteTimer) {
+      clearTimeout(this.qteTimer);
+      this.qteTimer = null;
+    }
+    const b = this.battle;
+    if (!b || !b.qteActive) return;
+    b.qteActive = false;
+    b.qteSuccess = success;
+    if (success) b.qteStreak = Math.min(5, b.qteStreak + 1);
+    else b.qteStreak = 0;
+    this.ui.hideQte();
+    const kind = this.pendingQteKind;
+    const ultId = this.pendingQteUlt;
+    this.pendingQteKind = null;
+    this.pendingQteUlt = null;
+    if (kind) this.doBattleAction(kind, success, ultId);
+  }
+
+  private doBattleAction(kind: "attack" | "ult", qteSuccess: boolean, ultId?: string | null): void {
+    const s = this.state;
+    if (!s || !this.battle || this.battle.over) return;
+    if (kind === "attack") {
+      this.battle.log = [...this.battle.log, ...playerAttack(this.battle, s, qteSuccess)].slice(-60);
+    } else if (kind === "ult" && ultId) {
+      const ult = availableUts(s).find((u) => u.id === ultId);
+      if (ult) this.battle.log = [...this.battle.log, ...playerUlt(this.battle, s, ult, qteSuccess)].slice(-60);
+    }
+    this.ui.showCombat(s, this.battle);
+    this.scheduleBattleExit();
+  }
+
   finishBattle(): void {
     if (this.finishingBattle) return;
+    if (this.qteTimer) {
+      clearTimeout(this.qteTimer);
+      this.qteTimer = null;
+    }
+    this.ui.hideQte();
+    if (this.battle) this.battle.qteActive = false;
     this.finishingBattle = true;
     // 出战斗转场：战斗相机淡出后再收尾
     const cam = this.game.scene.getScene("Battle")?.cameras?.main;

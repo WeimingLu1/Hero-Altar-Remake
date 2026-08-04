@@ -4,6 +4,7 @@ import { NPCS } from "../content/npcs";
 import { PLATE_SECTS, SECTS } from "../content/sects";
 import { SKILLS, skillDef } from "../content/skills";
 import type { EnemySkillDef, UltDef } from "../content/types";
+import { randomQteText } from "../content/story";
 import {
   activeNeigongLevel,
   attackPower,
@@ -47,7 +48,7 @@ export interface BattleEntity {
   defending: boolean;
 }
 
-export type BattleEventKind = "move" | "attack" | "hit" | "crit" | "dodge" | "parry" | "heal" | "buff" | "debuff" | "poison" | "death" | "flee" | "phase" | "stance" | "opening" | "info";
+export type BattleEventKind = "move" | "attack" | "hit" | "crit" | "dodge" | "parry" | "heal" | "buff" | "debuff" | "poison" | "death" | "flee" | "phase" | "stance" | "opening" | "qte" | "info";
 
 export interface BattleEvent {
   kind: BattleEventKind;
@@ -58,6 +59,7 @@ export interface BattleEvent {
   ultName?: string;
   ultType?: string;
   mult?: number;
+  qte?: boolean;
 }
 
 export interface BattleState {
@@ -79,6 +81,11 @@ export interface BattleState {
   lastHealTurn: number;
   lastHealUlt: string | null;
   enemyWasHit: boolean; // guard AI 反击判定用：敌方上回合后是否受过击
+  // QTE 微操：随机字母，按对后本次攻击获得大幅加成
+  qteActive: boolean;
+  qteKey: string;
+  qteSuccess: boolean;
+  qteStreak: number;
 }
 
 export function startBattle(s: GameState, enemyId: string, sourceNpc?: string): BattleState {
@@ -137,7 +144,11 @@ export function startBattle(s: GameState, enemyId: string, sourceNpc?: string): 
     rewardHalf: false,
     lastHealTurn: -99,
     lastHealUlt: null,
-    enemyWasHit: false
+    enemyWasHit: false,
+    qteActive: false,
+    qteKey: "",
+    qteSuccess: false,
+    qteStreak: 0
   };
 }
 
@@ -145,6 +156,18 @@ function effectiveStat(e: BattleEntity, stat: string, base: number): number {
   let v = base;
   for (const b of e.buffs) if (b.stat === stat) v += b.value;
   return Math.max(0, v);
+}
+
+// 物理伤害上限：单次最多削掉目标约 45% 最大气血（弱敌保底 50 点），避免一招秒杀
+function capDamage(dmg: number, targetMaxHp: number): number {
+  return Math.max(1, Math.min(dmg, Math.max(50, Math.floor(targetMaxHp * 0.45))));
+}
+
+function qteTechName(s: GameState): string {
+  const pool = Object.entries(s.player.skills)
+    .filter(([, lv]) => lv > 0)
+    .map(([id]) => skillDef(id).name);
+  return pool.length ? pool[Math.floor(Math.random() * pool.length)] : "所学招式";
 }
 
 function addBuff(e: BattleEntity, buff: { stat: Buff["stat"]; value: number; turns: number }): void {
@@ -189,7 +212,7 @@ export function availableUts(s: GameState): UltDef[] {
   return out.sort((a, b) => b.lv - a.lv);
 }
 
-export function playerAttack(b: BattleState, s: GameState): BattleEvent[] {
+export function playerAttack(b: BattleState, s: GameState, qteSuccess?: boolean): BattleEvent[] {
   const events: BattleEvent[] = [];
   if (b.over) return events;
   b.turn += 1;
@@ -220,6 +243,13 @@ export function playerAttack(b: BattleState, s: GameState): BattleEvent[] {
       b.opening.enemy = false;
       events.push({ kind: "opening", side: "enemy", text: `${e.name}门户大开，破绽毕露！` });
     }
+    if (qteSuccess) {
+      const tech = qteTechName(s);
+      const bonus = 0.5 + Math.min(0.4, b.qteStreak * 0.06);
+      dmg = Math.round(dmg * (1 + bonus));
+      events.push({ kind: "qte", side: "player", text: randomQteText(true, tech), qte: true });
+    }
+    dmg = capDamage(dmg, e.maxHp);
     e.hp -= dmg;
     b.enemyWasHit = true;
     events.push({
@@ -240,7 +270,7 @@ export function playerAttack(b: BattleState, s: GameState): BattleEvent[] {
   return events;
 }
 
-export function playerUlt(b: BattleState, s: GameState, ult: UltDef): BattleEvent[] {
+export function playerUlt(b: BattleState, s: GameState, ult: UltDef, qteSuccess?: boolean): BattleEvent[] {
   const events: BattleEvent[] = [];
   if (b.over) return events;
   const p = b.player;
@@ -258,6 +288,9 @@ export function playerUlt(b: BattleState, s: GameState, ult: UltDef): BattleEven
   p.mp -= ult.cost;
   const ultType = ultOwnerType(ult.id);
   events.push({ kind: "move", side: "player", text: ult.text, ultName: ult.name, ultType, mult: ult.mult });
+  if (qteSuccess) {
+    events.push({ kind: "qte", side: "player", text: randomQteText(true, ult.name), qte: true });
+  }
   if (ult.kind === "attack") {
     const jiali = payJiali(b, events);
     const hitRoll = Math.random();
@@ -281,6 +314,11 @@ export function playerUlt(b: BattleState, s: GameState, ult: UltDef): BattleEven
         b.opening.enemy = false;
         events.push({ kind: "opening", side: "enemy", text: `${e.name}门户大开，破绽毕露！` });
       }
+      if (qteSuccess) {
+        const bonus = 0.5 + Math.min(0.4, b.qteStreak * 0.06);
+        dmg = Math.round(dmg * (1 + bonus));
+      }
+      dmg = capDamage(dmg, e.maxHp);
       e.hp -= dmg;
       b.enemyWasHit = true;
       events.push({
@@ -301,18 +339,19 @@ export function playerUlt(b: BattleState, s: GameState, ult: UltDef): BattleEven
     }
   } else if (ult.kind === "heal") {
     // 治疗绝招：固定 120 + 最大气血 8% + 当前内功等级 ×0.8
-    const heal = Math.floor(120 + p.maxHp * 0.08 + activeNeigongLevel(s.player) * 0.8);
+    let heal = Math.floor(120 + p.maxHp * 0.08 + activeNeigongLevel(s.player) * 0.8);
+    if (qteSuccess) heal = Math.round(heal * 1.3);
     p.hp = Math.min(p.maxHp, p.hp + heal);
     b.lastHealTurn = b.turn;
     b.lastHealUlt = ult.id;
     events.push({ kind: "heal", side: "player", text: `你恢复了 ${heal} 点气血。` });
   } else if (ult.kind === "buff") {
-    if (ult.buff) addBuff(p, ult.buff);
-    if (ult.buff2) addBuff(p, ult.buff2);
+    if (ult.buff) addBuff(p, { ...ult.buff, turns: ult.buff.turns + (qteSuccess ? 1 : 0) });
+    if (ult.buff2) addBuff(p, { ...ult.buff2, turns: ult.buff2.turns + (qteSuccess ? 1 : 0) });
     const names = [ult.buff ? statName(ult.buff.stat) : "", ult.buff2 ? statName(ult.buff2.stat) : ""].filter(Boolean);
     events.push({ kind: "buff", side: "player", text: `${names.join("、") || "气息"}提升了！` });
   } else if (ult.kind === "defense") {
-    if (ult.buff) addBuff(p, ult.buff);
+    if (ult.buff) addBuff(p, { ...ult.buff, turns: ult.buff.turns + (qteSuccess ? 1 : 0) });
     events.push({ kind: "buff", side: "player", text: "你凝神运功，防御大增。" });
   } else if (ult.kind === "debuff") {
     if (ult.debuff) {
@@ -626,6 +665,7 @@ function enemyTurn(b: BattleState, s: GameState): BattleEvent[] {
       dmg = 0;
       events.push({ kind: "info", side: "player", text: "锁血护体，这一击对你毫无作用！" });
     }
+    if (!s.player.cheatLock) dmg = capDamage(dmg, p.maxHp);
     p.hp -= dmg;
     events.push({
       kind: crit ? "crit" : "hit",

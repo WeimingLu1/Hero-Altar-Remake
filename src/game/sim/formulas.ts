@@ -80,13 +80,14 @@ export function attackPower(p: PlayerState): number {
   const w = weaponOf(p);
   const skill = mainCombatSkill(p);
   const ngLv = activeNeigongLevel(p);
+  // 属性/兵器仍是成长基础，但不再一家独大：QTE 操作与武功选择决定更多战局
   return Math.floor(
-      8 +
-      a.li * 1.5 +
-      w.atk +
-      skill.level * 0.75 +
-      p.neiliStrength * 0.12 +
-      ngLv * 0.25
+    14 +
+    a.li * 1.15 +
+    w.atk * 0.8 +
+    skill.level * 0.6 +
+    p.neiliStrength * 0.1 +
+    ngLv * 0.18
   );
 }
 

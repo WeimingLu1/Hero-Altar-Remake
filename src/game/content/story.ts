@@ -2105,6 +2105,45 @@ export function randomEncounterEvent(a: string, b: string): string {
   return pickText(ENCOUNTER_EVENTS)(a, b);
 }
 
+const QTE_SUCCESS_TEXTS = [
+  (t: string) => `你凝神屏息，${t}如龙蛇起陆，破空而出！`,
+  (t: string) => `心随意转，${t}在你手中化作漫天寒光，直取对方要害！`,
+  (t: string) => `你一声低喝，${t}携风雷之势轰然落下，连空气都仿佛被撕开！`,
+  (t: string) => `${t}的余韵在你经脉中流转，这一招竟比平日快了三成！`,
+  (t: string) => `你踩着对方呼吸的间隙出手，${t}毫无征兆地绽开！`,
+  (t: string) => `天地间仿佛静了一瞬，${t}已破开长空，直贯中门！`,
+  (t: string) => `你双手一分，${t}化作虚实两道，连对手都辨不出真假！`,
+  (t: string) => `这一招${t}，你练了千百遍，此刻却像是第一次真正使出！`,
+  (t: string) => `${t}起手时无声无息，临身时却如惊雷炸响！`,
+  (t: string) => `你足尖一点，${t}随身形旋转而出，锋芒所指，风声尽断！`,
+  (t: string) => `一念起，${t}便已到了；这一招，快得连影子都追不上！`,
+  (t: string) => `你长笑一声，${t}如长河奔涌，一泻千里！`,
+  (t: string) => `${t}使到妙处，你只觉周身穴窍一热，招意竟比招式先到！`,
+  (t: string) => `你以气驭招，${t}在半空转折三次，直取对手破绽！`,
+  (t: string) => `风停叶落，${t}已无声无息地印在对方身前！`,
+  (t: string) => `你这一记${t}，含着三日前山雨欲来的剑意，凛然难当！`,
+  (t: string) => `${t}出手的一刻，你听见自己心跳如鼓，招意却静如止水！`,
+  (t: string) => `你骤然变招，${t}自不可能的角度击出，令对方门户大乱！`,
+  (t: string) => `这一招${t}，你借了夜风之势，快得连自己都几乎收不住！`,
+  (t: string) => `${t}的寒芒在对方眼前一闪，胜负似乎已在这一瞬分晓！`
+];
+
+const QTE_FAIL_TEXTS = [
+  "你手忙脚乱，招式只使出一半，破绽微露。",
+  "那一瞬的犹豫让力道散了，这一招远不如预期。",
+  "你本欲抢攻，却在出手前错失良机，招式变得平平无奇。",
+  "气息一岔，招意中断，这一击只留下七分力气。",
+  "你慢了半拍，原本的杀招变成了一次寻常试探。",
+  "心一乱，招就乱；这一招连你自己都看不下去。",
+  "你惦记着方才的变故，出手时少了那股一往无前的气势。",
+  "招式未老已收，力道未发已泄，白白浪费了一次机会。"
+];
+
+export function randomQteText(success: boolean, techName?: string): string {
+  const name = techName || "所学招式";
+  return success ? pickText(QTE_SUCCESS_TEXTS)(name) : pickText(QTE_FAIL_TEXTS);
+}
+
 export function randomTalkText(): string {
   return "「" + pickText(TALK_FLAVOR) + "」";
 }

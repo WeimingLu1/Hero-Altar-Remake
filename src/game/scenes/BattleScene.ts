@@ -167,7 +167,7 @@ export class BattleScene extends Phaser.Scene {
       const ev: BattleEvent = b.log[this.playedIdx];
       this.playEvent(ev);
       this.playedIdx += 1;
-      const ultDelay = ev.kind === "move" && ev.ultType ? 560 : 0;
+      const ultDelay = ev.kind === "move" && ev.ultType ? 560 : ev.kind === "qte" ? 700 : 0;
       this.nextEventAt = this.time.now + (ultDelay || (ev.kind === "death" ? 500 : ev.kind === "crit" ? 420 : 320));
     }
     if (b.over && this.eventsDrained() && !this.exitSent) {
@@ -197,18 +197,21 @@ export class BattleScene extends Phaser.Scene {
         yoyo: true,
         onComplete: () => this.playerSprite.setTexture(`char-${this.playerPalette()}-idle`)
       });
+      this.hopSprite(this.playerSprite);
       if (ev.kind === "move" && ev.ultType) {
         // 绝招专属演出：按武功类型配色与形态 + 顿帧 + 分级震屏
         this.ultStrike(ev.ultType, ev.mult || 2);
       }
       if (ev.kind === "hit" || ev.kind === "crit") {
         const ultColor = ev.ultType ? ULT_COLORS[ev.ultType] : undefined;
+        const qteScale = ev.qte ? 1.6 : 1;
         this.slashAt(
           this.enemySprite.x,
           this.enemySprite.y - 20,
           ultColor ?? (ev.kind === "crit" ? 0xffe0a0 : 0xdff0ff),
-          ev.kind === "crit" ? 1.8 : ev.ultType ? 1.4 : 1.1
+          (ev.kind === "crit" ? 1.8 : ev.ultType ? 1.4 : 1.1) * qteScale
         );
+        if (ev.qte) this.cameras.main.flash(200, 255, 217, 138);
       }
       if (ev.kind === "crit") {
         this.cameras.main.shake(120, 0.008);
@@ -224,6 +227,7 @@ export class BattleScene extends Phaser.Scene {
         yoyo: true,
         onComplete: () => this.enemySprite.setTexture(this.enemyVisual.key("idle"))
       });
+      this.hopSprite(this.enemySprite);
       if (ev.kind === "move" && ev.ultName) {
         // 敌方技能前摇：暖色光环
         this.glowRing(this.enemySprite.x, this.enemySprite.y - 20, 0xff9a6a);
@@ -245,7 +249,13 @@ export class BattleScene extends Phaser.Scene {
         yoyo: true,
         repeat: 2
       });
-      this.sparkBurst(target.x, target.y - 20, ev.kind === "poison" ? 0x8ae08a : 0xfff2c0, ev.kind === "crit" ? 10 : 6);
+      this.sparkBurst(
+        target.x,
+        target.y - 20,
+        ev.kind === "poison" ? 0x8ae08a : ev.qte ? 0xffd98a : 0xfff2c0,
+        ev.qte ? 14 : ev.kind === "crit" ? 10 : 6
+      );
+      this.hopSprite(target);
       const dmgText = this.add.text(target.x, target.y - 60, `-${ev.dmg || 0}`, {
         fontFamily: "Noto Serif SC, serif",
         fontSize: "22px",
@@ -258,6 +268,29 @@ export class BattleScene extends Phaser.Scene {
         duration: 700,
         onComplete: () => dmgText.destroy()
       });
+    }
+    if (ev.kind === "qte") {
+      const colors = [0x7de0e8, 0xffd98a, 0xff6b5e, 0x8ae08a, 0xc87de0];
+      const color = colors[Math.floor(Math.random() * colors.length)];
+      const t = this.add.text(480, 210, ev.text, {
+        fontFamily: "Noto Serif SC, serif",
+        fontSize: "20px",
+        color: "#fff3c8",
+        align: "center",
+        wordWrap: { width: 760 },
+        stroke: "#1a1210",
+        strokeThickness: 4
+      }).setOrigin(0.5);
+      this.tweens.add({
+        targets: t,
+        y: t.y - 30,
+        alpha: 0,
+        duration: 1800,
+        delay: 350,
+        onComplete: () => t.destroy()
+      });
+      this.sparkBurst(480, 260, color, 16);
+      this.cameras.main.flash(180, 255, 217, 138);
     }
     if (ev.kind === "heal") {
       this.healSparkles(this.playerSprite.x, this.playerSprite.y - 24);
@@ -368,6 +401,21 @@ export class BattleScene extends Phaser.Scene {
         onComplete: () => t.destroy()
       });
     }
+  }
+
+  // 角色上下翻飞：模拟激烈碰撞中的身法起伏
+  private hopSprite(sprite: Phaser.GameObjects.Sprite): void {
+    const fromY = sprite.y;
+    const up = 18 + Math.random() * 18;
+    this.tweens.add({
+      targets: sprite,
+      y: fromY - up,
+      duration: 120,
+      yoyo: true,
+      onComplete: () => {
+        sprite.y = fromY;
+      }
+    });
   }
 
   // 绝招专属演出：剑气横斩 / 刀芒斜劈 / 拳劲冲击波 / 杖影竖劈 / 鞭影蛇形 / 内功光环爆发
