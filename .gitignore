@@ -5,3 +5,4 @@ tsconfig.tsbuildinfo
 scripts/.balance-bundle.mjs
 .DS_Store
 -l
+AGENTS.md
