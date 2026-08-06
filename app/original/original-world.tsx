@@ -1,11 +1,9 @@
 "use client";
 import { useCallback, useEffect, useRef, useState } from "react";
-import Link from "next/link";
 import {
   activePage,
   getOriginalMap,
   originalStart,
-  passable,
   tileAt,
   triggerEvent,
   type MapEvent,
@@ -409,18 +407,19 @@ export default function OriginalWorld() {
         nx = s.position.x + dx,
         ny = s.position.y + dy;
       s.position.direction = direction;
-      if (!passable(map, nx, ny, direction)) {
+      if (nx < 0 || ny < 0 || nx >= map.width || ny >= map.height) {
         sync(s);
         return;
       }
-      const blocking = map.events.find(
-        (e) =>
+      const blocking = map.events.find((e) => {
+        const visual = eventVisual(e, s);
+        return (
           e.x === nx &&
           e.y === ny &&
-          (String(activePage(e).graphic?.character_name || "") ||
-            eventScene(e, s)?.type === 0) &&
-          !activePage(e).through,
-      );
+          visual.kind === "npc" &&
+          !activePage(e).through
+        );
+      });
       const wantedBlocking =
         s.tasks.wantedPlace === s.position.mapId &&
         s.tasks.wantedX === nx &&
@@ -469,10 +468,18 @@ export default function OriginalWorld() {
       ],
       npc = candidates.find(([x, y]) => {
         const event = map.events.find((e) => e.x === x && e.y === y);
-        return event && eventScene(event, s)?.type === 0;
+        return event && eventVisual(event, s).kind === "npc";
+      }),
+      interactive = candidates.find(([x, y]) => {
+        const event = map.events.find((e) => e.x === x && e.y === y);
+        return event && eventVisual(event, s).kind !== "none";
       });
     if (npc) {
       runAt(npc[0], npc[1]);
+      return;
+    }
+    if (interactive) {
+      runAt(interactive[0], interactive[1]);
       return;
     }
     if (!runAt(p.x + d[0], p.y + d[1]))
@@ -1342,10 +1349,10 @@ export default function OriginalWorld() {
   return (
     <main className="world-shell">
       <header>
-        <Link href="/">← 云游志</Link>
+        <strong>英雄坛说</strong>
         <div>
-          <b>原版世界</b>
-          <span>69 MAP DATA RUNTIME</span>
+          <b>云游志</b>
+          <span>正式版 · 69 MAPS</span>
         </div>
         <button onClick={save}>
           保存 <kbd>F</kbd>
@@ -1933,34 +1940,39 @@ function draw(ctx: CanvasRenderingContext2D, state: WorldSave) {
     }
   for (const e of map.events) {
     if (e.x < sx || e.y < sy || e.x >= sx + 20 || e.y >= sy + 15) continue;
-    const page = activePage(e),
-      g = page.graphic || {},
-      name = String(g.character_name || ""),
-      scene = eventScene(e, state),
-      isNpc = scene?.type === 0 && scene.id !== undefined,
-      actorName = isNpc
-        ? String(npcRecord(scene.id!).name || "江湖人物")
-        : e.name,
+    const visual = eventVisual(e, state),
       near = Math.abs(e.x - pos.x) + Math.abs(e.y - pos.y) <= 2;
-    if (name || isNpc) {
+    if (visual.kind === "npc") {
       drawActor(
         ctx,
         (e.x - sx) * T + 16,
         (e.y - sy) * T + 23,
-        hash(actorName),
+        hash(visual.label),
         false,
       );
       drawNpcMarker(
         ctx,
         (e.x - sx) * T + 16,
         (e.y - sy) * T + 23,
-        actorName,
+        visual.label,
         near,
       );
-    } else if (page.commands.some((c) => c.code === 201)) {
-      ctx.fillStyle = "rgba(210,177,92,.65)";
-      ctx.fillRect((e.x - sx) * T + 12, (e.y - sy) * T + 12, 8, 8);
-    }
+    } else if (visual.kind === "door")
+      drawDoorMarker(
+        ctx,
+        (e.x - sx) * T + 16,
+        (e.y - sy) * T + 21,
+        visual.label,
+        near,
+      );
+    else if (visual.kind === "object")
+      drawObjectMarker(
+        ctx,
+        (e.x - sx) * T + 16,
+        (e.y - sy) * T + 21,
+        visual.label,
+        near,
+      );
   }
   if (
     state.tasks.wantedPlace === pos.mapId &&
@@ -1985,26 +1997,75 @@ function draw(ctx: CanvasRenderingContext2D, state: WorldSave) {
     drawNpcMarker(ctx, wx, wy, "通缉犯", near, true);
   }
   drawActor(ctx, (pos.x - sx) * T + 16, (pos.y - sy) * T + 23, "#dce8ec", true);
-  ctx.fillStyle = "rgba(5,10,7,.75)";
-  ctx.fillRect(0, 0, W, 30);
+  const shade = ctx.createRadialGradient(W / 2, H / 2, 120, W / 2, H / 2, 430);
+  shade.addColorStop(0, "rgba(0,0,0,0)");
+  shade.addColorStop(1, "rgba(2,7,4,.34)");
+  ctx.fillStyle = shade;
+  ctx.fillRect(0, 0, W, H);
+  ctx.fillStyle = "rgba(5,10,7,.72)";
+  ctx.fillRect(8, 7, Math.min(150, map.name.length * 18 + 24), 25);
   ctx.fillStyle = "#eadcae";
-  ctx.font = "bold 15px serif";
+  ctx.font = "bold 14px serif";
   ctx.textAlign = "left";
-  ctx.fillText(map.name, 14, 20);
+  ctx.fillText(map.name, 17, 24);
+  ctx.fillStyle = "rgba(5,10,7,.62)";
+  ctx.fillRect(W - 107, 8, 99, 22);
   ctx.textAlign = "right";
   ctx.font = "10px monospace";
   ctx.fillStyle = "#9aaa9e";
-  ctx.fillText(`MAP ${map.id}  ${pos.x},${pos.y}`, W - 14, 19);
+  ctx.fillText(`MAP ${map.id} · ${pos.x},${pos.y}`, W - 15, 23);
 }
-function eventScene(event: MapEvent, state: WorldSave) {
-  const result = executeMapCommands(activePage(event).commands);
-  return selectSceneEvent(result.source, {
-    inventory: state.actor.inventory,
-    tanId: state.actor.tanId,
-    freeWork: state.tasks.freeWork,
-    canGetItem: true,
-    canGetCaihua: true,
-  });
+type EventVisual = {
+  kind: "npc" | "object" | "door" | "none";
+  label: string;
+};
+const sceneLabels: Record<number, string> = {
+  1: "菜花宝典",
+  2: "可拾取物",
+  3: "宝物",
+  4: "钓鱼点",
+  5: "水源",
+  6: "游戏设施",
+  7: "工作点",
+  8: "挑战入口",
+  9: "告示牌",
+  10: "绳索",
+  11: "酒坛",
+  12: "对战入口",
+  13: "坛入口",
+  14: "铸剑台",
+  15: "桃花源",
+  16: "房间入口",
+};
+function eventVisual(event: MapEvent, state: WorldSave): EventVisual {
+  const page = activePage(event),
+    result = executeMapCommands(page.commands),
+    scene = selectSceneEvent(result.source, {
+      inventory: state.actor.inventory,
+      tanId: state.actor.tanId,
+      freeWork: state.tasks.freeWork,
+      canGetItem: true,
+      canGetCaihua: true,
+    }),
+    graphic = String(page.graphic?.character_name || ""),
+    cleanName = /^\d+$/.test(event.name.trim()) ? "" : event.name.trim();
+  if (scene?.type === 0 && scene.id !== undefined)
+    return {
+      kind: "npc",
+      label: String(npcRecord(scene.id).name || cleanName || "江湖人物"),
+    };
+  if (graphic) return { kind: "npc", label: cleanName || "江湖人物" };
+  if (result.transfer || (scene && [13, 15, 16].includes(scene.type)))
+    return {
+      kind: "door",
+      label: cleanName || (scene ? sceneLabels[scene.type] : "通往别处"),
+    };
+  if (scene)
+    return {
+      kind: "object",
+      label: cleanName || sceneLabels[scene.type] || "可互动",
+    };
+  return { kind: "none", label: "" };
 }
 function drawTile(
   ctx: CanvasRenderingContext2D,
@@ -2014,27 +2075,50 @@ function drawTile(
   layer: number,
 ) {
   if (!id) return;
-  const h = (id * 47) % 360;
   if (layer === 0) {
-    ctx.fillStyle = `hsl(${80 + (id % 35)} 22% ${24 + (id % 5) * 3}%)`;
+    const family = id % 6,
+      palettes = [
+        [103, 25, 27],
+        [88, 24, 31],
+        [43, 24, 34],
+        [188, 27, 28],
+        [25, 22, 31],
+        [122, 18, 25],
+      ],
+      [h, s, l] = palettes[family];
+    ctx.fillStyle = `hsl(${h + (id % 11) - 5} ${s}% ${l + (id % 4)}%)`;
     ctx.fillRect(x, y, T, T);
-    ctx.fillStyle = "rgba(255,255,255,.035)";
-    ctx.fillRect(x + ((id * 7) % 25), y + ((id * 11) % 25), 3, 3);
-  } else {
-    ctx.fillStyle = `hsl(${h} ${28 + layer * 8}% ${31 + layer * 7}%)`;
-    const kind = id % 7;
-    if (kind < 2) {
-      ctx.fillRect(x + 3, y + 4, T - 6, T - 7);
-      ctx.fillStyle = "rgba(15,18,15,.32)";
-      ctx.fillRect(x + 3, y + 22, T - 6, 7);
-    } else if (kind < 4) {
-      ctx.fillRect(x + 13, y + 3, 6, 27);
-      ctx.fillRect(x + 7, y + 5, 18, 12);
+    ctx.fillStyle = "rgba(255,244,195,.055)";
+    ctx.fillRect(x + 3 + ((id * 7) % 22), y + 4 + ((id * 11) % 20), 2, 2);
+    ctx.fillStyle = "rgba(3,12,7,.12)";
+    ctx.fillRect(x, y + T - 2, T, 2);
+    ctx.fillRect(x + T - 2, y, 2, T);
+    if (family === 0 || family === 1) {
+      ctx.fillStyle = "rgba(157,190,111,.15)";
+      const px = x + 5 + ((id * 3) % 20),
+        py = y + 9 + ((id * 5) % 15);
+      ctx.fillRect(px, py, 2, 6);
+      ctx.fillRect(px - 2, py + 2, 2, 2);
+      ctx.fillRect(px + 2, py + 1, 2, 3);
+    } else if (family === 3) {
+      ctx.strokeStyle = "rgba(157,215,220,.12)";
+      ctx.lineWidth = 1;
+      ctx.beginPath();
+      ctx.moveTo(x + 3, y + 10 + (id % 8));
+      ctx.lineTo(x + 29, y + 10 + (id % 8));
+      ctx.stroke();
     } else {
-      ctx.fillRect(x + 4, y + 10, 24, 18);
-      ctx.fillStyle = "rgba(240,220,170,.15)";
-      ctx.fillRect(x + 7, y + 13, 18, 3);
+      ctx.fillStyle = "rgba(235,216,168,.1)";
+      ctx.fillRect(x + 5 + (id % 14), y + 7 + (id % 12), 4, 2);
     }
+  } else {
+    // Higher RMXP layers are flattened into low-profile ground detail. This
+    // preserves map identity without letting walls or roofs hide interaction.
+    ctx.strokeStyle = `hsla(${(id * 47) % 360} 35% 68% / ${layer === 1 ? ".16" : ".1"})`;
+    ctx.lineWidth = 1;
+    ctx.strokeRect(x + 4 + (id % 3), y + 5 + (id % 4), 22, 18);
+    ctx.fillStyle = "rgba(235,220,178,.07)";
+    ctx.fillRect(x + 9, y + 13, 14, 3);
   }
 }
 function drawActor(
@@ -2084,6 +2168,69 @@ function drawNpcMarker(
   ctx.fillRect(x - width / 2, y - 43, width, 13);
   ctx.fillStyle = accent;
   ctx.fillText(label, x, y - 33);
+}
+function drawObjectMarker(
+  ctx: CanvasRenderingContext2D,
+  x: number,
+  y: number,
+  name: string,
+  near: boolean,
+) {
+  const pulse = Math.sin(Date.now() / 220) > 0,
+    accent = "#70e0d0";
+  ctx.fillStyle = "rgba(7,22,20,.85)";
+  ctx.fillRect(x - 10, y - 8, 20, 15);
+  ctx.strokeStyle = near ? accent : "rgba(112,224,208,.72)";
+  ctx.lineWidth = near ? 3 : 2;
+  ctx.strokeRect(x - 11, y - 9, 22, 17);
+  ctx.fillStyle = accent;
+  ctx.fillRect(x - 3, y - 5, 6, 6);
+  ctx.fillRect(x - 1, y - 9 - (pulse ? 2 : 0), 2, 2);
+  drawMarkerLabel(ctx, x, y - 18, name, accent, near);
+}
+function drawDoorMarker(
+  ctx: CanvasRenderingContext2D,
+  x: number,
+  y: number,
+  name: string,
+  near: boolean,
+) {
+  const pulse = Math.sin(Date.now() / 250) > 0,
+    accent = "#8ee28f";
+  ctx.fillStyle = "rgba(6,20,12,.84)";
+  ctx.fillRect(x - 11, y - 14, 22, 23);
+  ctx.strokeStyle = near ? accent : "rgba(142,226,143,.72)";
+  ctx.lineWidth = near ? 3 : 2;
+  ctx.strokeRect(x - 12, y - 15, 24, 25);
+  ctx.fillStyle = accent;
+  ctx.fillRect(x - 7, y - 10, 14, 3);
+  ctx.fillRect(x - 7, y - 7, 3, 12);
+  ctx.fillRect(x + 4, y - 7, 3, 12);
+  ctx.beginPath();
+  ctx.moveTo(x - 4, y - 20 - (pulse ? 1 : 0));
+  ctx.lineTo(x + 4, y - 20 - (pulse ? 1 : 0));
+  ctx.lineTo(x, y - 16 - (pulse ? 1 : 0));
+  ctx.fill();
+  drawMarkerLabel(ctx, x, y - 27, name, accent, near, true);
+}
+function drawMarkerLabel(
+  ctx: CanvasRenderingContext2D,
+  x: number,
+  y: number,
+  name: string,
+  accent: string,
+  visible: boolean,
+  always = false,
+) {
+  if (!visible && !always) return;
+  const label = name.length > 8 ? `${name.slice(0, 8)}…` : name;
+  ctx.font = `bold ${visible ? 10 : 9}px sans-serif`;
+  ctx.textAlign = "center";
+  const width = Math.ceil(ctx.measureText(label).width) + 8;
+  ctx.fillStyle = visible ? "rgba(6,13,9,.94)" : "rgba(6,13,9,.78)";
+  ctx.fillRect(x - width / 2, y - 11, width, 13);
+  ctx.fillStyle = accent;
+  ctx.fillText(label, x, y - 1);
 }
 function hash(text: string) {
   let n = 0;

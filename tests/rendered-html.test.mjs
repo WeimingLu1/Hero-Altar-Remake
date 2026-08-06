@@ -9,20 +9,23 @@ async function render(path = "/") {
     new Request(`http://localhost${path}`, {
       headers: { accept: "text/html" },
     }),
-    { ASSETS: { fetch: async () => new Response("Not found", { status: 404 }) } },
+    {
+      ASSETS: { fetch: async () => new Response("Not found", { status: 404 }) },
+    },
     { waitUntil() {}, passThroughOnException() {} },
   );
 }
 
-test("server-renders the playable landing page", async () => {
+test("root route renders the complete official game directly", async () => {
   const response = await render();
   assert.equal(response.status, 200);
   assert.match(response.headers.get("content-type") ?? "", /^text\/html\b/i);
   const html = await response.text();
   assert.match(html, /<title>英雄坛说：云游志<\/title>/);
-  assert.match(html, /初入江湖/);
-  assert.match(html, /原版世界/);
-  assert.match(html, /读取 JSON/);
+  assert.match(html, /正式版 · 69 MAPS/);
+  assert.match(html, /下载 JSON/);
+  assert.doesNotMatch(html, /初入江湖/);
+  assert.doesNotMatch(html, /原版世界/);
   assert.match(html, /<canvas/);
 });
 
@@ -30,7 +33,7 @@ test("server-renders the complete original-world runtime", async () => {
   const response = await render("/original");
   assert.equal(response.status, 200);
   const html = await response.text();
-  assert.match(html, /69 MAP DATA RUNTIME/);
+  assert.match(html, /正式版 · 69 MAPS/);
   assert.match(html, /JSON/);
   assert.match(html, /<canvas/);
 });

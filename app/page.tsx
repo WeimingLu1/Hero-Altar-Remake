@@ -1,5 +1,5 @@
 import type { Metadata } from "next";
-import HeroGame from "./hero-game";
+import OriginalWorld from "./original/original-world";
 
 export const metadata: Metadata = {
   title: "英雄坛说：云游志",
@@ -7,5 +7,5 @@ export const metadata: Metadata = {
 };
 
 export default function Home() {
-  return <HeroGame />;
+  return <OriginalWorld />;
 }
