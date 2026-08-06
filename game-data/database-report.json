@@ -1,0 +1,17 @@
+{
+  "format": "rmxp-hero-data-report",
+  "version": 1,
+  "generated_at": "2026-08-06T12:48:11Z",
+  "files": {
+    "core": 2,
+    "kungfus": 60,
+    "skills": 41,
+    "items": 33,
+    "weapons": 32,
+    "armors": 34,
+    "enemies": 199,
+    "enemies_plus": 199,
+    "tasks": 1,
+    "config": 7
+  }
+}

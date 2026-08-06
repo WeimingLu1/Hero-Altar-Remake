@@ -1,6 +1,8 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
+import { attackEffect, type Combatant } from "./game-core/combat";
+import { originalCounts, originalData } from "./game-core/original-data";
 
 const W = 640, H = 480, TILE = 32;
 type Mode = "title" | "play" | "dialog" | "battle" | "menu" | "help" | "ending";
@@ -122,7 +124,19 @@ export default function HeroGame() {
     if (type === "flee" && !enemy.boss) { battleLog.current = ["你虚晃一招，脱离了战斗。", ...battleLog.current].slice(0, 5); setBattleMessages([...battleLog.current]); setMode("play"); return; }
     if (type === "heal") { if ((s.inventory.herb || 0) <= 0) { battleLog.current.unshift("行囊里没有金创药。"); setBattleMessages([...battleLog.current]); return; } s.inventory.herb--; const heal = Math.min(38, s.player.maxHp - s.player.hp); s.player.hp += heal; battleLog.current.unshift(`服下金创药，恢复 ${heal} 点气血。`); }
     else if (type === "skill") { if (!s.skills["落叶掌"]) { battleLog.current.unshift("你还没有学会可用的绝招。"); setBattleMessages([...battleLog.current]); return; } if (s.player.qi < 12) { battleLog.current.unshift("内力不足，无法施展落叶掌。"); setBattleMessages([...battleLog.current]); return; } s.player.qi -= 12; playerDmg = Math.max(5, s.player.atk * 2 + s.skills["落叶掌"] * 4 - enemy.def); enemy.hp -= playerDmg; battleLog.current.unshift(`落叶掌劲穿林而过，造成 ${playerDmg} 点伤害！`); }
-    else if (type === "attack") { playerDmg = Math.max(1, s.player.atk + Math.floor(Math.random() * 6) - enemy.def); enemy.hp -= playerDmg; battleLog.current.unshift(`你挥动${s.player.weapon}，造成 ${playerDmg} 点伤害。`); }
+    else if (type === "attack") {
+      const attacker = playerCombatant(s);
+      const result = attackEffect(attacker, enemyCombatant(enemy, s.player.level), max => Math.floor(Math.random() * max));
+      s.player.qi = attacker.fp;
+      if (typeof result.damage === "number") {
+        playerDmg = result.damage;
+        enemy.hp -= playerDmg;
+        battleLog.current.unshift(`你挥动${s.player.weapon}，造成 ${playerDmg} 点伤害${result.hurt > 0 ? `，并留下 ${result.hurt} 点外伤` : ""}。`);
+      } else {
+        const reason = result.damage === "Miss.1" ? "被对方以轻功避开" : result.damage === "Miss.2" ? "被对方招架" : "被虚影挡下";
+        battleLog.current.unshift(`这一招${reason}。`);
+      }
+    }
     if (enemy.hp <= 0) { s.player.exp += enemy.exp; s.player.silver += enemy.silver; s.flags[enemy.id] = true; if (enemy.boss) { s.quests.blackwind = 2; s.inventory.token = (s.inventory.token || 0) + 1; battleLog.current.unshift("你取得了黑风令！回平安镇复命。", `击败${enemy.name}，获得阅历 ${enemy.exp}、银两 ${enemy.silver}。`); } else battleLog.current.unshift(`击败${enemy.name}，获得阅历 ${enemy.exp}、银两 ${enemy.silver}。`); setBattleMessages([...battleLog.current]); levelCheck(s); syncSave(s); setTimeout(() => { setMode("play"); setToast(enemy.boss ? "黑风寨已破，回镇复命" : "首战告捷"); }, 900); return; }
     const enemyDmg = Math.max(1, enemy.atk + Math.floor(Math.random() * 4) - s.player.def); s.player.hp -= enemyDmg; battleLog.current.unshift(`${enemy.name}反击，造成 ${enemyDmg} 点伤害。`); battleLog.current = battleLog.current.slice(0, 5); setBattleMessages([...battleLog.current]);
     if (s.player.hp <= 0) { s.player.hp = Math.ceil(s.player.maxHp / 2); s.player.qi = Math.ceil(s.player.maxQi / 2); s.player.map = "home"; s.player.pos = { x: 12, y: 7 }; s.player.silver = Math.max(0, s.player.silver - 10); setMode("play"); setToast("你被路人救回家中，损失十两"); }
@@ -165,7 +179,7 @@ export default function HeroGame() {
         {mode === "title" && <div className="title-overlay"><div className="mountains"/><div className="title-copy"><b>英雄坛说</b><span>云 游 志</span></div><div className="title-actions"><button onClick={() => start(hasLocalSave)}>{hasLocalSave ? "继续江湖" : "初入江湖"}<kbd>Enter</kbd></button><button onClick={() => start(false)}>新开一局 <kbd>N</kbd></button><button onClick={() => fileRef.current?.click()}>读取 JSON <kbd>L</kbd></button></div></div>}
         {mode === "dialog" && <button className="dialog" onClick={() => { const rest = messages.slice(1); messagesRef.current = rest; setMessages(rest); if (!rest.length) setMode("play"); }}><span>{messages[0]}</span><i>▼</i></button>}
         {mode === "battle" && <div className="battle-ui"><div className="battle-log">{battleMessages.map((x,i)=><p key={`${x}-${i}`}>{x}</p>)}</div><div className="battle-actions"><button onClick={()=>battleAction("attack")}>1 普通攻击</button><button onClick={()=>battleAction("skill")}>2 落叶掌</button><button onClick={()=>battleAction("heal")}>3 金创药</button><button onClick={()=>battleAction("flee")}>4 脱离</button></div></div>}
-        {mode === "menu" && <div className="menu-panel"><nav>{["人物","行囊","武学","任务","存档"].map((x,i)=><button className={menuTab===i?"active":""} onClick={()=>setMenuTab(i)} key={x}>{x}</button>)}</nav><div className="menu-content">{menuTab===0&&<Status s={save}/>} {menuTab===1&&<Inventory s={save} consumeItem={consumeItem}/>} {menuTab===2&&<Skills s={save}/>} {menuTab===3&&<Quests s={save}/>} {menuTab===4&&<div className="save-actions"><button onClick={()=>persist()}>保存到设备</button><button onClick={exportSave}>下载 JSON</button><button onClick={()=>fileRef.current?.click()}>读取 JSON</button><p>存档为明文 JSON，可用文本编辑器修改。读取时会校验基本结构。</p></div>}</div><button className="close" onClick={()=>setMode("play")}>×</button></div>}
+        {mode === "menu" && <div className="menu-panel"><nav>{["人物","行囊","武学","任务","存档","原典"].map((x,i)=><button className={menuTab===i?"active":""} onClick={()=>setMenuTab(i)} key={x}>{x}</button>)}</nav><div className="menu-content">{menuTab===0&&<Status s={save}/>} {menuTab===1&&<Inventory s={save} consumeItem={consumeItem}/>} {menuTab===2&&<Skills s={save}/>} {menuTab===3&&<Quests s={save}/>} {menuTab===4&&<div className="save-actions"><button onClick={()=>persist()}>保存到设备</button><button onClick={exportSave}>下载 JSON</button><button onClick={()=>fileRef.current?.click()}>读取 JSON</button><p>存档为明文 JSON，可用文本编辑器修改。读取时会校验基本结构。</p></div>} {menuTab===5&&<Codex/>}</div><button className="close" onClick={()=>setMode("play")}>×</button></div>}
         {mode === "help" && <div className="help-panel"><h2>键盘操作</h2><div><kbd>WASD</kbd><span>移动</span><kbd>方向键</kbd><span>移动</span><kbd>Z / Enter</kbd><span>确认、交互</span><kbd>X / Esc</kbd><span>返回</span><kbd>C / Tab</kbd><span>人物菜单</span><kbd>F</kbd><span>快速保存</span></div><button onClick={()=>setMode("play")}>返回江湖</button></div>}
       </div>
       <aside className="hud"><div><span>境界</span><strong>{save.player.level}</strong></div><Bar label="气血" value={save.player.hp} max={save.player.maxHp} color="#c44747"/><Bar label="内力" value={save.player.qi} max={save.player.maxQi} color="#4e87b8"/><div className="hud-row"><span>兵器</span><b>{save.player.weapon}</b></div><div className="hud-row"><span>银两</span><b>{save.player.silver}</b></div><div className="hud-row"><span>所在</span><b>{MAPS[save.player.map].name}</b></div><div className="quest-pin"><small>当前目标</small><b>{questText(save)}</b></div><button className="key-help" onClick={()=>setMode("help")}>? 按键说明</button></aside>
@@ -180,7 +194,18 @@ function Status({s}:{s:Save}) { return <div className="status-grid"><span>姓名
 function Inventory({s,consumeItem}:{s:Save;consumeItem:(id:string)=>void}) { const list=Object.entries(s.inventory).filter(([,n])=>n>0); return <div className="item-list">{list.length?list.map(([id,n])=><button key={id} onClick={()=>consumeItem(id)}><i className={`item-icon ${id}`}/><span><b>{ITEMS[id]?.name||id} × {n}</b><small>{ITEMS[id]?.desc}</small></span></button>):<p>行囊空空。</p>}</div>; }
 function Skills({s}:{s:Save}) { return <div className="skill-list">{Object.entries(s.skills).map(([name,lv])=><div key={name}><i/><span><b>{name}</b><small>{name==="落叶掌"?"掌风如秋叶，消耗内力造成双倍伤害。":"江湖基础修为。"}</small></span><em>Lv.{lv}</em></div>)}</div>; }
 function Quests({s}:{s:Save}) { return <div className="quest-list"><h3>黑风之患</h3><p>{questText(s)}</p><ol><li className={s.quests.blackwind>=1?"done":""}>听老管家讲述镇外异动</li><li className={s.flags.bandit?"done":""}>穿过十里竹林</li><li className={s.quests.blackwind>=2?"done":""}>击败黑风寨主</li><li className={s.quests.blackwind>=3?"done":""}>携黑风令回镇复命</li></ol></div>; }
+function Codex() { return <div className="codex"><p>已载入原版数据库</p><div className="codex-counts"><span>武学 <b>{originalCounts.kungfus}</b></span><span>绝招 <b>{originalCounts.skills}</b></span><span>物品 <b>{originalCounts.items}</b></span><span>武器 <b>{originalCounts.weapons}</b></span><span>防具 <b>{originalCounts.armors}</b></span><span>人物 <b>{originalCounts.enemies}</b></span></div><h3>武学总览</h3><div className="codex-list">{originalData.kungfus.map((item,index)=><span key={`${item.name}-${index}`}>{item.name}</span>)}</div></div>; }
 function questText(s:Save) { const q=s.quests.blackwind; if(q===0)return"去找镇中的老管家谈谈";if(q===1&&!s.flags.sword)return"向镇东铁匠讨一柄趁手兵器";if(q===1&&!s.flags.bandit)return"由镇东进入竹林，击退拦路山贼";if(q===1)return"深入竹林，剿灭黑风寨";if(q===2)return"把黑风令交给老管家";return s.flags.meditate?"江湖任你行" : "前往少林山门拜访慧空禅师"; }
+
+function playerCombatant(s: Save): Combatant {
+  const level = s.player.level;
+  const fist = s.skills["基本拳脚"] || 1;
+  const dodge = s.skills["基本轻功"] || 1;
+  return { exp:s.player.exp + level*100, hit:level*3, eva:level*2, attackKfLv:fist, dodgeKfLv:dodge, parryKfLv:fist, agi:30+level, int:30+level, str:30+level*2, atk:s.player.atk, pdef:s.player.def, fp:s.player.qi, fpPlus:0, weaponId:s.player.weapon==="木剑"?1:2, movable:true, fenshen:-1, kfAp:0, kfDp:0, kfPp:0, kfDamage:0, kfForce:0, hitType:0 };
+}
+function enemyCombatant(enemy: Enemy, level: number): Combatant {
+  return { exp:enemy.maxHp*100, hit:level*3+5, eva:level*2+3, attackKfLv:level*4, dodgeKfLv:level*3, parryKfLv:level*3, agi:30+level, int:30, str:30+level*2, atk:enemy.atk, pdef:enemy.def, fp:40+level*10, fpPlus:0, weaponId:1, movable:true, fenshen:-1, kfAp:0, kfDp:0, kfPp:0, kfDamage:0, kfForce:0, hitType:0 };
+}
 
 function drawWorld(ctx:CanvasRenderingContext2D,s:Save,mode:Mode,enemy:Enemy|null,log:string[]) {
   ctx.fillStyle="#111913";ctx.fillRect(0,0,W,H); const map=MAPS[s.player.map]; const rand=mulberry32(map.seed);
