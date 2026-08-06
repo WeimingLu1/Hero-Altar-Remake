@@ -53,6 +53,16 @@ import {
 import { battleSpecials } from "../game-core/special-system";
 import { digestActor } from "../game-core/survival-system";
 import {
+  acceptFreeWork,
+  acceptMainTask,
+  claimMainReward,
+  finishFreeWork,
+  finishMainTask,
+  freshTaskState,
+  taskJournal,
+  type TaskState,
+} from "../game-core/task-system";
+import {
   healWounds,
   meditateForce,
   meditateMagic,
@@ -79,6 +89,7 @@ type WorldSave = {
   flags: Record<string, boolean>;
   variables: Record<string, number>;
   actor: SceneActorState;
+  tasks: TaskState;
 };
 const newActor = (): SceneActorState => ({
   inventory: {},
@@ -125,6 +136,7 @@ const fresh = (): WorldSave => ({
   flags: {},
   variables: {},
   actor: newActor(),
+  tasks: freshTaskState(),
 });
 const normalize = (value: WorldSave): WorldSave => ({
   ...value,
@@ -136,6 +148,7 @@ const normalize = (value: WorldSave): WorldSave => ({
   },
   flags: value.flags || {},
   variables: value.variables || {},
+  tasks: { ...freshTaskState(), ...(value.tasks || {}) },
 });
 const loadSave = (): WorldSave => {
   if (typeof window === "undefined") return fresh();
@@ -145,6 +158,13 @@ const loadSave = (): WorldSave => {
   } catch {
     return fresh();
   }
+};
+const seeded = (seed: number) => {
+  let value = seed >>> 0;
+  return (max: number) => {
+    value = (Math.imul(value, 1664525) + 1013904223) >>> 0;
+    return Math.floor((value / 4294967296) * Math.max(1, max));
+  };
 };
 
 export default function OriginalWorld() {
@@ -207,7 +227,7 @@ export default function OriginalWorld() {
       const sceneCall = selectSceneEvent(result.source, {
         inventory: s.actor.inventory,
         tanId: s.actor.tanId,
-        freeWork: s.variables.freeWork || 0,
+        freeWork: s.tasks.freeWork,
         canGetItem: true,
         canGetCaihua: true,
       });
@@ -222,7 +242,19 @@ export default function OriginalWorld() {
             next.actor,
             event.id + s.position.mapId,
           );
+        if (sceneCall.type === 7) {
+          const work = finishFreeWork(
+            next.actor,
+            next.tasks,
+            sceneCall.id || 0,
+          );
+          sync(next);
+          setEventText(`${event.name || "义工"}\n${work.text}`);
+          setNotice(work.ok ? "义工完成" : "义工未完成");
+          return true;
+        }
         applySceneResolution(next.actor, resolution);
+        next.tasks.clock += resolution.playTimeDelta || 0;
         if (resolution.transfer)
           next.position = {
             ...resolution.transfer,
@@ -317,6 +349,55 @@ export default function OriginalWorld() {
     (id: number, option: NpcOption) => {
       const next = structuredClone(stateRef.current);
       if (option === "talk") {
+        const tasks = next.tasks,
+          random = seeded(next.position.mapId + id + tasks.clock);
+        if (tasks.visitId === id) {
+          tasks.visitId = -1;
+          sync(next);
+          setEventText(`${npcRecord(id).name}\n拜访已经完成，回村长处复命吧。`);
+          setNpcMenu(null);
+          return;
+        }
+        if (id === 25) {
+          const result = acceptFreeWork(next.actor, tasks, random);
+          sync(next);
+          setEventText(`${npcRecord(id).name}\n${result.text}`);
+          setNpcMenu(null);
+          return;
+        }
+        const taskType = id === 6 ? 1 : id === 10 ? 2 : id === 26 ? 3 : 0;
+        if (taskType) {
+          let text = "";
+          if (id === 26 && next.actor.morals >= 128)
+            text = "你并非邪道中人，我这里没有适合你的杀人任务。";
+          else if (tasks.finishFlag)
+            text = "你已有任务奖励待领，先去找顾炎武。";
+          else if (finishMainTask(next.actor, tasks, taskType as 1 | 2 | 3))
+            text = "任务完成，去找顾炎武领取奖励。";
+          else {
+            const active =
+              taskType === 1
+                ? tasks.visitId
+                : taskType === 2
+                  ? tasks.findId
+                  : tasks.killId;
+            text = active
+              ? `任务尚未完成：${taskType === 1 ? tasks.visitName : taskType === 2 ? tasks.findName : tasks.killName}。`
+              : acceptMainTask(next.actor, tasks, taskType as 1 | 2 | 3, random)
+                  .text;
+          }
+          sync(next);
+          setEventText(`${npcRecord(id).name}\n${text}`);
+          setNpcMenu(null);
+          return;
+        }
+        if (id === 31 && tasks.finishFlag) {
+          const result = claimMainReward(next.actor, tasks, random);
+          sync(next);
+          setEventText(`${npcRecord(id).name}\n${result.text}`);
+          setNpcMenu(null);
+          return;
+        }
         const r = resolveSceneEvent(
           { type: 0, id },
           next.actor,
@@ -357,6 +438,8 @@ export default function OriginalWorld() {
   const leaveBattle = useCallback(() => {
     if (!battle) return;
     const next = structuredClone(stateRef.current);
+    if (battle.finished === "win" && next.tasks.killId === battle.enemyId)
+      next.tasks.killId = -1;
     endSpar(next.actor, battle);
     sync(next);
     setBattle(null);
@@ -646,6 +729,10 @@ export default function OriginalWorld() {
         if (confirm) interact();
         else if (k === "f") save();
         else if (k === "r") setCultivation(0);
+        else if (k === "t")
+          setEventText(
+            `任务簿\n${taskJournal(stateRef.current.tasks).join("\n")}`,
+          );
         else if (["m", "e", "tab"].includes(k)) setMenu({ tab: 0, index: 0 });
         else if (cancel) location.href = "/";
       },
@@ -709,6 +796,7 @@ export default function OriginalWorld() {
     const id = window.setInterval(() => {
       const next = structuredClone(stateRef.current);
       digestActor(next.actor);
+      next.tasks.clock += 15;
       sync(next);
     }, 15000);
     return () => window.clearInterval(id);
@@ -905,6 +993,13 @@ export default function OriginalWorld() {
           </button>
           <button onClick={() => setCultivation(0)}>
             修炼 <kbd>R</kbd>
+          </button>
+          <button
+            onClick={() =>
+              setEventText(`任务簿\n${taskJournal(state.tasks).join("\n")}`)
+            }
+          >
+            任务 <kbd>T</kbd>
           </button>
           <button onClick={exportJson}>下载 JSON</button>
           <button onClick={() => file.current?.click()}>读取 JSON</button>
