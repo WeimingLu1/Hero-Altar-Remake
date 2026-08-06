@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import { readFile } from "node:fs/promises";
 import test from "node:test";
 
 async function render(path = "/") {
@@ -36,4 +37,15 @@ test("server-renders the complete original-world runtime", async () => {
   assert.match(html, /正式版 · 69 MAPS/);
   assert.match(html, /JSON/);
   assert.match(html, /<canvas/);
+});
+
+test("local saves are restored only after hydration", async () => {
+  const source = await readFile(
+    new URL("../app/original/original-world.tsx", import.meta.url),
+    "utf8",
+  );
+  assert.match(source, /useState<WorldSave>\(fresh\)/);
+  assert.match(source, /setTimeout\(\(\) => sync\(loadLocalSave\(\)\), 0\)/);
+  assert.doesNotMatch(source, /useState<WorldSave>\(loadLocalSave\)/);
+  assert.match(source, /savedAt: ""/);
 });

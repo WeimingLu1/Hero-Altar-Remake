@@ -177,7 +177,7 @@ const newActor = (): SceneActorState => ({
 const fresh = (): WorldSave => ({
   format: "rmxp-hero-original-world-save",
   version: 1,
-  savedAt: new Date().toISOString(),
+  savedAt: "",
   position: { ...originalStart },
   flags: {},
   variables: {},
@@ -196,8 +196,7 @@ const normalize = (value: WorldSave): WorldSave => ({
   variables: value.variables || {},
   tasks: { ...freshTaskState(), ...(value.tasks || {}) },
 });
-const loadSave = (): WorldSave => {
-  if (typeof window === "undefined") return fresh();
+const loadLocalSave = (): WorldSave => {
   try {
     const raw = localStorage.getItem("rmxp-original-world-v1");
     return raw ? normalize(JSON.parse(raw)) : fresh();
@@ -214,7 +213,7 @@ const seeded = (seed: number) => {
 };
 
 export default function OriginalWorld() {
-  const [state, setState] = useState<WorldSave>(loadSave),
+  const [state, setState] = useState<WorldSave>(fresh),
     [notice, setNotice] = useState("原版地图数据已载入"),
     [eventText, setEventText] = useState("");
   const [npcMenu, setNpcMenu] = useState<{ id: number; index: number } | null>(
@@ -249,6 +248,10 @@ export default function OriginalWorld() {
     stateRef.current = next;
     setState(structuredClone(next));
   }, []);
+  useEffect(() => {
+    const id = window.setTimeout(() => sync(loadLocalSave()), 0);
+    return () => window.clearTimeout(id);
+  }, [sync]);
   const save = useCallback(() => {
     const next = { ...stateRef.current, savedAt: new Date().toISOString() };
     sync(next);
@@ -1323,7 +1326,7 @@ export default function OriginalWorld() {
     );
     a.download = "英雄坛说-原版世界.json";
     a.click();
-    URL.revokeObjectURL(a.href);
+    window.setTimeout(() => URL.revokeObjectURL(a.href), 0);
   };
   const importJson = async (f?: File) => {
     if (!f) return;
