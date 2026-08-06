@@ -46,6 +46,7 @@ export type OriginalBattle = {
     eagleTurns: number;
     burnTurns: number;
   };
+  enemyOverride?: OriginalRecord;
 };
 type Move = {
   text: string;
@@ -408,8 +409,9 @@ function enemyTurn(
 export function beginOriginalBattle(
   enemyId: number,
   seed = 9527,
+  enemyOverride?: OriginalRecord,
 ): OriginalBattle {
-  const e = originalTables.enemies[enemyId] || {};
+  const e = enemyOverride || originalTables.enemies[enemyId] || {};
   return {
     enemyId,
     enemyName: String(e.name || "江湖中人"),
@@ -434,6 +436,7 @@ export function beginOriginalBattle(
       turns: 0,
     },
     enemyDebuff: { hit: 0, busy: 0, turns: 0, eagleTurns: 0, burnTurns: 0 },
+    enemyOverride,
   };
 }
 export function battleRound(source: OriginalBattle, actor: SceneActorState) {
@@ -445,7 +448,7 @@ export function battleRound(source: OriginalBattle, actor: SceneActorState) {
     battle.log.push(`${battle.enemyName}倒在苍鹰利爪之下。`);
     return battle;
   }
-  const record = originalTables.enemies[battle.enemyId] || {},
+  const record = battle.enemyOverride || originalTables.enemies[battle.enemyId] || {},
     random = lcg(battle),
     playerId = combatSkillProfile(actor).attackId,
     pm = moveFor(
@@ -547,7 +550,7 @@ export function specialRound(
       str: battle.buff.str + Math.floor((level * 2) / 15),
       turns: Math.floor(level / 20) + 1,
     };
-  const record = originalTables.enemies[battle.enemyId] || {},
+  const record = battle.enemyOverride || originalTables.enemies[battle.enemyId] || {},
     random = lcg(battle),
     blank: Move = {
       text: "",

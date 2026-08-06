@@ -1,5 +1,8 @@
 import { originalTables, originalTasks, originalText } from "./original-data";
 import type { SceneActorState } from "./scene-event";
+import { derivedStats } from "./inventory-system";
+import type { OriginalRecord } from "./original-data";
+import { getOriginalMap } from "./original-world";
 
 export type TaskState = {
   clock: number;
@@ -25,6 +28,12 @@ export type TaskState = {
   wantedReward: number;
   wantedCount: number;
   wantedTurn: number;
+  wantedX: number;
+  wantedY: number;
+  wantedGender: number;
+  wantedClass: number;
+  wantedLevel: number;
+  wantedPercent: number;
   stoneStarted: boolean;
   stoneStartedAt: number;
 };
@@ -53,6 +62,12 @@ export const freshTaskState = (): TaskState => ({
   wantedReward: 0,
   wantedCount: 0,
   wantedTurn: 1,
+  wantedX: 0,
+  wantedY: 0,
+  wantedGender: 0,
+  wantedClass: 1,
+  wantedLevel: 1,
+  wantedPercent: 80,
   stoneStarted: false,
   stoneStartedAt: -180,
 });
@@ -356,6 +371,116 @@ export function giveTanReward(actor: SceneActorState) {
   if (id === 8) actor.maxFp += 200;
   actor.tanId++;
   return { ok: true, text: texts[id] || `通过第 ${id} 坛。` };
+}
+
+export function acceptWantedTask(
+  actor: SceneActorState,
+  tasks: TaskState,
+  random: (max: number) => number,
+  fast = false,
+) {
+  if (actor.morals < 128)
+    return {
+      ok: false,
+      text: String(originalText.you_bad_text || "你也是通缉犯，休想领任务。"),
+    };
+  if (tasks.wantedPlace > 0 && tasks.clock - tasks.wantedStarted < 1200)
+    return {
+      ok: false,
+      text: String(originalText.bad_undo_text || "先去收服name。 ").replace(
+        "name",
+        tasks.wantedName,
+      ),
+    };
+  if (tasks.wantedPlace > 0) tasks.wantedCount--;
+  const cooldown = fast ? 150 : 300;
+  if (tasks.wantedPlace <= 0 && tasks.clock - tasks.wantedStarted < cooldown)
+    return {
+      ok: false,
+      text: String(originalText.no_bad_task || "暂无通缉任务。"),
+    };
+  const maps = (originalTasks.bad_map as number[]) || [],
+    areas = (originalTasks.bad_area as number[][][]) || [],
+    index = random(maps.length),
+    first = ((originalText.bad_name1 as string[]) || ["赵"])[random(8)] || "赵",
+    second = ((originalText.bad_name2 as string[]) || ["某"])[random(8)] || "某";
+  tasks.wantedPlace = maps[index] || 3;
+  tasks.wantedStarted = tasks.clock;
+  tasks.wantedName = first + second;
+  tasks.wantedGender = ((originalText.bad_name2 as string[]) || []).indexOf(second) > 3 ? 0 : 1;
+  tasks.wantedCount++;
+  if (tasks.wantedCount > 10) {
+    tasks.wantedTurn++;
+    tasks.wantedCount = 1;
+  }
+  tasks.wantedReward =
+    (80 + random(80)) * (tasks.wantedCount + tasks.wantedTurn - 1);
+  tasks.wantedClass = random(8) + 1;
+  tasks.wantedPercent = Math.min(
+    70 + 5 * tasks.wantedCount + 5 * tasks.wantedTurn,
+    125,
+  );
+  tasks.wantedLevel = Math.floor(
+    (Math.max(1, ...Object.values(actor.skills).map((skill) => skill.level)) *
+      tasks.wantedPercent) /
+      100,
+  );
+  const area = areas[index] || [[1, 1]],
+    point = area[random(area.length)] || [1, 1];
+  tasks.wantedX = point[0];
+  tasks.wantedY = point[1];
+  const place = getOriginalMap(tasks.wantedPlace).name;
+  return {
+    ok: true,
+    text: String(originalText.give_bad_text || "恶人name出没于place。")
+      .replace("name", tasks.wantedName)
+      .replace("place", place),
+  };
+}
+
+export function wantedEnemyRecord(
+  actor: SceneActorState,
+  tasks: TaskState,
+): OriginalRecord {
+  const base = structuredClone(originalTables.enemies[198] || {}),
+    stats = derivedStats(actor),
+    percent = tasks.wantedPercent || 80,
+    classes = (originalTasks.bad_data as number[][]) || [],
+    data = classes[tasks.wantedClass] || classes[1] || [],
+    weaponId = data[0] || 0,
+    use = [data[1], data[2], data[3], data[4], data[5], data[6]],
+    ids = (data[8] as unknown as number[]) || [1, 2, 9, 10],
+    maxhp = Math.max(1, Math.floor((actor.maxHp * percent) / 100)),
+    maxfp = Math.max(0, Math.floor((actor.maxFp * percent) / 100));
+  return {
+    ...base,
+    name: tasks.wantedName,
+    exp: Math.floor((actor.exp * percent) / 100),
+    hp: maxhp,
+    maxhp,
+    fp: maxfp,
+    maxfp,
+    fp_plus: Math.floor(maxfp / 40),
+    base_hit: stats.hit,
+    base_eva: stats.eva,
+    agi: stats.agi,
+    int: stats.int,
+    str: stats.str,
+    atk: stats.atk,
+    pdef: stats.pdef,
+    weapon_id: weaponId,
+    skill_use: use,
+    skill_list: ids.map((id) => [id, tasks.wantedLevel]),
+  };
+}
+
+export function finishWantedTask(actor: SceneActorState, tasks: TaskState) {
+  if (tasks.wantedPlace <= 0)
+    return { ok: false, text: "当前没有可结算的通缉犯。" };
+  tasks.wantedPlace = 0;
+  const exp = tasks.wantedReward,
+    potential = Math.floor(tasks.wantedReward / 4);
+  return { ok: true, text: reward(actor, exp, potential, -1) };
 }
 
 export function taskJournal(tasks: TaskState) {

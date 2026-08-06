@@ -4,6 +4,7 @@ import type { SceneActorState } from "../app/game-core/scene-event";
 import {
   acceptFreeWork,
   acceptMainTask,
+  acceptWantedTask,
   claimMainReward,
   finishFreeWork,
   finishMainTask,
@@ -11,6 +12,7 @@ import {
   freshTaskState,
   giveTanReward,
   startStoneTask,
+  wantedEnemyRecord,
 } from "../app/game-core/task-system";
 
 const actor = (): SceneActorState => ({
@@ -49,6 +51,20 @@ const actor = (): SceneActorState => ({
   fpPlus: 0,
   mpPlus: 0,
   xue6: false,
+});
+
+test("捕快任务保持五分钟冷却、十次轮转和动态敌人比例", () => {
+  const a = actor(),
+    tasks = freshTaskState();
+  assert.equal(acceptWantedTask(a, tasks, () => 0).ok, true);
+  assert.equal(tasks.wantedPlace, 3);
+  assert.equal(tasks.wantedName, "赵梅");
+  assert.equal(tasks.wantedReward, 80);
+  assert.equal(tasks.wantedPercent, 80);
+  const enemy = wantedEnemyRecord(a, tasks);
+  assert.equal(enemy.name, "赵梅");
+  assert.equal(enemy.maxhp, 80);
+  assert.equal(enemy.exp, 800);
 });
 
 test("石料任务保持原作冷却、道具与动态奖励", () => {

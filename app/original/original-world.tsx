@@ -55,15 +55,18 @@ import { digestActor } from "../game-core/survival-system";
 import {
   acceptFreeWork,
   acceptMainTask,
+  acceptWantedTask,
   claimMainReward,
   finishFreeWork,
   finishMainTask,
   finishStoneTask,
+  finishWantedTask,
   freshTaskState,
   giveTanReward,
   startStoneTask,
   startTanQuest,
   taskJournal,
+  wantedEnemyRecord,
   type TaskState,
 } from "../game-core/task-system";
 import {
@@ -212,8 +215,22 @@ export default function OriginalWorld() {
   const runAt = useCallback(
     (x: number, y: number, automatic = false) => {
       const s = stateRef.current,
+        isWanted =
+          s.tasks.wantedPlace === s.position.mapId &&
+          s.tasks.wantedX === x &&
+          s.tasks.wantedY === y,
         map = getOriginalMap(s.position.mapId),
         hook = triggerEvent(map, x, y);
+      if (isWanted && !automatic) {
+        setBattle(
+          beginOriginalBattle(
+            198,
+            s.tasks.clock + x * 31 + y,
+            wantedEnemyRecord(s.actor, s.tasks),
+          ),
+        );
+        return true;
+      }
       if (!hook) return false;
       const { result, event, page } = hook;
       if (result.transfer) {
@@ -317,7 +334,11 @@ export default function OriginalWorld() {
           String(activePage(e).graphic?.character_name || "") &&
           !activePage(e).through,
       );
-      if (!blocking) {
+      const wantedBlocking =
+        s.tasks.wantedPlace === s.position.mapId &&
+        s.tasks.wantedX === nx &&
+        s.tasks.wantedY === ny;
+      if (!blocking && !wantedBlocking) {
         s.position.x = nx;
         s.position.y = ny;
         sync(s);
@@ -374,6 +395,13 @@ export default function OriginalWorld() {
             id === 14
               ? startStoneTask(next.actor, tasks)
               : finishStoneTask(next.actor, tasks);
+          sync(next);
+          setEventText(`${npcRecord(id).name}\n${result.text}`);
+          setNpcMenu(null);
+          return;
+        }
+        if (id === 36) {
+          const result = acceptWantedTask(next.actor, tasks, random);
           sync(next);
           setEventText(`${npcRecord(id).name}\n${result.text}`);
           setNpcMenu(null);
@@ -463,6 +491,9 @@ export default function OriginalWorld() {
     const next = structuredClone(stateRef.current);
     let altarText = "";
     if (battle.finished === "win") {
+      if (battle.enemyId === 198 && next.tasks.wantedPlace > 0) {
+        altarText = finishWantedTask(next.actor, next.tasks).text;
+      }
       if (next.tasks.killId === battle.enemyId) next.tasks.killId = -1;
       const altarId = battle.enemyId - 162;
       if (altarId === next.actor.tanId && altarId >= 1 && altarId <= 8) {
@@ -855,7 +886,7 @@ export default function OriginalWorld() {
     let raf = 0;
     const frame = () => {
       const ctx = canvas.current?.getContext("2d");
-      if (ctx) draw(ctx, stateRef.current.position);
+      if (ctx) draw(ctx, stateRef.current);
       raf = requestAnimationFrame(frame);
     };
     frame();
@@ -1323,8 +1354,9 @@ function SkillRows({
   );
 }
 
-function draw(ctx: CanvasRenderingContext2D, pos: WorldPosition) {
-  const map = getOriginalMap(pos.mapId),
+function draw(ctx: CanvasRenderingContext2D, state: WorldSave) {
+  const pos = state.position,
+    map = getOriginalMap(pos.mapId),
     ox = Math.floor(W / 2 / T),
     oy = Math.floor(H / 2 / T),
     sx = Math.max(0, Math.min(map.width - 20, pos.x - ox)),
@@ -1358,6 +1390,20 @@ function draw(ctx: CanvasRenderingContext2D, pos: WorldPosition) {
       ctx.fillRect((e.x - sx) * T + 12, (e.y - sy) * T + 12, 8, 8);
     }
   }
+  if (
+    state.tasks.wantedPlace === pos.mapId &&
+    state.tasks.wantedX >= sx &&
+    state.tasks.wantedY >= sy &&
+    state.tasks.wantedX < sx + 20 &&
+    state.tasks.wantedY < sy + 15
+  )
+    drawActor(
+      ctx,
+      (state.tasks.wantedX - sx) * T + 16,
+      (state.tasks.wantedY - sy) * T + 23,
+      state.tasks.wantedGender ? "#a94b57" : "#80403b",
+      false,
+    );
   drawActor(ctx, (pos.x - sx) * T + 16, (pos.y - sy) * T + 23, "#dce8ec", true);
   ctx.fillStyle = "rgba(5,10,7,.75)";
   ctx.fillRect(0, 0, W, 30);
