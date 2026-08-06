@@ -80,6 +80,15 @@ import {
   practiceOnce,
   practiceOptions,
 } from "../game-core/cultivation-system";
+import {
+  buyFurniture,
+  clearFurniture,
+  createSword,
+  furnitureNames,
+  reforgeSword,
+  swordTypes,
+  upgradeRoom,
+} from "../game-core/life-system";
 import "./world.css";
 import "./choice.css";
 import "./battle.css";
@@ -111,6 +120,7 @@ type ArcadeState =
       fail: number;
       flight: number;
     };
+type LifeState = { kind: "forge" | "home"; index: number };
 const newActor = (): SceneActorState => ({
   inventory: {},
   gold: 100,
@@ -149,6 +159,17 @@ const newActor = (): SceneActorState => ({
   xue6: false,
   dance: 100,
   ball: 100,
+  swordBattle: false,
+  swordName: "",
+  swordType: -1,
+  sword1: 0,
+  sword2: 0,
+  sword3: 0,
+  swordTimes: 0,
+  forgeChallengeStep: 0,
+  haveNewHome: false,
+  roomLevel: 0,
+  jiajuList: [0, 0, 0, 0, 0],
 });
 const fresh = (): WorldSave => ({
   format: "rmxp-hero-original-world-save",
@@ -213,6 +234,7 @@ export default function OriginalWorld() {
     index: number;
   } | null>(null);
   const [arcade, setArcade] = useState<ArcadeState | null>(null);
+  const [life, setLife] = useState<LifeState | null>(null);
   const canvas = useRef<HTMLCanvasElement>(null),
     file = useRef<HTMLInputElement>(null),
     stateRef = useRef<WorldSave>(state),
@@ -283,6 +305,34 @@ export default function OriginalWorld() {
           setArcade({ kind: "select", index: 0 });
           return true;
         }
+        if (sceneCall.type === 14) {
+          if (!s.actor.swordBattle) {
+            if (s.actor.exp < 150000) {
+              setEventText("干匠\n你的江湖阅历还不足以接受铸剑挑战。");
+              return true;
+            }
+            const nextForge = structuredClone(s),
+              required = [8, 15, 25, 21];
+            nextForge.actor.forgeChallengeStep = 0;
+            nextForge.actor.inventory[`2:${required[0]}`] = 1;
+            nextForge.actor.weaponId = required[0];
+            sync(nextForge);
+            setBattle(beginOriginalBattle(149, s.tasks.clock + 149));
+          } else setLife({ kind: "forge", index: 0 });
+          return true;
+        }
+        if (sceneCall.type === 15) {
+          if (s.actor.haveNewHome) {
+            const nextHome = structuredClone(s);
+            nextHome.position = { mapId: 57, x: 9, y: 13, direction: 8 };
+            sync(nextHome);
+          } else if (
+            seeded(s.tasks.clock + s.actor.luck)(30 + s.actor.luck) >= 30
+          )
+            setBattle(beginOriginalBattle(162, s.tasks.clock + 162));
+          else setEventText("桃花源\n你在山路上失足跌落，只得休养后再来。 ");
+          return true;
+        }
         if (sceneCall.type === 7) {
           const work = finishFreeWork(
             next.actor,
@@ -335,7 +385,8 @@ export default function OriginalWorld() {
         menu ||
         caihua ||
         cultivation !== null ||
-        arcade
+        arcade ||
+        life
       )
         return;
       const s = structuredClone(stateRef.current),
@@ -371,6 +422,7 @@ export default function OriginalWorld() {
       caihua,
       cultivation,
       arcade,
+      life,
       eventText,
       menu,
       npcMenu,
@@ -478,6 +530,11 @@ export default function OriginalWorld() {
           setNpcMenu(null);
           return;
         }
+        if (id === 172 && next.actor.haveNewHome) {
+          setLife({ kind: "home", index: 0 });
+          setNpcMenu(null);
+          return;
+        }
         const r = resolveSceneEvent(
           { type: 0, id },
           next.actor,
@@ -518,8 +575,42 @@ export default function OriginalWorld() {
   const leaveBattle = useCallback(() => {
     if (!battle) return;
     const next = structuredClone(stateRef.current);
-    let altarText = "";
+    let altarText = "",
+      nextBattle: OriginalBattle | null = null;
     if (battle.finished === "win") {
+      if (battle.enemyId === 149) {
+        const required = [8, 15, 25, 21],
+          step = next.actor.forgeChallengeStep || 0,
+          requiredId = required[step],
+          key = `2:${requiredId}`;
+        if (next.actor.weaponId !== requiredId) {
+          delete next.actor.inventory[key];
+          next.actor.weaponId = 0;
+          next.actor.forgeChallengeStep = 0;
+          altarText = "兵器与本轮要求不符，铸剑挑战失败。";
+        } else {
+          delete next.actor.inventory[key];
+          next.actor.weaponId = 0;
+          if (step < required.length - 1) {
+            const following = required[step + 1];
+            next.actor.forgeChallengeStep = step + 1;
+            next.actor.inventory[`2:${following}`] = 1;
+            next.actor.weaponId = following;
+            nextBattle = beginOriginalBattle(149, battle.seed + step + 1);
+            altarText = `第 ${step + 1} 轮通过，换用指定兵器继续挑战。`;
+          } else {
+            next.actor.swordBattle = true;
+            next.actor.forgeChallengeStep = 0;
+            altarText = "四轮铸剑挑战全部通过，铸剑谷已经开放。";
+          }
+        }
+      }
+      if (battle.enemyId === 162) {
+        next.actor.haveNewHome = true;
+        next.actor.roomLevel = 1;
+        next.actor.jiajuList = [0, 0, 0, 0, 0];
+        altarText = "击败山大王，桃花源从此归你所有。";
+      }
       if (battle.enemyId === 198 && next.tasks.wantedPlace > 0) {
         altarText = finishWantedTask(next.actor, next.tasks).text;
       }
@@ -538,9 +629,14 @@ export default function OriginalWorld() {
         altarText = giveTanReward(next.actor).text;
       }
     }
+    if (battle.enemyId === 149 && battle.finished !== "win") {
+      for (const id of [8, 15, 25, 21]) delete next.actor.inventory[`2:${id}`];
+      next.actor.weaponId = 0;
+      next.actor.forgeChallengeStep = 0;
+    }
     endSpar(next.actor, battle);
     sync(next);
-    setBattle(null);
+    setBattle(nextBattle);
     setSpecialMenu(null);
     setNotice(
       battle.finished === "win"
@@ -699,6 +795,56 @@ export default function OriginalWorld() {
         keys.current.add(k);
         const confirm = ["z", "enter", " "].includes(k),
           cancel = ["x", "escape"].includes(k);
+        if (life) {
+          const length =
+            life.kind === "forge"
+              ? (stateRef.current.actor.swordType ?? -1) < 0
+                ? 4
+                : 2
+              : 8;
+          if (k === "arrowup" || k === "w")
+            setLife({ ...life, index: (life.index + length - 1) % length });
+          else if (k === "arrowdown" || k === "s")
+            setLife({ ...life, index: (life.index + 1) % length });
+          else if (cancel) setLife(null);
+          else if (confirm) {
+            const next = structuredClone(stateRef.current);
+            let result: { ok: boolean; text: string };
+            if (life.kind === "forge") {
+              if ((next.actor.swordType ?? -1) < 0)
+                result = createSword(
+                  next.actor,
+                  life.index,
+                  `无名${swordTypes[life.index]}`,
+                );
+              else if (life.index === 0)
+                result = reforgeSword(
+                  next.actor,
+                  seeded(next.tasks.clock + (next.actor.swordTimes || 0)),
+                );
+              else {
+                setLife(null);
+                return;
+              }
+            } else if (life.index === 0) result = upgradeRoom(next.actor);
+            else if (life.index <= 5)
+              result = buyFurniture(next.actor, life.index - 1);
+            else if (life.index === 6) result = clearFurniture(next.actor);
+            else {
+              setLife(null);
+              return;
+            }
+            sync(next);
+            setNotice(result.text);
+            if (
+              result.ok &&
+              life.kind === "forge" &&
+              (next.actor.swordType ?? -1) >= 0
+            )
+              setLife(null);
+          }
+          return;
+        }
         if (arcade) {
           if (arcade.kind === "select") {
             if (["arrowup", "arrowdown", "w", "s"].includes(k))
@@ -951,6 +1097,7 @@ export default function OriginalWorld() {
     activateBagEntry,
     activateSkill,
     arcade,
+    life,
     specialMenu,
     fightSpecial,
     rememberArcadeScore,
@@ -1087,6 +1234,7 @@ export default function OriginalWorld() {
           </button>
         )}
         {arcade && <Arcade game={arcade} actor={state.actor} />}
+        {life && <LifeMenu menu={life} actor={state.actor} />}
         {npcMenu && (
           <Choice
             title={String(npcRecord(npcMenu.id).name)}
@@ -1294,6 +1442,45 @@ function Arcade({
       </div>
       <small>
         Z/Enter 开始游标，再按一次投球 · 命中区 110–128 · X/Esc 离开
+      </small>
+    </section>
+  );
+}
+
+function LifeMenu({
+  menu,
+  actor,
+}: {
+  menu: LifeState;
+  actor: SceneActorState;
+}) {
+  const forgeNew = (actor.swordType ?? -1) < 0,
+    items =
+      menu.kind === "forge"
+        ? forgeNew
+          ? swordTypes.map((name) => `铸造${name}`)
+          : [`重铸「${actor.swordName || "无名兵器"}」`, "离开"]
+        : [
+            `翻修房屋（当前 ${actor.roomLevel || 0}/3）`,
+            ...furnitureNames.map(
+              (name, index) =>
+                `${name} / 已有 ${actor.jiajuList?.[index] || 0}`,
+            ),
+            "销毁全部家具",
+            "离开",
+          ];
+  return (
+    <section className="arcade-panel life-panel">
+      <h2>{menu.kind === "forge" ? "铸剑谷" : "桃花源管家"}</h2>
+      {items.map((item, index) => (
+        <b className={menu.index === index ? "active" : ""} key={item}>
+          {item}
+        </b>
+      ))}
+      <small>
+        {menu.kind === "forge"
+          ? `经验 ${actor.exp} · 银两 ${actor.gold} · 武器名可在 JSON 中修改`
+          : `银两 ${actor.gold} · 家具每件 60000`}
       </small>
     </section>
   );

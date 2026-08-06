@@ -50,7 +50,11 @@ export function bagEntries(actor: SceneActorState): BagEntry[] {
         kind: kind as 1 | 2 | 3,
         id,
         amount,
-        name: String(record.name || id),
+        name: String(
+          kind === 2 && id === 31 && actor.swordName
+            ? actor.swordName
+            : record.name || id,
+        ),
         description: String(record.description || ""),
         equipped:
           kind === 2
@@ -78,8 +82,20 @@ export function equipmentBonus(
     | "add_eva",
 ) {
   let value = 0;
-  if (actor.weaponId)
+  if (actor.weaponId) {
     value += Number(originalTables.weapons[actor.weaponId]?.[key] || 0);
+    if (actor.weaponId === 31) {
+      if (key === "add_atk") value += actor.sword1 || 0;
+      const middleType = Math.floor((actor.sword2 || 0) / 100),
+        middleValue = (actor.sword2 || 0) % 100,
+        suffixType = Math.floor((actor.sword3 || 0) / 100),
+        suffixValue = (actor.sword3 || 0) % 100;
+      if (key === "add_eva" && middleType === 3) value += middleValue;
+      if (key === "add_hit" && middleType === 4) value += middleValue;
+      const suffixKeys = ["", "add_str", "add_agi", "add_int", "add_bon"];
+      if (suffixKeys[suffixType] === key) value += suffixValue;
+    }
+  }
   for (const id of actor.armorIds)
     value += Number(originalTables.armors[id]?.[key] || 0);
   return Math.min(255, value);

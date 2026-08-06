@@ -48,6 +48,16 @@ export type SceneActorState = {
   roomLevel?: number;
   dance?: number;
   ball?: number;
+  swordBattle?: boolean;
+  swordName?: string;
+  swordType?: number;
+  sword1?: number;
+  sword2?: number;
+  sword3?: number;
+  swordTimes?: number;
+  forgeChallengeStep?: number;
+  haveNewHome?: boolean;
+  jiajuList?: number[];
 };
 export type SceneResolution = {
   lines: string[];
