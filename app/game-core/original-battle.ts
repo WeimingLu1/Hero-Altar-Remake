@@ -29,10 +29,11 @@ export type OriginalBattle = {
     eva: number;
     agi: number;
     atk: number;
+    pdef: number;
     fenshen: number;
     turns: number;
   };
-  enemyDebuff: { hit: number; busy: number; turns: number };
+  enemyDebuff: { hit: number; busy: number; turns: number; eagleTurns: number };
 };
 type Move = {
   text: string;
@@ -94,6 +95,7 @@ function player(
     eva: 0,
     agi: 0,
     atk: 0,
+    pdef: 0,
     fenshen: 0,
     turns: 0,
   };
@@ -108,7 +110,7 @@ function player(
     int: stats.int,
     str: stats.str + buff.str,
     atk: stats.atk + buff.atk,
-    pdef: stats.pdef,
+    pdef: stats.pdef + buff.pdef,
     fp: actor.fp,
     fpPlus: actor.fpPlus,
     weaponId: actor.weaponId,
@@ -132,7 +134,12 @@ function enemy(
     level = (id: number) => skills.find((row) => row[0] === id)?.[1] || 0,
     uses = (record.skill_use as number[]) || [],
     attackId = n(record, "weapon_id") > 0 ? uses[1] || 1 : uses[0] || 2;
-  const debuff = battle?.enemyDebuff || { hit: 0, busy: 0, turns: 0 };
+  const debuff = battle?.enemyDebuff || {
+    hit: 0,
+    busy: 0,
+    turns: 0,
+    eagleTurns: 0,
+  };
   return {
     exp: n(record, "exp"),
     hit: n(record, "base_hit") + debuff.hit,
@@ -182,6 +189,7 @@ function tick(battle: OriginalBattle) {
       eva: 0,
       agi: 0,
       atk: 0,
+      pdef: 0,
       fenshen: 0,
       turns: 0,
     };
@@ -189,6 +197,13 @@ function tick(battle: OriginalBattle) {
   if (battle.playerBusy > 0) battle.playerBusy--;
   if (battle.enemyDebuff.turns > 0 && --battle.enemyDebuff.turns === 0)
     battle.enemyDebuff.hit = 0;
+  if (battle.enemyDebuff.eagleTurns > 0) {
+    if (lcg(battle)(100) < 60) {
+      battle.enemyHp = Math.max(0, battle.enemyHp - 50);
+      battle.log.push(`铁爪苍鹰俯冲抓伤${battle.enemyName}，造成 50 点伤害。`);
+    }
+    battle.enemyDebuff.eagleTurns--;
+  }
 }
 function enemyTurn(
   battle: OriginalBattle,
@@ -237,14 +252,28 @@ export function beginOriginalBattle(
     log: [`${String(e.name || "江湖中人")}抱拳道：“请赐教！”`],
     finished: null,
     cooldowns: {},
-    buff: { hit: 0, str: 0, eva: 0, agi: 0, atk: 0, fenshen: 0, turns: 0 },
-    enemyDebuff: { hit: 0, busy: 0, turns: 0 },
+    buff: {
+      hit: 0,
+      str: 0,
+      eva: 0,
+      agi: 0,
+      atk: 0,
+      pdef: 0,
+      fenshen: 0,
+      turns: 0,
+    },
+    enemyDebuff: { hit: 0, busy: 0, turns: 0, eagleTurns: 0 },
   };
 }
 export function battleRound(source: OriginalBattle, actor: SceneActorState) {
   const battle = structuredClone(source);
   if (battle.finished) return battle;
   tick(battle);
+  if (battle.enemyHp <= 0) {
+    battle.finished = "win";
+    battle.log.push(`${battle.enemyName}倒在苍鹰利爪之下。`);
+    return battle;
+  }
   const record = originalTables.enemies[battle.enemyId] || {},
     random = lcg(battle),
     playerId = combatSkillProfile(actor).attackId,
@@ -312,6 +341,11 @@ export function specialRound(
     return battle;
   }
   tick(battle);
+  if (battle.enemyHp <= 0) {
+    battle.finished = "win";
+    battle.log.push(`${battle.enemyName}倒在苍鹰利爪之下。`);
+    return battle;
+  }
   paySpecialCost(actor, special);
   battle.turn++;
   battle.log.push(
@@ -567,6 +601,67 @@ export function specialRound(
       battle.log.push(`${battle.enemyName}以内力格挡连环三招。`);
     }
     battle.cooldowns["22"] = 6;
+  } else if (specialId === 23) {
+    const snow = effectiveLevel(actor, 39),
+      maximum = actor.xue6 ? 6 : 5;
+    forcedAttacks = Math.min(Math.floor((snow - 90) / 30) + 2, maximum);
+    forcedAttacks = Math.max(1, forcedAttacks);
+    battle.buff = {
+      ...battle.buff,
+      hit: battle.buff.hit + 10,
+      turns: Math.max(battle.buff.turns, 1),
+    };
+    battle.playerBusy = 4;
+    battle.cooldowns["23"] = 11;
+  } else if (specialId === 24) {
+    const ice = effectiveLevel(actor, 41),
+      turns = Math.min(Math.floor(ice / 20), 10) + 1;
+    battle.buff = {
+      ...battle.buff,
+      pdef: battle.buff.pdef + Math.min(Math.floor(ice / 4), 100),
+      turns: Math.max(battle.buff.turns, turns),
+    };
+    battle.cooldowns["24"] = turns;
+  } else if (specialId === 25) {
+    const dragon = effectiveLevel(actor, 47),
+      power = dragon + 5 - Math.floor(n(record, "maxfp") / 10);
+    if (power >= 0) {
+      battle.enemyHp = Math.max(0, battle.enemyHp - power);
+      battle.enemyDebuff.busy = Math.max(
+        battle.enemyDebuff.busy,
+        Math.floor(dragon / 30) + 2,
+      );
+      battle.log.push(`虎啸震伤${battle.enemyName}，造成 ${power} 点伤害。`);
+    } else battle.log.push(`${battle.enemyName}内力深厚，不为虎啸所动。`);
+    battle.cooldowns["25"] = 6;
+  } else if (specialId === 26) {
+    const eagle = effectiveLevel(actor, 44);
+    battle.enemyDebuff.eagleTurns = Math.floor(eagle / 10) + 1;
+    battle.cooldowns["26"] = 12;
+    battle.log.push("金眼铁爪苍鹰开始在战场上盘旋。");
+  } else if (specialId === 27) {
+    const eagle = effectiveLevel(actor, 44),
+      addition = Math.floor((eagle * (5 + random(6))) / 10),
+      turns = Math.floor(eagle / 20) + 1;
+    battle.buff = {
+      ...battle.buff,
+      eva: battle.buff.eva + addition,
+      turns: Math.max(battle.buff.turns, turns),
+    };
+    battle.cooldowns["27"] = turns;
+  } else if (specialId === 28) {
+    const dragon = effectiveLevel(actor, 47),
+      knowledge = skillLevel(actor, 48),
+      turns = Math.floor(dragon / 20) + Math.floor(knowledge / 15) + 1,
+      additionStr = Math.floor(dragon / 10) + Math.floor(knowledge / 8),
+      additionDef = Math.floor(dragon / 2) + knowledge;
+    battle.buff = {
+      ...battle.buff,
+      str: battle.buff.str + additionStr,
+      pdef: battle.buff.pdef + additionDef,
+      turns: Math.max(battle.buff.turns, turns),
+    };
+    battle.cooldowns["28"] = turns;
   }
   const attacks =
       forcedAttacks > 0
@@ -575,9 +670,10 @@ export function specialRound(
           ? 2
           : specialId === 4 || specialId === 5 || specialId === 11
             ? 3
-            : [6, 7, 8, 9, 10, 13, 14, 15, 16, 17, 19, 20, 22].includes(
-                  specialId,
-                )
+            : [
+                  6, 7, 8, 9, 10, 13, 14, 15, 16, 17, 19, 20, 22, 24, 25, 26,
+                  27, 28,
+                ].includes(specialId)
               ? 0
               : special.type === 2
                 ? 1

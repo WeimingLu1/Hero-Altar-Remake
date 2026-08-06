@@ -7,7 +7,7 @@ export type SceneActorState = {
   teacherId:number;classId:number;gender:number;face:number;mp:number;maxMp:number;age:number;
   baseBon:number;baseInt:number;baseAgi:number;baseStr:number;bon:number;int:number;agi:number;str:number;luck:number;
   skills:Record<string,{level:number;points:number}>;
-  weaponId:number;armorIds:number[];skillUse:number[];fpPlus:number;
+  weaponId:number;armorIds:number[];skillUse:number[];fpPlus:number;xue6:boolean;
 };
 export type SceneResolution = { lines:string[]; gain?:{kind:1|2|3;id:number;amount:number}; transfer?:{mapId:number;x:number;y:number}; tag:string };
 
