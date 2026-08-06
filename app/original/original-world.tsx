@@ -57,6 +57,7 @@ import {
   acceptMainTask,
   acceptWantedTask,
   claimMainReward,
+  completeHiddenQuest,
   finishFreeWork,
   finishMainTask,
   finishStoneTask,
@@ -400,7 +401,7 @@ export default function OriginalWorld() {
           setNpcMenu(null);
           return;
         }
-        if (id === 36) {
+        if (id === 3) {
           const result = acceptWantedTask(next.actor, tasks, random);
           sync(next);
           setEventText(`${npcRecord(id).name}\n${result.text}`);
@@ -446,6 +447,13 @@ export default function OriginalWorld() {
           const result = claimMainReward(next.actor, tasks, random);
           sync(next);
           setEventText(`${npcRecord(id).name}\n${result.text}`);
+          setNpcMenu(null);
+          return;
+        }
+        const hidden = completeHiddenQuest(next.actor, id);
+        if (hidden.ok || hidden.text) {
+          sync(next);
+          setEventText(`${npcRecord(id).name}\n${hidden.text}`);
           setNpcMenu(null);
           return;
         }

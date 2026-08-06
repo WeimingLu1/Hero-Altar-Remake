@@ -483,6 +483,34 @@ export function finishWantedTask(actor: SceneActorState, tasks: TaskState) {
   return { ok: true, text: reward(actor, exp, potential, -1) };
 }
 
+export function completeHiddenQuest(actor: SceneActorState, npcId: number) {
+  const quest = (originalTasks.quest_list as Record<
+    string,
+    [[number, number, number, number], [number, number, number]]
+  >)?.[String(npcId)];
+  if (!quest) return { ok: false, text: "" };
+  const [request, prize] = quest,
+    [questType, type1, id1, num1] = request,
+    [type2, id2, num2] = prize,
+    requestKey = `${type1}:${id1}`,
+    prizeKey = `${type2}:${id2}`;
+  if ((actor.inventory[requestKey] || 0) < num1)
+    return { ok: false, text: "" };
+  if (bagIsFull(actor) && !actor.inventory[prizeKey]) {
+    const releasesSlot = questType === 1 && (actor.inventory[requestKey] || 0) === num1;
+    if (!releasesSlot) return { ok: false, text: "背包已满，无法收下交换物。" };
+  }
+  if (questType === 1) {
+    actor.inventory[requestKey] -= num1;
+    if (actor.inventory[requestKey] <= 0) delete actor.inventory[requestKey];
+  }
+  actor.inventory[prizeKey] = (actor.inventory[prizeKey] || 0) + num2;
+  const lines = (originalText.quest_talk as Record<string, string[]>)?.[
+    String(npcId)
+  ];
+  return { ok: true, text: lines?.[1] || "交换完成。" };
+}
+
 export function taskJournal(tasks: TaskState) {
   const lines: string[] = [];
   if (tasks.freeWork)

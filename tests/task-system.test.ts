@@ -6,6 +6,7 @@ import {
   acceptMainTask,
   acceptWantedTask,
   claimMainReward,
+  completeHiddenQuest,
   finishFreeWork,
   finishMainTask,
   finishStoneTask,
@@ -51,6 +52,14 @@ const actor = (): SceneActorState => ({
   fpPlus: 0,
   mpPlus: 0,
   xue6: false,
+});
+
+test("隐藏交换任务消耗原作数量并发放对应奖励", () => {
+  const a = actor();
+  a.inventory["1:6"] = 2;
+  assert.equal(completeHiddenQuest(a, 2).ok, true);
+  assert.equal(a.inventory["1:6"], undefined);
+  assert.equal(a.inventory["3:2"], 1);
 });
 
 test("捕快任务保持五分钟冷却、十次轮转和动态敌人比例", () => {
