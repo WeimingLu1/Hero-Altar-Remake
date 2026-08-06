@@ -10,6 +10,7 @@ module RPG
   class Map; end
   class MapInfo; end
   class AudioFile; end
+  class Tileset; end
   class Event
     class Page
       class Condition; end
@@ -106,4 +107,14 @@ manifest = {
 # Stable output: build metadata lives in a sibling report, game data remains diffable.
 File.write(File.join(out_dir, "maps.json"), JSON.generate(manifest.reject { |key, _| key == :generated_at }))
 File.write(File.join(out_dir, "extraction-report.json"), JSON.pretty_generate(manifest.slice(:format, :version, :source_commit, :generated_at, :map_count)))
+tilesets = Marshal.load(File.binread(File.join(data_dir, "Tilesets.rxdata"))).compact.map do |tileset|
+  {
+    id: ivar(tileset, :id), name: text(ivar(tileset, :name)), tileset_name: text(ivar(tileset, :tileset_name)),
+    autotile_names: ivar(tileset, :autotile_names, []).map { |name| text(name) },
+    panorama_name: text(ivar(tileset, :panorama_name)), battleback_name: text(ivar(tileset, :battleback_name)),
+    passages: json_value(ivar(tileset, :passages)), priorities: json_value(ivar(tileset, :priorities)),
+    terrain_tags: json_value(ivar(tileset, :terrain_tags))
+  }
+end
+File.write(File.join(out_dir, "tilesets.json"), JSON.generate({ format: "rmxp-hero-tilesets", version: 1, data: tilesets }))
 puts "Exported #{maps.length} maps to #{out_dir}"
