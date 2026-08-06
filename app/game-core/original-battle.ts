@@ -1,6 +1,7 @@
 import { attackEffect, type Combatant, type RandomInt } from "./combat";
 import { originalTables, type OriginalRecord } from "./original-data";
 import type { SceneActorState } from "./scene-event";
+import { derivedStats } from "./inventory-system";
 
 export type OriginalBattle={enemyId:number;enemyName:string;enemyHp:number;enemyMaxHp:number;enemyFp:number;turn:number;seed:number;log:string[];finished:"win"|"lose"|null};
 type Move={text:string;hitType:number;ap:number;dp:number;pp:number;damage:number;force:number};
@@ -16,7 +17,8 @@ function moveFor(record:OriginalRecord,kfId:number,level:number,random:RandomInt
 }
 function player(actor:SceneActorState,move:Move):Combatant{
  const attackId=actor.weaponId>0?(actor.skillUse[1]||1):(actor.skillUse[0]||2);
- return {exp:actor.exp,hit:skillLevel(actor,1),eva:skillLevel(actor,1),attackKfLv:skillLevel(actor,attackId),dodgeKfLv:skillLevel(actor,9),parryKfLv:skillLevel(actor,10),agi:actor.agi,int:actor.int,str:actor.str,atk:0,pdef:0,fp:actor.fp,fpPlus:actor.fpPlus,weaponId:actor.weaponId,movable:actor.hp>0,fenshen:0,kfAp:move.ap,kfDp:move.dp,kfPp:move.pp,kfDamage:move.damage,kfForce:move.force,hitType:move.hitType};
+ const stats=derivedStats(actor);
+ return {exp:actor.exp,hit:stats.hit,eva:stats.eva,attackKfLv:skillLevel(actor,attackId),dodgeKfLv:skillLevel(actor,9),parryKfLv:skillLevel(actor,10),agi:stats.agi,int:stats.int,str:stats.str,atk:stats.atk,pdef:stats.pdef,fp:actor.fp,fpPlus:actor.fpPlus,weaponId:actor.weaponId,movable:actor.hp>0,fenshen:0,kfAp:move.ap,kfDp:move.dp,kfPp:move.pp,kfDamage:move.damage,kfForce:move.force,hitType:move.hitType};
 }
 function enemy(record:OriginalRecord,fp:number,move:Move):Combatant{
  const skills=(record.skill_list as number[][])||[],level=(id:number)=>skills.find(row=>row[0]===id)?.[1]||0,uses=(record.skill_use as number[])||[],attackId=n(record,"weapon_id")>0?(uses[1]||1):(uses[0]||2);
