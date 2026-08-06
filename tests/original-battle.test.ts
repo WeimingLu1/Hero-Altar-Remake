@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import {
+  attemptEscape,
   battleRound,
   beginOriginalBattle,
 } from "../app/game-core/original-battle";
@@ -41,6 +42,12 @@ const actor = (): SceneActorState => ({
   fpPlus: 0,
   mpPlus: 0,
   xue6: false,
+});
+test("story battles preserve the original no-escape rule", () => {
+  const a = actor(),
+    result = attemptEscape(beginOriginalBattle(1, 42, undefined, "story"), a);
+  assert.equal(result.escaped, false);
+  assert.match(result.battle.log.at(-1) || "", /无法逃走/);
 });
 test("original sparring round is deterministic and changes combat state", () => {
   const a = actor(),

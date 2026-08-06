@@ -133,6 +133,16 @@ export function derivedStats(actor: SceneActorState) {
   };
 }
 export function activateEntry(actor: SceneActorState, entry: BagEntry) {
+  return activateItemEntry(actor, entry, false);
+}
+export function activateBattleEntry(actor: SceneActorState, entry: BagEntry) {
+  return activateItemEntry(actor, entry, true);
+}
+function activateItemEntry(
+  actor: SceneActorState,
+  entry: BagEntry,
+  inBattle: boolean,
+) {
   const item = record(entry);
   if (entry.kind === 2) {
     actor.weaponId = actor.weaponId === entry.id ? 0 : entry.id;
@@ -159,7 +169,7 @@ export function activateEntry(actor: SceneActorState, entry: BagEntry) {
   if (item.is_book)
     return { ok: false, text: "翻开秘籍准备研读。", bookId: entry.id };
   const occasion = Number(item.occasion || 0);
-  if (occasion !== 0 && occasion !== 2)
+  if (occasion !== 0 && occasion !== (inBattle ? 1 : 2))
     return { ok: false, text: "此物只能在战斗中使用。" };
   const before = [
     actor.hp,

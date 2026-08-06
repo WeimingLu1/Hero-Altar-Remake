@@ -16,6 +16,7 @@ import {
   type SceneActorState,
 } from "../game-core/scene-event";
 import { selectSceneEvent } from "../game-core/rmxp-events";
+import { originalTables } from "../game-core/original-data";
 import {
   attemptJoin,
   bookStudyOptions,
@@ -34,6 +35,7 @@ import {
   battleRound,
   beginOriginalBattle,
   endSpar,
+  attemptEscape,
   specialRound,
   type OriginalBattle,
 } from "../game-core/original-battle";
@@ -43,6 +45,7 @@ import {
   maxFood,
   maxWater,
   activateEntry,
+  activateBattleEntry,
   type BagEntry,
 } from "../game-core/inventory-system";
 import {
@@ -89,6 +92,7 @@ import {
   swordTypes,
   upgradeRoom,
 } from "../game-core/life-system";
+import { settleVictoryLoot } from "../game-core/battle-settlement";
 import "./world.css";
 import "./choice.css";
 import "./battle.css";
@@ -225,6 +229,8 @@ export default function OriginalWorld() {
     } | null>(null);
   const [studyActive, setStudyActive] = useState(false);
   const [battle, setBattle] = useState<OriginalBattle | null>(null);
+  const [battleOutcome, setBattleOutcome] = useState<number | null>(null);
+  const [battleItem, setBattleItem] = useState<number | null>(null);
   const [specialMenu, setSpecialMenu] = useState<number | null>(null);
   const [menu, setMenu] = useState<{ tab: number; index: number } | null>(null);
   const [cultivation, setCultivation] = useState<number | null>(null);
@@ -265,6 +271,7 @@ export default function OriginalWorld() {
             198,
             s.tasks.clock + x * 31 + y,
             wantedEnemyRecord(s.actor, s.tasks),
+            "lethal",
           ),
         );
         return true;
@@ -317,7 +324,9 @@ export default function OriginalWorld() {
             nextForge.actor.inventory[`2:${required[0]}`] = 1;
             nextForge.actor.weaponId = required[0];
             sync(nextForge);
-            setBattle(beginOriginalBattle(149, s.tasks.clock + 149));
+            setBattle(
+              beginOriginalBattle(149, s.tasks.clock + 149, undefined, "story"),
+            );
           } else setLife({ kind: "forge", index: 0 });
           return true;
         }
@@ -329,7 +338,9 @@ export default function OriginalWorld() {
           } else if (
             seeded(s.tasks.clock + s.actor.luck)(30 + s.actor.luck) >= 30
           )
-            setBattle(beginOriginalBattle(162, s.tasks.clock + 162));
+            setBattle(
+              beginOriginalBattle(162, s.tasks.clock + 162, undefined, "story"),
+            );
           else setEventText("桃花源\n你在山路上失足跌落，只得休养后再来。 ");
           return true;
         }
@@ -357,6 +368,8 @@ export default function OriginalWorld() {
             beginOriginalBattle(
               resolution.battleEnemyId,
               resolution.battleEnemyId + s.position.mapId,
+              undefined,
+              resolution.battleEnemyId >= 195 ? "story" : "lethal",
             ),
           );
         else
@@ -572,82 +585,133 @@ export default function OriginalWorld() {
     },
     [battle, sync],
   );
-  const leaveBattle = useCallback(() => {
-    if (!battle) return;
-    const next = structuredClone(stateRef.current);
-    let altarText = "",
-      nextBattle: OriginalBattle | null = null;
-    if (battle.finished === "win") {
-      if (battle.enemyId === 149) {
-        const required = [8, 15, 25, 21],
-          step = next.actor.forgeChallengeStep || 0,
-          requiredId = required[step],
-          key = `2:${requiredId}`;
-        if (next.actor.weaponId !== requiredId) {
-          delete next.actor.inventory[key];
-          next.actor.weaponId = 0;
-          next.actor.forgeChallengeStep = 0;
-          altarText = "兵器与本轮要求不符，铸剑挑战失败。";
-        } else {
-          delete next.actor.inventory[key];
-          next.actor.weaponId = 0;
-          if (step < required.length - 1) {
-            const following = required[step + 1];
-            next.actor.forgeChallengeStep = step + 1;
-            next.actor.inventory[`2:${following}`] = 1;
-            next.actor.weaponId = following;
-            nextBattle = beginOriginalBattle(149, battle.seed + step + 1);
-            altarText = `第 ${step + 1} 轮通过，换用指定兵器继续挑战。`;
-          } else {
-            next.actor.swordBattle = true;
+  const settleBattle = useCallback(
+    (kill: boolean) => {
+      if (!battle) return;
+      const next = structuredClone(stateRef.current);
+      let altarText = "",
+        nextBattle: OriginalBattle | null = null;
+      if (battle.finished === "win") {
+        if (battle.mode === "lethal") {
+          const loot = settleVictoryLoot(next.actor, battle.enemyId, kill);
+          altarText = loot.text;
+        }
+        if (battle.enemyId === 149) {
+          const required = [8, 15, 25, 21],
+            step = next.actor.forgeChallengeStep || 0,
+            requiredId = required[step],
+            key = `2:${requiredId}`;
+          if (next.actor.weaponId !== requiredId) {
+            delete next.actor.inventory[key];
+            next.actor.weaponId = 0;
             next.actor.forgeChallengeStep = 0;
-            altarText = "四轮铸剑挑战全部通过，铸剑谷已经开放。";
+            altarText = "兵器与本轮要求不符，铸剑挑战失败。";
+          } else {
+            delete next.actor.inventory[key];
+            next.actor.weaponId = 0;
+            if (step < required.length - 1) {
+              const following = required[step + 1];
+              next.actor.forgeChallengeStep = step + 1;
+              next.actor.inventory[`2:${following}`] = 1;
+              next.actor.weaponId = following;
+              nextBattle = beginOriginalBattle(
+                149,
+                battle.seed + step + 1,
+                undefined,
+                "story",
+              );
+              altarText = `第 ${step + 1} 轮通过，换用指定兵器继续挑战。`;
+            } else {
+              next.actor.swordBattle = true;
+              next.actor.forgeChallengeStep = 0;
+              altarText = "四轮铸剑挑战全部通过，铸剑谷已经开放。";
+            }
           }
         }
-      }
-      if (battle.enemyId === 162) {
-        next.actor.haveNewHome = true;
-        next.actor.roomLevel = 1;
-        next.actor.jiajuList = [0, 0, 0, 0, 0];
-        altarText = "击败山大王，桃花源从此归你所有。";
-      }
-      if (battle.enemyId === 198 && next.tasks.wantedPlace > 0) {
-        altarText = finishWantedTask(next.actor, next.tasks).text;
-      }
-      if (next.tasks.killId === battle.enemyId) next.tasks.killId = -1;
-      const altarId = battle.enemyId - 162;
-      if (altarId === next.actor.tanId && altarId >= 1 && altarId <= 8) {
-        const mapKey = `1:${20 + altarId}`;
-        if ((next.actor.inventory[mapKey] || 0) > 0) {
-          next.actor.inventory[mapKey]--;
-          if (next.actor.inventory[mapKey] <= 0)
-            delete next.actor.inventory[mapKey];
+        if (battle.enemyId === 162) {
+          next.actor.haveNewHome = true;
+          next.actor.roomLevel = 1;
+          next.actor.jiajuList = [0, 0, 0, 0, 0];
+          altarText = "击败山大王，桃花源从此归你所有。";
         }
-        next.actor.killList = Array.from(
-          new Set([...(next.actor.killList || []), battle.enemyId]),
-        );
-        altarText = giveTanReward(next.actor).text;
+        if (kill && battle.enemyId === 198 && next.tasks.wantedPlace > 0) {
+          altarText = finishWantedTask(next.actor, next.tasks).text;
+        }
+        if (kill && next.tasks.killId === battle.enemyId)
+          next.tasks.killId = -1;
+        const altarId = battle.enemyId - 162;
+        if (
+          kill &&
+          altarId === next.actor.tanId &&
+          altarId >= 1 &&
+          altarId <= 8
+        ) {
+          const mapKey = `1:${20 + altarId}`;
+          if ((next.actor.inventory[mapKey] || 0) > 0) {
+            next.actor.inventory[mapKey]--;
+            if (next.actor.inventory[mapKey] <= 0)
+              delete next.actor.inventory[mapKey];
+          }
+          next.actor.killList = Array.from(
+            new Set([...(next.actor.killList || []), battle.enemyId]),
+          );
+          altarText = giveTanReward(next.actor).text;
+        }
       }
+      if (battle.enemyId === 149 && battle.finished !== "win") {
+        for (const id of [8, 15, 25, 21])
+          delete next.actor.inventory[`2:${id}`];
+        next.actor.weaponId = 0;
+        next.actor.forgeChallengeStep = 0;
+      }
+      endSpar(next.actor, battle);
+      sync(next);
+      setBattle(nextBattle);
+      setBattleOutcome(null);
+      setBattleItem(null);
+      setSpecialMenu(null);
+      setNotice(
+        battle.finished === "win"
+          ? altarText
+            ? `${kill ? "战斗得胜" : "手下留情"} · ${altarText}`
+            : kill
+              ? "战斗得胜"
+              : "手下留情"
+          : battle.finished === "lose"
+            ? "切磋结束，已恢复少量气血"
+            : "你退出了切磋",
+      );
+    },
+    [battle, sync],
+  );
+  const leaveBattle = useCallback(() => {
+    if (battle?.finished === "win" && battle.mode === "lethal") {
+      setBattleOutcome(0);
+      return;
     }
-    if (battle.enemyId === 149 && battle.finished !== "win") {
-      for (const id of [8, 15, 25, 21]) delete next.actor.inventory[`2:${id}`];
-      next.actor.weaponId = 0;
-      next.actor.forgeChallengeStep = 0;
-    }
-    endSpar(next.actor, battle);
+    settleBattle(false);
+  }, [battle, settleBattle]);
+  const fleeBattle = useCallback(() => {
+    if (!battle || battle.finished) return;
+    const next = structuredClone(stateRef.current),
+      result = attemptEscape(battle, next.actor);
     sync(next);
-    setBattle(nextBattle);
-    setSpecialMenu(null);
-    setNotice(
-      battle.finished === "win"
-        ? altarText
-          ? `切磋得胜 · ${altarText}`
-          : "切磋得胜"
-        : battle.finished === "lose"
-          ? "切磋结束，已恢复少量气血"
-          : "你退出了切磋",
-    );
+    if (result.escaped) {
+      setBattle(null);
+      setNotice("成功脱离战斗");
+    } else setBattle(result.battle);
   }, [battle, sync]);
+  const consumeBattleItem = useCallback(
+    (entry?: BagEntry) => {
+      if (!entry) return;
+      const next = structuredClone(stateRef.current),
+        result = activateBattleEntry(next.actor, entry);
+      sync(next);
+      setNotice(result.text);
+      if (result.ok) setBattleItem(null);
+    },
+    [sync],
+  );
   const activateBagEntry = useCallback(
     (entry?: BagEntry) => {
       if (!entry) return;
@@ -925,6 +989,34 @@ export default function OriginalWorld() {
             stateRef.current.actor,
             battle.cooldowns,
           );
+          const combatItems = bagEntries(stateRef.current.actor).filter(
+            (entry) => {
+              if (entry.kind !== 1) return false;
+              const item = originalTables.items[entry.id] || {};
+              return (
+                !item.is_book && [0, 1].includes(Number(item.occasion || 0))
+              );
+            },
+          );
+          if (battleOutcome !== null) {
+            if (["arrowup", "arrowdown", "w", "s"].includes(k))
+              setBattleOutcome((battleOutcome + 1) % 2);
+            else if (confirm) settleBattle(battleOutcome === 0);
+            else if (cancel) setBattleOutcome(null);
+            return;
+          }
+          if (battleItem !== null) {
+            if (k === "arrowup" || k === "w")
+              setBattleItem(
+                (battleItem + combatItems.length - 1) %
+                  Math.max(1, combatItems.length),
+              );
+            else if (k === "arrowdown" || k === "s")
+              setBattleItem((battleItem + 1) % Math.max(1, combatItems.length));
+            else if (confirm) consumeBattleItem(combatItems[battleItem]);
+            else if (cancel || k === "i") setBattleItem(null);
+            return;
+          }
           if (specialMenu !== null) {
             if (k === "arrowup" || k === "w")
               setSpecialMenu(
@@ -938,8 +1030,13 @@ export default function OriginalWorld() {
             return;
           }
           if (k === "q" || k === "c") setSpecialMenu(0);
+          else if (k === "i") setBattleItem(0);
+          else if (k === "g") fleeBattle();
           else if (confirm) fight();
-          else if (cancel) leaveBattle();
+          else if (cancel) {
+            if (battle.mode === "spar") leaveBattle();
+            else fleeBattle();
+          }
           return;
         }
         if (caihua) {
@@ -1077,6 +1174,8 @@ export default function OriginalWorld() {
     };
   }, [
     battle,
+    battleItem,
+    battleOutcome,
     buySelected,
     caihua,
     chooseNpc,
@@ -1100,8 +1199,11 @@ export default function OriginalWorld() {
     life,
     specialMenu,
     fightSpecial,
+    fleeBattle,
     rememberArcadeScore,
+    settleBattle,
     sync,
+    consumeBattleItem,
   ]);
   const arcadeKind = arcade?.kind;
   useEffect(() => {
@@ -1211,6 +1313,11 @@ export default function OriginalWorld() {
     }
   };
   const map = getOriginalMap(state.position.mapId);
+  const battleConsumables = bagEntries(state.actor).filter((entry) => {
+    if (entry.kind !== 1) return false;
+    const item = originalTables.items[entry.id] || {};
+    return !item.is_book && [0, 1].includes(Number(item.occasion || 0));
+  });
   return (
     <main className="world-shell">
       <header>
@@ -1278,8 +1385,32 @@ export default function OriginalWorld() {
             hp={state.actor.hp}
             maxHp={state.actor.maxHp}
             fight={fight}
-            leave={leaveBattle}
+            leave={battle.mode === "spar" ? leaveBattle : fleeBattle}
             openSpecial={() => setSpecialMenu(0)}
+            openItem={() => setBattleItem(0)}
+            flee={fleeBattle}
+          />
+        )}{" "}
+        {battle && battleOutcome !== null && (
+          <Choice
+            title="是否取其性命？"
+            items={["砍头", "手下留情"]}
+            index={battleOutcome}
+            choose={(index) => settleBattle(index === 0)}
+          />
+        )}{" "}
+        {battle && battleItem !== null && (
+          <Choice
+            title="战斗物品"
+            items={
+              battleConsumables.length
+                ? battleConsumables.map(
+                    (entry) => `${entry.name} ×${entry.amount}`,
+                  )
+                : ["无可用物品"]
+            }
+            index={battleItem}
+            choose={(index) => consumeBattleItem(battleConsumables[index])}
           />
         )}{" "}
         {battle && specialMenu !== null && (
@@ -1521,6 +1652,8 @@ function BattleView({
   fight,
   leave,
   openSpecial,
+  openItem,
+  flee,
 }: {
   battle: OriginalBattle;
   hp: number;
@@ -1528,6 +1661,8 @@ function BattleView({
   fight: () => void;
   leave: () => void;
   openSpecial: () => void;
+  openItem: () => void;
+  flee: () => void;
 }) {
   return (
     <div className="battle">
@@ -1536,7 +1671,10 @@ function BattleView({
           <i />
           <span>少侠</span>
         </div>
-        <b>切磋 · 第 {battle.turn + 1} 回合</b>
+        <b>
+          {battle.mode === "spar" ? "切磋" : "生死战"} · 第 {battle.turn + 1}{" "}
+          回合
+        </b>
         <div className="fighter enemy">
           <i />
           <span>{battle.enemyName}</span>
@@ -1564,13 +1702,20 @@ function BattleView({
       </div>
       <nav>
         <button onClick={battle.finished ? leave : fight}>
-          {battle.finished ? "结束切磋" : "普通攻击"} <kbd>Z</kbd>
+          {battle.finished ? "处理战果" : "普通攻击"} <kbd>Z</kbd>
         </button>
-        <button onClick={openSpecial}>
+        <button onClick={openSpecial} disabled={Boolean(battle.finished)}>
           绝招 <kbd>Q</kbd>
         </button>
-        <button onClick={leave}>
-          退出 <kbd>X</kbd>
+        <button onClick={openItem} disabled={Boolean(battle.finished)}>
+          物品 <kbd>I</kbd>
+        </button>
+        <button
+          onClick={battle.mode === "spar" ? leave : flee}
+          disabled={Boolean(battle.finished)}
+        >
+          {battle.mode === "spar" ? "退出" : "逃跑"}{" "}
+          <kbd>{battle.mode === "spar" ? "X" : "G"}</kbd>
         </button>
       </nav>
     </div>

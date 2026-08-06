@@ -58,6 +58,7 @@ export type SceneActorState = {
   forgeChallengeStep?: number;
   haveNewHome?: boolean;
   jiajuList?: number[];
+  stoneList?: number[];
 };
 export type SceneResolution = {
   lines: string[];

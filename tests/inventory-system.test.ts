@@ -4,6 +4,7 @@ import {
   bagEntries,
   derivedStats,
   maxFood,
+  activateBattleEntry,
   activateEntry,
 } from "../app/game-core/inventory-system";
 import type { SceneActorState } from "../app/game-core/scene-event";
@@ -43,6 +44,18 @@ const actor = (): SceneActorState => ({
   fpPlus: 0,
   mpPlus: 0,
   xue6: false,
+});
+test("battle item activation applies original consumable data", () => {
+  const a = actor();
+  a.inventory = { "1:8": 1 };
+  a.hp = 30;
+  a.maxHp = 50;
+  const medicine = bagEntries(a)[0];
+  const result = activateBattleEntry(a, medicine);
+  assert.equal(result.ok, true);
+  assert.equal(a.hp, 30);
+  assert.equal(a.maxHp, 75);
+  assert.equal(a.inventory["1:8"], undefined);
 });
 test("food follows original item effect and maximum", () => {
   const a = actor(),

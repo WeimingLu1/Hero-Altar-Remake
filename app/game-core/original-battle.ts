@@ -47,6 +47,8 @@ export type OriginalBattle = {
     burnTurns: number;
   };
   enemyOverride?: OriginalRecord;
+  mode: "spar" | "lethal" | "story";
+  escapeFactor: number;
 };
 type Move = {
   text: string;
@@ -410,6 +412,7 @@ export function beginOriginalBattle(
   enemyId: number,
   seed = 9527,
   enemyOverride?: OriginalRecord,
+  mode: "spar" | "lethal" | "story" = "spar",
 ): OriginalBattle {
   const e = enemyOverride || originalTables.enemies[enemyId] || {};
   return {
@@ -437,7 +440,39 @@ export function beginOriginalBattle(
     },
     enemyDebuff: { hit: 0, busy: 0, turns: 0, eagleTurns: 0, burnTurns: 0 },
     enemyOverride,
+    mode,
+    escapeFactor: 0,
   };
+}
+
+export function attemptEscape(source: OriginalBattle, actor: SceneActorState) {
+  const battle = structuredClone(source),
+    record =
+      battle.enemyOverride || originalTables.enemies[battle.enemyId] || {},
+    random = lcg(battle),
+    actorAgi = derivedStats(actor).agi,
+    enemyAgi = n(record, "agi", n(record, "base_agi"));
+  if (battle.mode === "story") {
+    battle.log.push(`${battle.enemyName}封住去路，这一战无法逃走。`);
+    return { escaped: false, battle };
+  }
+  if (random(Math.max(1, actorAgi + battle.escapeFactor)) >= enemyAgi) {
+    battle.log.push("你虚晃一招，脱离了战斗。 ");
+    return { escaped: true, battle };
+  }
+  battle.escapeFactor += 10;
+  battle.log.push(`${battle.enemyName}一把拦住：想跑，没门！`);
+  const blank: Move = {
+    text: "",
+    hitType: 0,
+    ap: 0,
+    dp: 0,
+    pp: 0,
+    damage: 0,
+    force: 0,
+  };
+  enemyTurn(battle, actor, record, random, blank);
+  return { escaped: false, battle };
 }
 export function battleRound(source: OriginalBattle, actor: SceneActorState) {
   const battle = structuredClone(source);
@@ -448,7 +483,8 @@ export function battleRound(source: OriginalBattle, actor: SceneActorState) {
     battle.log.push(`${battle.enemyName}倒在苍鹰利爪之下。`);
     return battle;
   }
-  const record = battle.enemyOverride || originalTables.enemies[battle.enemyId] || {},
+  const record =
+      battle.enemyOverride || originalTables.enemies[battle.enemyId] || {},
     random = lcg(battle),
     playerId = combatSkillProfile(actor).attackId,
     pm = moveFor(
@@ -550,7 +586,8 @@ export function specialRound(
       str: battle.buff.str + Math.floor((level * 2) / 15),
       turns: Math.floor(level / 20) + 1,
     };
-  const record = battle.enemyOverride || originalTables.enemies[battle.enemyId] || {},
+  const record =
+      battle.enemyOverride || originalTables.enemies[battle.enemyId] || {},
     random = lcg(battle),
     blank: Move = {
       text: "",
