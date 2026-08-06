@@ -17,7 +17,7 @@ import "./menu.css";
 
 const W=640,H=480,T=32;
 type WorldSave={format:"rmxp-hero-original-world-save";version:1;savedAt:string;position:WorldPosition;flags:Record<string,boolean>;variables:Record<string,number>;actor:SceneActorState};
-const newActor=():SceneActorState=>({inventory:{},gold:100,hp:100,maxHp:100,fp:0,maxFp:0,food:100,water:100,exp:0,potential:100,morals:128,tanId:0,teacherId:0,classId:0,gender:0,face:20,mp:0,maxMp:0,age:14,baseBon:20,baseInt:20,baseAgi:20,baseStr:20,bon:20,int:20,agi:20,str:20,luck:20,skills:{},weaponId:0,armorIds:[],skillUse:[0,0,0,0,0,0],fpPlus:0,xue6:false});
+const newActor=():SceneActorState=>({inventory:{},gold:100,hp:100,maxHp:100,fp:0,maxFp:0,food:100,water:100,exp:0,potential:100,morals:128,tanId:0,teacherId:0,classId:0,gender:0,face:20,mp:0,maxMp:0,age:14,baseBon:20,baseInt:20,baseAgi:20,baseStr:20,bon:20,int:20,agi:20,str:20,luck:20,skills:{},weaponId:0,armorIds:[],skillUse:[0,0,0,0,0,0],fpPlus:0,mpPlus:0,xue6:false});
 const fresh=():WorldSave=>({format:"rmxp-hero-original-world-save",version:1,savedAt:new Date().toISOString(),position:{...originalStart},flags:{},variables:{},actor:newActor()});
 const normalize=(value:WorldSave):WorldSave=>({...value,actor:{...newActor(),...(value.actor||{}),skills:value.actor?.skills||{},inventory:value.actor?.inventory||{}},flags:value.flags||{},variables:value.variables||{}});
 const loadSave=():WorldSave=>{if(typeof window==="undefined")return fresh();try{const raw=localStorage.getItem("rmxp-original-world-v1");return raw?normalize(JSON.parse(raw)):fresh();}catch{return fresh();}};

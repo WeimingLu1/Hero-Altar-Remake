@@ -45,7 +45,7 @@ export function specialMpCost(actor: SceneActorState, id: number) {
     cost = Number(s.mp_cost || 0);
   return cost > 0
     ? cost
-    : actor.fpPlus + Number((s.magic_data as number[])?.[0] || 0);
+    : actor.mpPlus + Number((s.magic_data as number[])?.[0] || 0);
 }
 function matchingId(actor: SceneActorState, type: number) {
   const p = combatSkillProfile(actor),
@@ -75,6 +75,15 @@ export function specialCheck(
         ok: false,
         reason: `与${originalTables.skills[conflict]?.name || "当前绝招"}冲突`,
       };
+  if (id >= 29) {
+    const required = Number((s.magic_data as number[])?.[1] || 0),
+      magicId = actor.skillUse[5] || 8;
+    if (effectiveLevel(actor, magicId) < required)
+      return {
+        ok: false,
+        reason: `${originalTables.kungfus[magicId]?.name || "法术"}有效等级不足`,
+      };
+  }
   for (const row of (s.require as number[][]) || []) {
     const [type, num] = row;
     if (type > 0) {
@@ -138,5 +147,5 @@ export function battleSpecials(
 export function paySpecialCost(actor: SceneActorState, special: BattleSpecial) {
   actor.fp = Math.max(0, actor.fp - special.fpCost);
   actor.mp = Math.max(0, actor.mp - special.mpCost);
-  actor.hp = Math.max(1, actor.hp - special.hpCost);
+  actor.hp = Math.max(0, actor.hp - special.hpCost);
 }

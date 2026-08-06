@@ -1,4 +1,54 @@
-import assert from "node:assert/strict";import test from "node:test";
-import { battleRound,beginOriginalBattle } from "../app/game-core/original-battle";import type{SceneActorState}from"../app/game-core/scene-event";
-const actor=():SceneActorState=>({inventory:{},gold:100,hp:100,maxHp:100,fp:0,maxFp:0,food:100,water:100,exp:0,potential:100,morals:128,tanId:0,teacherId:0,classId:0,gender:0,face:20,mp:0,maxMp:0,age:14,baseBon:20,baseInt:20,baseAgi:20,baseStr:20,bon:20,int:20,agi:20,str:20,luck:20,skills:{},weaponId:0,armorIds:[],skillUse:[0,0,0,0,0,0],fpPlus:0,xue6:false});
-test("original sparring round is deterministic and changes combat state",()=>{const a=actor(),b=actor(),one=battleRound(beginOriginalBattle(1,42),a),two=battleRound(beginOriginalBattle(1,42),b);assert.deepEqual(one,two);assert.equal(a.hp,b.hp);assert.equal(one.turn,1);assert.ok(one.log.length>=3);});
+import assert from "node:assert/strict";
+import test from "node:test";
+import {
+  battleRound,
+  beginOriginalBattle,
+} from "../app/game-core/original-battle";
+import type { SceneActorState } from "../app/game-core/scene-event";
+const actor = (): SceneActorState => ({
+  inventory: {},
+  gold: 100,
+  hp: 100,
+  maxHp: 100,
+  fp: 0,
+  maxFp: 0,
+  food: 100,
+  water: 100,
+  exp: 0,
+  potential: 100,
+  morals: 128,
+  tanId: 0,
+  teacherId: 0,
+  classId: 0,
+  gender: 0,
+  face: 20,
+  mp: 0,
+  maxMp: 0,
+  age: 14,
+  baseBon: 20,
+  baseInt: 20,
+  baseAgi: 20,
+  baseStr: 20,
+  bon: 20,
+  int: 20,
+  agi: 20,
+  str: 20,
+  luck: 20,
+  skills: {},
+  weaponId: 0,
+  armorIds: [],
+  skillUse: [0, 0, 0, 0, 0, 0],
+  fpPlus: 0,
+  mpPlus: 0,
+  xue6: false,
+});
+test("original sparring round is deterministic and changes combat state", () => {
+  const a = actor(),
+    b = actor(),
+    one = battleRound(beginOriginalBattle(1, 42), a),
+    two = battleRound(beginOriginalBattle(1, 42), b);
+  assert.deepEqual(one, two);
+  assert.equal(a.hp, b.hp);
+  assert.equal(one.turn, 1);
+  assert.ok(one.log.length >= 3);
+});

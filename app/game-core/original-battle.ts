@@ -8,7 +8,13 @@ import { originalTables, type OriginalRecord } from "./original-data";
 import type { SceneActorState } from "./scene-event";
 import { derivedStats } from "./inventory-system";
 import { combatSkillProfile, effectiveLevel, skillLevel } from "./skill-system";
-import { battleSpecials, paySpecialCost } from "./special-system";
+import {
+  battleSpecials,
+  paySpecialCost,
+  specialCheck,
+  specialFpCost,
+  specialMpCost,
+} from "./special-system";
 
 export type OriginalBattle = {
   enemyId: number;
@@ -33,7 +39,13 @@ export type OriginalBattle = {
     fenshen: number;
     turns: number;
   };
-  enemyDebuff: { hit: number; busy: number; turns: number; eagleTurns: number };
+  enemyDebuff: {
+    hit: number;
+    busy: number;
+    turns: number;
+    eagleTurns: number;
+    burnTurns: number;
+  };
 };
 type Move = {
   text: string;
@@ -139,6 +151,7 @@ function enemy(
     busy: 0,
     turns: 0,
     eagleTurns: 0,
+    burnTurns: 0,
   };
   return {
     exp: n(record, "exp"),
@@ -177,7 +190,155 @@ function enemyAttackId(record: OriginalRecord) {
   const uses = (record.skill_use as number[]) || [];
   return n(record, "weapon_id") > 0 ? uses[1] || 1 : uses[0] || 2;
 }
-function tick(battle: OriginalBattle) {
+const magicLevelFactors = [
+  0, 1, 10, 13, 16, 20, 22, 24, 26, 28, 30, 31, 33, 35, 37, 38, 39, 41, 43, 46,
+  47, 48, 49, 51, 53, 55,
+];
+function magicKungfuId(actor: SceneActorState) {
+  return actor.skillUse[5] || 8;
+}
+function magicThreshold(
+  actor: SceneActorState,
+  target: OriginalRecord,
+  magicHit: number,
+) {
+  const level = effectiveLevel(actor, magicKungfuId(actor));
+  const userBase =
+    (Math.floor(actor.exp / 500000) + 1) * level ** 3 + actor.exp;
+  const user = Math.floor(
+    (userBase * Math.min(500, Math.max(20, magicHit))) / 100,
+  );
+  const targetPower = Math.floor((n(target, "exp") * 4) / 3);
+  return Math.floor((targetPower * 100) / Math.max(1, user + targetPower));
+}
+function addMagicState(
+  battle: OriginalBattle,
+  actor: SceneActorState,
+  type: number,
+  buffHit: number,
+  buffEffect: number,
+  buffTurns: number,
+  random: RandomInt,
+) {
+  const rawLevel = skillLevel(actor, magicKungfuId(actor));
+  const factor =
+    magicLevelFactors[
+      Math.min(magicLevelFactors.length - 1, Math.floor(rawLevel / 10))
+    ] || 0;
+  const chance = buffHit === 0 ? 100 : factor - buffEffect;
+  if (random(100) >= chance) return;
+  if (type === 1) {
+    const reduction = Math.floor(rawLevel / Math.max(1, buffTurns));
+    battle.enemyDebuff.hit -= reduction;
+    battle.enemyDebuff.turns = Math.max(
+      battle.enemyDebuff.turns,
+      (buffHit === 0 ? 1 : Math.floor(rawLevel / 20)) + 1,
+    );
+    battle.log.push(`${battle.enemyName}被雷光灼目，命中下降 ${reduction}。`);
+  } else if (type === 2) {
+    battle.enemyDebuff.burnTurns = Math.max(
+      battle.enemyDebuff.burnTurns,
+      Math.floor((random(Math.max(1, rawLevel)) + rawLevel) / 6) + 2,
+    );
+    battle.log.push(`${battle.enemyName}身上燃起法火。`);
+  } else if (type === 3) {
+    battle.enemyDebuff.busy = Math.max(
+      battle.enemyDebuff.busy,
+      random(Math.max(1, Math.floor(rawLevel / Math.max(1, buffTurns)))) + 2,
+    );
+    battle.log.push(`${battle.enemyName}被寒气冻住，动弹不得。`);
+  }
+}
+function castSpell(
+  battle: OriginalBattle,
+  actor: SceneActorState,
+  spellId: number,
+  record: OriginalRecord,
+  random: RandomInt,
+) {
+  const skill = originalTables.skills[spellId] || {};
+  if (spellId === 35) {
+    if (
+      random(100) >=
+      magicThreshold(
+        actor,
+        record,
+        Number((skill.magic_data as number[])?.[2] || 0),
+      )
+    ) {
+      const damage = effectiveLevel(actor, magicKungfuId(actor));
+      battle.enemyHp = Math.max(0, battle.enemyHp - damage);
+      battle.playerBusy = Math.max(battle.playerBusy, 3);
+      if (random(100) < 25)
+        battle.enemyDebuff.burnTurns = Math.max(
+          battle.enemyDebuff.burnTurns,
+          3,
+        );
+      battle.log.push(`三昧真火命中，造成 ${damage} 点伤害。`);
+    } else {
+      battle.playerBusy = Math.max(battle.playerBusy, 6);
+      battle.log.push("三昧真火反噬，施法失败。 ");
+    }
+    return;
+  }
+  if (spellId === 39) {
+    const level = effectiveLevel(actor, magicKungfuId(actor));
+    const success =
+      random(Math.max(1, level ** 3 + actor.exp + n(record, "exp"))) >=
+        n(record, "exp") &&
+      random(Math.max(1, actor.maxMp + n(record, "maxfp"))) >=
+        n(record, "maxfp") &&
+      random(Math.max(1, actor.mp + battle.enemyFp)) >= battle.enemyFp;
+    if (success) {
+      battle.enemyDebuff.busy = Math.max(
+        battle.enemyDebuff.busy,
+        random(15) + 6,
+      );
+      battle.log.push(`${battle.enemyName}被暴风雪彻底冰封。`);
+    } else {
+      battle.playerBusy = Math.max(battle.playerBusy, random(2) + 2);
+      battle.log.push("暴风雪未能凝聚，你被寒气反噬。 ");
+    }
+    return;
+  }
+  const data = (skill.magic_data as number[]) || [];
+  if (spellId === 31) battle.playerBusy = Math.max(battle.playerBusy, 2);
+  const hit =
+    random(100) >= magicThreshold(actor, record, Number(data[2] || 0));
+  if (!hit) {
+    battle.log.push(`${String(skill.name || "法术")}未能命中。`);
+    if ([29, 31, 33].includes(spellId))
+      addMagicState(battle, actor, data[6], data[7], data[8], data[9], random);
+    return;
+  }
+  const damageRate = Math.min(200, Math.max(20, Number(data[3] || 0)));
+  const userPower =
+    Math.floor(
+      (random(Math.max(1, actor.maxHp)) + Math.min(actor.mp, actor.maxMp * 2)) /
+        20,
+    ) + Math.floor((damageRate * 2 * actor.mpPlus) / 100);
+  const enemyFpPlus = n(record, "fp_plus");
+  const targetPower =
+    Math.floor((random(Math.max(1, battle.enemyMaxHp)) + battle.enemyFp) / 20) +
+    Math.floor((damageRate * 2 * random(Math.max(1, enemyFpPlus))) / 100);
+  const reflected = userPower < targetPower;
+  const first = reflected
+    ? Math.floor(((targetPower - userPower + enemyFpPlus) * damageRate) / 100)
+    : Math.floor(((userPower - targetPower) * damageRate) / 100);
+  const second = Math.floor(
+    (first * effectiveLevel(actor, magicKungfuId(actor))) / 200,
+  );
+  const damage = (first + second) * 2;
+  if (reflected) {
+    actor.hp = Math.max(0, actor.hp - damage);
+    battle.log.push(`法力遭到反弹，你受到 ${damage} 点伤害。`);
+  } else {
+    battle.enemyHp = Math.max(0, battle.enemyHp - damage);
+    battle.log.push(`${battle.enemyName}受到 ${damage} 点法术伤害。`);
+    addMagicState(battle, actor, data[6], data[7], data[8], data[9], random);
+  }
+}
+function tick(battle: OriginalBattle, actor: SceneActorState) {
   for (const id of Object.keys(battle.cooldowns)) {
     battle.cooldowns[id]--;
     if (battle.cooldowns[id] <= 0) delete battle.cooldowns[id];
@@ -203,6 +364,16 @@ function tick(battle: OriginalBattle) {
       battle.log.push(`铁爪苍鹰俯冲抓伤${battle.enemyName}，造成 50 点伤害。`);
     }
     battle.enemyDebuff.eagleTurns--;
+  }
+  if (battle.enemyDebuff.burnTurns > 0) {
+    const damage = Math.max(
+      actor.mp - lcg(battle)(Math.max(1, battle.enemyFp)),
+      0,
+    );
+    battle.enemyHp = Math.max(0, battle.enemyHp - damage);
+    battle.enemyDebuff.burnTurns--;
+    if (damage > 0)
+      battle.log.push(`${battle.enemyName}受到 ${damage} 点灼烧伤害。`);
   }
 }
 function enemyTurn(
@@ -262,13 +433,13 @@ export function beginOriginalBattle(
       fenshen: 0,
       turns: 0,
     },
-    enemyDebuff: { hit: 0, busy: 0, turns: 0, eagleTurns: 0 },
+    enemyDebuff: { hit: 0, busy: 0, turns: 0, eagleTurns: 0, burnTurns: 0 },
   };
 }
 export function battleRound(source: OriginalBattle, actor: SceneActorState) {
   const battle = structuredClone(source);
   if (battle.finished) return battle;
-  tick(battle);
+  tick(battle, actor);
   if (battle.enemyHp <= 0) {
     battle.finished = "win";
     battle.log.push(`${battle.enemyName}倒在苍鹰利爪之下。`);
@@ -340,7 +511,7 @@ export function specialRound(
     battle.log.push(special?.reason || "无法施展这项绝招。");
     return battle;
   }
-  tick(battle);
+  tick(battle, actor);
   if (battle.enemyHp <= 0) {
     battle.finished = "win";
     battle.log.push(`${battle.enemyName}倒在苍鹰利爪之下。`);
@@ -389,7 +560,39 @@ export function specialRound(
     },
     enemyCombatant = enemy(record, battle.enemyFp, blank, battle);
   let forcedAttacks = 0;
-  if (specialId === 6) {
+  if (specialId >= 29) {
+    const combo = ([32, 36, 40] as number[]).includes(specialId)
+      ? ((
+          (originalTables.skills[specialId]?.magic_data as number[]) || []
+        ).slice(2, 5) as number[])
+      : [specialId];
+    for (const spellId of combo) {
+      if (spellId !== specialId) {
+        const check = specialCheck(actor, spellId, battle.cooldowns);
+        if (!check.ok) {
+          battle.log.push(`连锁施法中断：${check.reason}。`);
+          break;
+        }
+        actor.fp = Math.max(0, actor.fp - specialFpCost(actor, spellId));
+        actor.mp = Math.max(0, actor.mp - specialMpCost(actor, spellId));
+        actor.hp = Math.max(
+          0,
+          actor.hp - Number(originalTables.skills[spellId]?.hp_cost || 0),
+        );
+        battle.log.push(
+          String(
+            (originalTables.skills[spellId]?.use_text as string[])?.[0] ||
+              originalTables.skills[spellId]?.name ||
+              "法术",
+          )
+            .replaceAll("user", "你")
+            .replaceAll("target", battle.enemyName),
+        );
+      }
+      castSpell(battle, actor, spellId, record, random);
+      if (actor.hp <= 0 || battle.enemyHp <= 0) break;
+    }
+  } else if (specialId === 6) {
     const flower = effectiveLevel(actor, 19);
     if (battle.enemyWeaponId > 0) {
       if (
@@ -672,8 +875,8 @@ export function specialRound(
             ? 3
             : [
                   6, 7, 8, 9, 10, 13, 14, 15, 16, 17, 19, 20, 22, 24, 25, 26,
-                  27, 28,
-                ].includes(specialId)
+                  27, 28, 27, 28,
+                ].includes(specialId) || specialId >= 29
               ? 0
               : special.type === 2
                 ? 1
@@ -722,6 +925,11 @@ export function specialRound(
   if (battle.enemyHp <= 0) {
     battle.finished = "win";
     battle.log.push(`${battle.enemyName}收招认输。`);
+    return battle;
+  }
+  if (actor.hp <= 0) {
+    battle.finished = "lose";
+    battle.log.push("法术反噬耗尽气血，你已无力再战。切磋到此为止。");
     return battle;
   }
   enemyTurn(battle, actor, record, random, blank);
