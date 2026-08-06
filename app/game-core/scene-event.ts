@@ -46,6 +46,8 @@ export type SceneActorState = {
   playTime?: number;
   killList?: number[];
   roomLevel?: number;
+  dance?: number;
+  ball?: number;
 };
 export type SceneResolution = {
   lines: string[];

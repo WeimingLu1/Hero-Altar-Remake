@@ -99,6 +99,18 @@ type WorldSave = {
   actor: SceneActorState;
   tasks: TaskState;
 };
+type ArcadeState =
+  | { kind: "select"; index: number }
+  | { kind: "dance"; dir: number; count: number; score: number }
+  | {
+      kind: "ball";
+      step: 1 | 2 | 3;
+      x: number;
+      dir: 1 | 2;
+      score: number;
+      fail: number;
+      flight: number;
+    };
 const newActor = (): SceneActorState => ({
   inventory: {},
   gold: 100,
@@ -135,6 +147,8 @@ const newActor = (): SceneActorState => ({
   fpPlus: 0,
   mpPlus: 0,
   xue6: false,
+  dance: 100,
+  ball: 100,
 });
 const fresh = (): WorldSave => ({
   format: "rmxp-hero-original-world-save",
@@ -198,6 +212,7 @@ export default function OriginalWorld() {
     step: 1 | 2;
     index: number;
   } | null>(null);
+  const [arcade, setArcade] = useState<ArcadeState | null>(null);
   const canvas = useRef<HTMLCanvasElement>(null),
     file = useRef<HTMLInputElement>(null),
     stateRef = useRef<WorldSave>(state),
@@ -264,6 +279,10 @@ export default function OriginalWorld() {
             next.actor,
             event.id + s.position.mapId,
           );
+        if (sceneCall.type === 6) {
+          setArcade({ kind: "select", index: 0 });
+          return true;
+        }
         if (sceneCall.type === 7) {
           const work = finishFreeWork(
             next.actor,
@@ -315,7 +334,8 @@ export default function OriginalWorld() {
         battle ||
         menu ||
         caihua ||
-        cultivation !== null
+        cultivation !== null ||
+        arcade
       )
         return;
       const s = structuredClone(stateRef.current),
@@ -350,6 +370,7 @@ export default function OriginalWorld() {
       battle,
       caihua,
       cultivation,
+      arcade,
       eventText,
       menu,
       npcMenu,
@@ -653,6 +674,14 @@ export default function OriginalWorld() {
     },
     [sync],
   );
+  const rememberArcadeScore = useCallback(
+    (kind: "dance" | "ball", score: number) => {
+      const next = structuredClone(stateRef.current);
+      next.actor[kind] = Math.max(next.actor[kind] || 100, score);
+      sync(next);
+    },
+    [sync],
+  );
   useEffect(() => {
     const down = (e: KeyboardEvent) => {
         const k = e.key.toLowerCase();
@@ -670,6 +699,81 @@ export default function OriginalWorld() {
         keys.current.add(k);
         const confirm = ["z", "enter", " "].includes(k),
           cancel = ["x", "escape"].includes(k);
+        if (arcade) {
+          if (arcade.kind === "select") {
+            if (["arrowup", "arrowdown", "w", "s"].includes(k))
+              setArcade({ ...arcade, index: (arcade.index + 1) % 3 });
+            else if (confirm) {
+              if (arcade.index === 0)
+                setArcade({
+                  kind: "dance",
+                  dir: Math.floor(Math.random() * 4) + 1,
+                  count: 40,
+                  score: 0,
+                });
+              else if (arcade.index === 1)
+                setArcade({
+                  kind: "ball",
+                  step: 1,
+                  x: 119,
+                  dir: 1,
+                  score: 0,
+                  fail: 0,
+                  flight: 0,
+                });
+              else setArcade(null);
+            } else if (cancel) setArcade(null);
+            return;
+          }
+          if (arcade.kind === "dance") {
+            const dir =
+              k === "arrowup" || k === "w"
+                ? 1
+                : k === "arrowleft" || k === "a"
+                  ? 2
+                  : k === "arrowdown" || k === "s"
+                    ? 3
+                    : k === "arrowright" || k === "d"
+                      ? 4
+                      : 0;
+            if (cancel) {
+              rememberArcadeScore("dance", arcade.score);
+              setArcade(null);
+            } else if (dir && arcade.count > 4) {
+              if (dir === arcade.dir)
+                setArcade({ ...arcade, score: arcade.score + 3, count: 4 });
+              else {
+                rememberArcadeScore("dance", arcade.score);
+                setArcade(null);
+                setNotice(`踏错节拍，最终得分 ${arcade.score}`);
+              }
+            }
+            return;
+          }
+          if (cancel) {
+            rememberArcadeScore("ball", arcade.score);
+            setArcade(null);
+          } else if (confirm && arcade.step === 1)
+            setArcade({ ...arcade, step: 2 });
+          else if (confirm && arcade.step === 2) {
+            if (arcade.x > 110 && arcade.x < 128)
+              setArcade({
+                ...arcade,
+                step: 3,
+                score: arcade.score + 10,
+                flight: 0,
+              });
+            else {
+              const fail = arcade.fail + 1;
+              if (fail >= 7) {
+                rememberArcadeScore("ball", arcade.score);
+                setArcade(null);
+                setNotice(`七次投失，最终得分 ${arcade.score}`);
+              } else setArcade({ ...arcade, step: 1, x: 119, fail, flight: 0 });
+            }
+          }
+          return;
+        }
         if (battle) {
           const specials = battleSpecials(
             stateRef.current.actor,
@@ -846,10 +950,42 @@ export default function OriginalWorld() {
     studySelected,
     activateBagEntry,
     activateSkill,
+    arcade,
     specialMenu,
     fightSpecial,
+    rememberArcadeScore,
     sync,
   ]);
+  const arcadeKind = arcade?.kind;
+  useEffect(() => {
+    if (!arcadeKind || arcadeKind === "select") return;
+    const id = window.setInterval(() => {
+      setArcade((current) => {
+        if (!current || current.kind === "select") return current;
+        if (current.kind === "dance") {
+          if (current.count > 0)
+            return { ...current, count: current.count - 1 };
+          let dir = current.dir;
+          while (dir === current.dir) dir = Math.floor(Math.random() * 4) + 1;
+          return { ...current, dir, count: 40 };
+        }
+        if (current.step === 2) {
+          const delta = Math.floor(Math.random() * 4) + 1,
+            x = current.x + (current.dir === 1 ? delta : -delta),
+            dir: 1 | 2 = x >= 186 ? 2 : x <= 52 ? 1 : current.dir;
+          return { ...current, x: Math.max(52, Math.min(186, x)), dir };
+        }
+        if (current.step === 3) {
+          const flight = current.flight + 1;
+          return flight >= 112
+            ? { ...current, step: 1, x: 119, flight: 0 }
+            : { ...current, flight };
+        }
+        return current;
+      });
+    }, 1000 / 120);
+    return () => window.clearInterval(id);
+  }, [arcadeKind]);
   useEffect(() => {
     const id = setInterval(() => {
       const now = Date.now(),
@@ -950,6 +1086,7 @@ export default function OriginalWorld() {
             <i>▼</i>
           </button>
         )}
+        {arcade && <Arcade game={arcade} actor={state.actor} />}
         {npcMenu && (
           <Choice
             title={String(npcRecord(npcMenu.id).name)}
@@ -1098,6 +1235,67 @@ export default function OriginalWorld() {
         onChange={(e) => void importJson(e.target.files?.[0])}
       />
     </main>
+  );
+}
+
+function Arcade({
+  game,
+  actor,
+}: {
+  game: ArcadeState;
+  actor: SceneActorState;
+}) {
+  if (game.kind === "select")
+    return (
+      <section className="arcade-panel">
+        <h2>平安镇游戏厅</h2>
+        {["跳舞毯", "投铅球", "离开"].map((name, index) => (
+          <b className={game.index === index ? "active" : ""} key={name}>
+            {name}
+          </b>
+        ))}
+        <small>W/S 选择 · Z/Enter 确认 · X/Esc 返回</small>
+      </section>
+    );
+  if (game.kind === "dance") {
+    const arrows = ["", "↑", "←", "↓", "→"];
+    return (
+      <section className="arcade-panel dance-panel">
+        <h2>跳舞毯</h2>
+        <div className="arcade-score">
+          SCORE {String(game.score).padStart(5, "0")} · TOP{" "}
+          {String(actor.dance || 100).padStart(5, "0")}
+        </div>
+        <strong>{arrows[game.dir]}</strong>
+        <div className="dance-pad">
+          ↑<i>← →</i>↓
+        </div>
+        <small>按对应方向或 WASD；踏错即结束 · X/Esc 离开</small>
+      </section>
+    );
+  }
+  const shotX = game.step === 3 ? 155 + Math.min(224, game.flight * 2) : 155,
+    shotY =
+      game.step === 3
+        ? 105 + Math.floor((379 - shotX) ** 2 * 0.004162330905)
+        : 290;
+  return (
+    <section className="arcade-panel ball-panel">
+      <h2>投铅球</h2>
+      <div className="arcade-score">
+        SCORE {String(game.score).padStart(5, "0")} · TOP{" "}
+        {String(actor.ball || 100).padStart(5, "0")} · MISS {game.fail}/7
+      </div>
+      <div className="aim-track">
+        <i style={{ left: game.x - 52 }} />
+      </div>
+      <div className="hoop">
+        ┐<span style={{ left: shotX - 90, top: shotY - 80 }}>●</span>
+      </div>
+      <small>
+        Z/Enter 开始游标，再按一次投球 · 命中区 110–128 · X/Esc 离开
+      </small>
+    </section>
   );
 }
 
