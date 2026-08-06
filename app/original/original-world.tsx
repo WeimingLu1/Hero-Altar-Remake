@@ -58,7 +58,11 @@ import {
   claimMainReward,
   finishFreeWork,
   finishMainTask,
+  finishStoneTask,
   freshTaskState,
+  giveTanReward,
+  startStoneTask,
+  startTanQuest,
   taskJournal,
   type TaskState,
 } from "../game-core/task-system";
@@ -365,6 +369,25 @@ export default function OriginalWorld() {
           setNpcMenu(null);
           return;
         }
+        if (id === 14 || id === 15) {
+          const result =
+            id === 14
+              ? startStoneTask(next.actor, tasks)
+              : finishStoneTask(next.actor, tasks);
+          sync(next);
+          setEventText(`${npcRecord(id).name}\n${result.text}`);
+          setNpcMenu(null);
+          return;
+        }
+        if (id === 6) {
+          const altar = startTanQuest(next.actor);
+          if (altar.ok) {
+            sync(next);
+            setEventText(`${npcRecord(id).name}\n${altar.text}`);
+            setNpcMenu(null);
+            return;
+          }
+        }
         const taskType = id === 6 ? 1 : id === 10 ? 2 : id === 26 ? 3 : 0;
         if (taskType) {
           let text = "";
@@ -438,15 +461,32 @@ export default function OriginalWorld() {
   const leaveBattle = useCallback(() => {
     if (!battle) return;
     const next = structuredClone(stateRef.current);
-    if (battle.finished === "win" && next.tasks.killId === battle.enemyId)
-      next.tasks.killId = -1;
+    let altarText = "";
+    if (battle.finished === "win") {
+      if (next.tasks.killId === battle.enemyId) next.tasks.killId = -1;
+      const altarId = battle.enemyId - 162;
+      if (altarId === next.actor.tanId && altarId >= 1 && altarId <= 8) {
+        const mapKey = `1:${20 + altarId}`;
+        if ((next.actor.inventory[mapKey] || 0) > 0) {
+          next.actor.inventory[mapKey]--;
+          if (next.actor.inventory[mapKey] <= 0)
+            delete next.actor.inventory[mapKey];
+        }
+        next.actor.killList = Array.from(
+          new Set([...(next.actor.killList || []), battle.enemyId]),
+        );
+        altarText = giveTanReward(next.actor).text;
+      }
+    }
     endSpar(next.actor, battle);
     sync(next);
     setBattle(null);
     setSpecialMenu(null);
     setNotice(
       battle.finished === "win"
-        ? "切磋得胜"
+        ? altarText
+          ? `切磋得胜 · ${altarText}`
+          : "切磋得胜"
         : battle.finished === "lose"
           ? "切磋结束，已恢复少量气血"
           : "你退出了切磋",

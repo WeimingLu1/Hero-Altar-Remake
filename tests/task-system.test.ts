@@ -7,7 +7,10 @@ import {
   claimMainReward,
   finishFreeWork,
   finishMainTask,
+  finishStoneTask,
   freshTaskState,
+  giveTanReward,
+  startStoneTask,
 } from "../app/game-core/task-system";
 
 const actor = (): SceneActorState => ({
@@ -46,6 +49,29 @@ const actor = (): SceneActorState => ({
   fpPlus: 0,
   mpPlus: 0,
   xue6: false,
+});
+
+test("石料任务保持原作冷却、道具与动态奖励", () => {
+  const a = actor(),
+    tasks = freshTaskState();
+  assert.equal(startStoneTask(a, tasks).ok, true);
+  assert.equal(a.inventory["1:29"], 1);
+  assert.equal(finishStoneTask(a, tasks).ok, true);
+  assert.equal(a.inventory["1:29"], undefined);
+  assert.equal(a.exp, 1040);
+  assert.equal(a.potential, 20);
+  assert.equal(startStoneTask(a, tasks).ok, false);
+});
+
+test("第六坛奖励为全部已学功夫加三级并奖励六万金钱", () => {
+  const a = actor();
+  a.tanId = 6;
+  a.skills = { "1": { level: 254, points: 0 }, "2": { level: 20, points: 0 } };
+  assert.equal(giveTanReward(a).ok, true);
+  assert.equal(a.skills["1"].level, 255);
+  assert.equal(a.skills["2"].level, 23);
+  assert.equal(a.gold, 60100);
+  assert.equal(a.tanId, 7);
 });
 
 test("义工随机编号、体力消耗与普通模式奖励保持原作", () => {

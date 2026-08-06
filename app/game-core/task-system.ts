@@ -245,6 +245,119 @@ export function claimMainReward(
     : { ok: true, text: reward(actor, 0, Math.floor(amount / 2), 0) };
 }
 
+const bagIsFull = (actor: SceneActorState) =>
+  Object.values(actor.inventory).filter((amount) => amount > 0).length >= 20;
+
+export function startStoneTask(
+  actor: SceneActorState,
+  tasks: TaskState,
+  fast = false,
+) {
+  const cooldown = fast ? 90 : 180;
+  if (tasks.stoneStarted)
+    return {
+      ok: false,
+      text: String(originalText.stone_undo_text || "先把石料送到工地。"),
+    };
+  if (tasks.clock - tasks.stoneStartedAt < cooldown)
+    return {
+      ok: false,
+      text: String(originalText.no_stone_task || "工地现在不需要石料。"),
+    };
+  if (actor.exp < 1000)
+    return {
+      ok: false,
+      text: String(originalText.stone_less_exp || "你经验尚浅，搬不动石料。"),
+    };
+  if (actor.exp >= 100000)
+    return {
+      ok: false,
+      text: String(originalText.stone_more_exp || "这种粗活不敢再劳烦大侠。"),
+    };
+  if (bagIsFull(actor))
+    return {
+      ok: false,
+      text: String(originalText.stone_full_bag || "你身上的东西太多了。"),
+    };
+  tasks.stoneStarted = true;
+  tasks.stoneStartedAt = tasks.clock;
+  actor.inventory["1:29"] = (actor.inventory["1:29"] || 0) + 1;
+  return {
+    ok: true,
+    text: String(originalText.give_stone_text || "把石料送到工地去。"),
+  };
+}
+
+export function finishStoneTask(
+  actor: SceneActorState,
+  tasks: TaskState,
+  fast = false,
+) {
+  if (!tasks.stoneStarted)
+    return {
+      ok: false,
+      text: String(originalText.no_stone_task2 || "你没有领取石料。"),
+    };
+  if ((actor.inventory["1:29"] || 0) < 1) {
+    tasks.stoneStarted = false;
+    return {
+      ok: false,
+      text: String(originalText.lose_stone_text || "石料已经遗失，任务取消。"),
+    };
+  }
+  actor.inventory["1:29"]--;
+  if (actor.inventory["1:29"] <= 0) delete actor.inventory["1:29"];
+  tasks.stoneStarted = false;
+  const scale = fast ? 3 : 1,
+    exp = (Math.floor(actor.exp / 1500) + 40) * scale,
+    potential = Math.floor(exp / 2);
+  return {
+    ok: true,
+    text: `${String(originalText.finish_stone_text || "石料已经送到工地。")}\n${reward(actor, exp, potential, -1)}`,
+  };
+}
+
+export function startTanQuest(actor: SceneActorState) {
+  const mapKey = "1:21";
+  if (actor.exp < 80000 || bagIsFull(actor)) return { ok: false, text: "" };
+  if (actor.tanId !== 0 && !(actor.tanId === 1 && !actor.inventory[mapKey]))
+    return { ok: false, text: "" };
+  actor.tanId = 1;
+  actor.inventory[mapKey] = (actor.inventory[mapKey] || 0) + 1;
+  return {
+    ok: true,
+    text: String(originalText.tan_start || "老夫把青龙坛地图送给你。"),
+  };
+}
+
+export function giveTanReward(actor: SceneActorState) {
+  const id = actor.tanId,
+    texts = (originalTasks.tan_reward as string[]) || [];
+  if (id < 1 || id > 8) return { ok: false, text: "九坛挑战尚未推进。" };
+  if (id === 1) actor.exp += 50000;
+  if (id === 2) {
+    actor.exp += 50000;
+    actor.gold += 60000;
+  }
+  if (id === 3) actor.maxFp += 150;
+  if (id === 4) {
+    actor.gold += 60000;
+    actor.maxFp += 200;
+  }
+  if (id === 5) {
+    actor.exp += 60000;
+    actor.maxFp += 200;
+  }
+  if (id >= 6)
+    for (const skill of Object.values(actor.skills))
+      skill.level = Math.min(255, skill.level + 3);
+  if (id === 6) actor.gold += 60000;
+  if (id === 7) actor.exp += 60000;
+  if (id === 8) actor.maxFp += 200;
+  actor.tanId++;
+  return { ok: true, text: texts[id] || `通过第 ${id} 坛。` };
+}
+
 export function taskJournal(tasks: TaskState) {
   const lines: string[] = [];
   if (tasks.freeWork)
