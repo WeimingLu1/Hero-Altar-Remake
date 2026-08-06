@@ -1,0 +1,6 @@
+.world-choice { position: absolute; min-width: 220px; max-height: 380px; overflow: auto; left: 50%; top: 50%; transform: translate(-50%,-50%); background: rgba(13,20,15,.97); border: 2px solid #b39557; box-shadow: 0 18px 50px #000; padding: 12px; display: flex; flex-direction: column; z-index: 4; }
+.world-choice > b { color: #e7d5a6; padding: 7px 10px 12px; border-bottom: 1px solid #4e513f; }
+.world-choice button { position: relative; border: 0; background: transparent; color: #9fac9f; text-align: left; padding: 9px 28px 9px 10px; }
+.world-choice button.active { background: #344639; color: #f0dfb1; }
+.world-choice button i { position: absolute; right: 10px; color: #d1a951; }
+.world-choice small { color: #69776c; font: 9px monospace; padding: 12px 8px 3px; }

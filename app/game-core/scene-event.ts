@@ -4,6 +4,9 @@ export type SceneEventCall = { type:number; id?:number; extra?:number };
 export type SceneActorState = {
   inventory: Record<string,number>; gold:number; hp:number; maxHp:number; fp:number; maxFp:number;
   food:number; water:number; exp:number; potential:number; morals:number; tanId:number;
+  teacherId:number;classId:number;gender:number;face:number;maxMp:number;age:number;
+  baseBon:number;baseInt:number;baseAgi:number;baseStr:number;bon:number;int:number;agi:number;str:number;luck:number;
+  skills:Record<string,{level:number;points:number}>;
 };
 export type SceneResolution = { lines:string[]; gain?:{kind:1|2|3;id:number;amount:number}; transfer?:{mapId:number;x:number;y:number}; tag:string };
 
