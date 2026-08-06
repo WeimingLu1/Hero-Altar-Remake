@@ -17,6 +17,7 @@ export type OriginalBattle = {
   enemyMaxHp: number;
   enemyFp: number;
   enemyWeaponId: number;
+  playerBusy: number;
   turn: number;
   seed: number;
   log: string[];
@@ -111,7 +112,7 @@ function player(
     fp: actor.fp,
     fpPlus: actor.fpPlus,
     weaponId: actor.weaponId,
-    movable: actor.hp > 0,
+    movable: actor.hp > 0 && (!battle || battle.playerBusy <= 0),
     fenshen: buff.fenshen,
     kfAp: move.ap,
     kfDp: move.dp,
@@ -185,8 +186,37 @@ function tick(battle: OriginalBattle) {
       turns: 0,
     };
   if (battle.enemyDebuff.busy > 0) battle.enemyDebuff.busy--;
+  if (battle.playerBusy > 0) battle.playerBusy--;
   if (battle.enemyDebuff.turns > 0 && --battle.enemyDebuff.turns === 0)
     battle.enemyDebuff.hit = 0;
+}
+function enemyTurn(
+  battle: OriginalBattle,
+  actor: SceneActorState,
+  record: OriginalRecord,
+  random: RandomInt,
+  blank: Move,
+) {
+  if (battle.enemyDebuff.busy > 0) {
+    battle.log.push(`${battle.enemyName}受制于招式，无法还手。`);
+    return;
+  }
+  const enemyId = enemyAttackId(record),
+    enemyLevel =
+      ((record.skill_list as number[][]) || []).find(
+        (row) => row[0] === enemyId,
+      )?.[1] || 0,
+    em = moveFor(record, enemyId, enemyLevel, random, battle.enemyName, "你"),
+    attacker = enemy(record, battle.enemyFp, em, battle),
+    target = player(actor, blank, battle),
+    received = attackEffect(attacker, target, random);
+  battle.log.push(em.text, resultText(received, "你"));
+  battle.enemyFp = attacker.fp;
+  actor.hp = Math.max(0, actor.hp - received.hurt);
+  if (actor.hp <= 0) {
+    battle.finished = "lose";
+    battle.log.push("你眼前一黑，已无力再战。切磋到此为止。");
+  }
 }
 
 export function beginOriginalBattle(
@@ -201,6 +231,7 @@ export function beginOriginalBattle(
     enemyMaxHp: n(e, "maxhp", 1),
     enemyFp: n(e, "fp"),
     enemyWeaponId: n(e, "weapon_id"),
+    playerBusy: 0,
     turn: 0,
     seed,
     log: [`${String(e.name || "江湖中人")}抱拳道：“请赐教！”`],
@@ -238,6 +269,13 @@ export function battleRound(source: OriginalBattle, actor: SceneActorState) {
       force: 0,
     },
     ec = enemy(record, battle.enemyFp, blank, battle);
+  if (battle.playerBusy > 0) {
+    battle.turn++;
+    battle.log.push("你受制于招式，本回合无法出手。");
+    enemyTurn(battle, actor, record, random, blank);
+    battle.log = battle.log.slice(-8);
+    return battle;
+  }
   battle.turn++;
   battle.log.push(pm.text);
   const dealt = attackEffect(pc, ec, random);
@@ -249,28 +287,7 @@ export function battleRound(source: OriginalBattle, actor: SceneActorState) {
     battle.log.push(`${battle.enemyName}收招认输。`);
     return battle;
   }
-  if (battle.enemyDebuff.busy > 0) {
-    battle.log.push(`受制于招式，无法还手。`);
-    battle.log = battle.log.slice(-8);
-    return battle;
-  }
-  const enemyId = enemyAttackId(record),
-    enemyLevel =
-      ((record.skill_list as number[][]) || []).find(
-        (row) => row[0] === enemyId,
-      )?.[1] || 0,
-    em = moveFor(record, enemyId, enemyLevel, random, battle.enemyName, "你"),
-    attacker = enemy(record, battle.enemyFp, em, battle),
-    target = player(actor, blank, battle);
-  battle.log.push(em.text);
-  const received = attackEffect(attacker, target, random);
-  battle.enemyFp = attacker.fp;
-  actor.hp = Math.max(0, actor.hp - received.hurt);
-  battle.log.push(resultText(received, "你"));
-  if (actor.hp <= 0) {
-    battle.finished = "lose";
-    battle.log.push("你眼前一黑，已无力再战。切磋到此为止。");
-  }
+  enemyTurn(battle, actor, record, random, blank);
   battle.log = battle.log.slice(-8);
   return battle;
 }
@@ -286,6 +303,7 @@ export function specialRound(
 ) {
   const battle = structuredClone(source);
   if (battle.finished) return battle;
+  if (battle.playerBusy > 0) return battleRound(source, actor);
   const special = battleSpecials(actor, battle.cooldowns).find(
     (item) => item.id === specialId,
   );
@@ -336,6 +354,7 @@ export function specialRound(
       force: 0,
     },
     enemyCombatant = enemy(record, battle.enemyFp, blank, battle);
+  let forcedAttacks = 0;
   if (specialId === 6) {
     const flower = effectiveLevel(actor, 19);
     if (battle.enemyWeaponId > 0) {
@@ -423,17 +442,146 @@ export function specialRound(
       fenshen: Math.max(Math.floor(ninja / 5), 30),
       turns: Math.max(battle.buff.turns, turns),
     };
+  } else if (specialId === 15) {
+    const hit = random(Math.max(1, actor.fp));
+    if (hit >= battle.enemyFp / 3) {
+      const damage = Math.max(
+        0,
+        Math.floor(actor.fp / 10) +
+          actor.fpPlus -
+          Math.floor(battle.enemyFp / 30),
+      );
+      battle.enemyHp = Math.max(0, battle.enemyHp - damage);
+      battle.enemyMaxHp = Math.max(
+        0,
+        battle.enemyMaxHp - Math.floor(damage / 2),
+      );
+      battle.cooldowns["15"] = 3;
+      battle.log.push(`太极刚劲造成 ${damage} 点伤害。`);
+    } else if (hit < battle.enemyFp / 4) {
+      battle.playerBusy = random(3) + 3;
+      battle.log.push("内力反震，你踉跄倒退。");
+    } else {
+      battle.enemyFp = Math.max(
+        0,
+        battle.enemyFp - (battle.enemyFp < 200 ? battle.enemyFp : 100),
+      );
+      battle.log.push("双方内力相拼，各自退开。");
+    }
+  } else if (specialId === 16) {
+    const hit = random(Math.max(1, actor.fp));
+    if (hit >= battle.enemyFp / 3) {
+      const drain = Math.floor(actor.fp / 10) + 350 + actor.fpPlus;
+      battle.enemyFp = Math.max(0, battle.enemyFp - drain);
+      battle.cooldowns["16"] = 3;
+      battle.log.push(`${battle.enemyName}损失 ${drain} 点内力。`);
+    } else if (hit < battle.enemyFp / 5) {
+      battle.playerBusy = random(3) + 2;
+      battle.log.push("你的劲力落空，身形失衡。");
+    } else {
+      battle.enemyFp = Math.max(0, battle.enemyFp - 350);
+      battle.log.push(`${battle.enemyName}损失 350 点内力。`);
+    }
+  } else if (specialId === 17) {
+    const hit = random(Math.max(1, effectiveLevel(actor, 32)));
+    if (hit >= enemyCombatant.parryKfLv / 3) {
+      const turns = Math.floor(hit / 30) + 3;
+      battle.enemyDebuff.busy = Math.max(battle.enemyDebuff.busy, turns);
+      battle.cooldowns["17"] = turns + 4;
+      battle.log.push(`${battle.enemyName}身陷乱环阵。`);
+    } else {
+      battle.playerBusy = 3;
+      battle.log.push(`${battle.enemyName}奋力挣脱乱环。`);
+    }
+  } else if (specialId === 18) {
+    const taiChi = effectiveLevel(actor, 32);
+    if (battle.enemyDebuff.busy > 0 || random(5) === 0) {
+      battle.buff = {
+        ...battle.buff,
+        hit: battle.buff.hit + 15,
+        str: battle.buff.str + Math.floor(taiChi / 5),
+        turns: Math.max(battle.buff.turns, 1),
+      };
+      battle.playerBusy = 4;
+      battle.cooldowns["18"] = 8;
+      forcedAttacks = 1;
+    } else {
+      const hit = random(Math.max(1, taiChi));
+      if (hit >= enemyCombatant.parryKfLv / 3) {
+        const turns = Math.floor(hit / 25) + 3;
+        battle.enemyDebuff.busy = Math.max(battle.enemyDebuff.busy, turns);
+        battle.cooldowns["18"] = 6;
+        battle.log.push(`${battle.enemyName}被太极柔劲困住。`);
+      } else {
+        battle.playerBusy = 3;
+        battle.log.push(`${battle.enemyName}挣脱了太极柔劲。`);
+      }
+    }
+  } else if (specialId === 19) {
+    const hit = random(Math.max(1, actor.exp)),
+      taiChiSword = effectiveLevel(actor, 33);
+    if (hit >= n(record, "exp") / 3) {
+      battle.enemyDebuff.busy = Math.max(
+        battle.enemyDebuff.busy,
+        random(Math.max(1, Math.floor(taiChiSword / 20))) + 2,
+      );
+      battle.log.push(`${battle.enemyName}被剑意丝棉紧紧裹住。`);
+    } else {
+      battle.playerBusy = 4;
+      battle.log.push(`${battle.enemyName}跃出缠字诀。`);
+    }
+    battle.cooldowns["19"] = 7;
+  } else if (specialId === 20) {
+    const sword = effectiveLevel(actor, 33),
+      turns = Math.floor(sword / 30) + 4;
+    battle.buff = {
+      ...battle.buff,
+      hit: battle.buff.hit + 10,
+      eva: battle.buff.eva + Math.floor(sword / 15),
+      turns: Math.max(battle.buff.turns, turns),
+    };
+    battle.cooldowns["20"] = turns;
+  } else if (specialId === 21) {
+    const sword = effectiveLevel(actor, 33);
+    battle.buff = {
+      ...battle.buff,
+      atk: battle.buff.atk + Math.floor(sword / 5),
+      turns: Math.max(battle.buff.turns, 1),
+    };
+    battle.playerBusy = 4;
+    battle.cooldowns["21"] = 7;
+    forcedAttacks = 3;
+  } else if (specialId === 22) {
+    const hit = random(Math.max(1, actor.fp)),
+      snow = effectiveLevel(actor, 37);
+    if (hit >= battle.enemyFp / 2) {
+      const damage = Math.floor(snow / 3);
+      battle.enemyHp = Math.max(0, battle.enemyHp - damage);
+      battle.enemyDebuff.busy = Math.max(
+        battle.enemyDebuff.busy,
+        Math.floor(snow / 35) + 4,
+      );
+      battle.log.push(`${battle.enemyName}被摔倒，受到 ${damage} 点伤害。`);
+    } else {
+      battle.playerBusy = 3;
+      battle.log.push(`${battle.enemyName}以内力格挡连环三招。`);
+    }
+    battle.cooldowns["22"] = 6;
   }
   const attacks =
-      specialId === 3
-        ? 2
-        : specialId === 4 || specialId === 5 || specialId === 11
-          ? 3
-          : [6, 7, 8, 9, 10, 13, 14].includes(specialId)
-            ? 0
-            : special.type === 2
-              ? 1
-              : 0,
+      forcedAttacks > 0
+        ? forcedAttacks
+        : specialId === 3
+          ? 2
+          : specialId === 4 || specialId === 5 || specialId === 11
+            ? 3
+            : [6, 7, 8, 9, 10, 13, 14, 15, 16, 17, 19, 20, 22].includes(
+                  specialId,
+                )
+              ? 0
+              : special.type === 2
+                ? 1
+                : 0,
     attackDamage = specialId === 4 ? 15 : 0;
   for (let i = 0; i < attacks && battle.enemyHp > 0; i++) {
     const pc = player(
@@ -480,27 +628,7 @@ export function specialRound(
     battle.log.push(`${battle.enemyName}收招认输。`);
     return battle;
   }
-  if (battle.enemyDebuff.busy > 0) {
-    battle.log.push(`受制于招式，无法还手。`);
-    battle.log = battle.log.slice(-8);
-    return battle;
-  }
-  const enemyId = enemyAttackId(record),
-    enemyLevel =
-      ((record.skill_list as number[][]) || []).find(
-        (row) => row[0] === enemyId,
-      )?.[1] || 0,
-    em = moveFor(record, enemyId, enemyLevel, random, battle.enemyName, "你"),
-    attacker = enemy(record, battle.enemyFp, em, battle),
-    target = player(actor, blank, battle),
-    received = attackEffect(attacker, target, random);
-  battle.log.push(em.text, resultText(received, "你"));
-  battle.enemyFp = attacker.fp;
-  actor.hp = Math.max(0, actor.hp - received.hurt);
-  if (actor.hp <= 0) {
-    battle.finished = "lose";
-    battle.log.push("你眼前一黑，已无力再战。");
-  }
+  enemyTurn(battle, actor, record, random, blank);
   battle.log = battle.log.slice(-8);
   return battle;
 }
