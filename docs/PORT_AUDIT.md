@@ -29,7 +29,7 @@ test or runtime check. Data extraction alone is not implementation evidence.
 | Save files               | Versioned local JSON import/export, normalization and editable actor/world/task/forge/home/minigame fields                                                                                                                                | Implemented |
 | Keyboard                 | Mac/Windows-compatible WASD/arrows, Z/Enter/Space, X/Escape, C/Q/I/G/F/L and every modal have keyboard and clickable controls                                                                                                             | Implemented |
 | Visual redraw            | Source bitmaps are not shipped; maps, terrain, buildings, figures, objects, effects and UI are rendered from new programmatic pixel primitives, palettes and CSS                                                                          | Implemented |
-| Production               | Production build plus 57 logic and 2 server-render tests pass; Sites version is deployed and production-smoke-tested                                                                                                                      | Implemented |
+| Production               | Production build plus 59 logic and 2 server-render tests pass; matching commit/archive is deployed by Sites with a succeeded status                                                                                                       | Implemented |
 
 ## Completion gate
 
