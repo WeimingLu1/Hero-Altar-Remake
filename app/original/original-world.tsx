@@ -8,6 +8,7 @@ import {
   passable,
   tileAt,
   triggerEvent,
+  type MapEvent,
   type WorldPosition,
 } from "../game-core/original-world";
 import {
@@ -416,7 +417,8 @@ export default function OriginalWorld() {
         (e) =>
           e.x === nx &&
           e.y === ny &&
-          String(activePage(e).graphic?.character_name || "") &&
+          (String(activePage(e).graphic?.character_name || "") ||
+            eventScene(e, s)?.type === 0) &&
           !activePage(e).through,
       );
       const wantedBlocking =
@@ -446,7 +448,8 @@ export default function OriginalWorld() {
     ],
   );
   const interact = useCallback(() => {
-    const p = stateRef.current.position,
+    const s = stateRef.current,
+      p = s.position,
       d =
         p.direction === 2
           ? [0, 1]
@@ -455,7 +458,25 @@ export default function OriginalWorld() {
             : p.direction === 6
               ? [1, 0]
               : [0, -1];
-    if (!runAt(p.x + d[0], p.y + d[1])) setNotice("这里没有可以触发的事件");
+    const map = getOriginalMap(p.mapId),
+      candidates = [
+        [p.x + d[0], p.y + d[1]],
+        [p.x, p.y],
+        [p.x, p.y + 1],
+        [p.x - 1, p.y],
+        [p.x + 1, p.y],
+        [p.x, p.y - 1],
+      ],
+      npc = candidates.find(([x, y]) => {
+        const event = map.events.find((e) => e.x === x && e.y === y);
+        return event && eventScene(event, s)?.type === 0;
+      });
+    if (npc) {
+      runAt(npc[0], npc[1]);
+      return;
+    }
+    if (!runAt(p.x + d[0], p.y + d[1]))
+      setNotice("靠近人物并按 Z / Enter 互动");
   }, [runAt]);
   const chooseNpc = useCallback(
     (id: number, option: NpcOption) => {
@@ -1915,14 +1936,7 @@ function draw(ctx: CanvasRenderingContext2D, state: WorldSave) {
     const page = activePage(e),
       g = page.graphic || {},
       name = String(g.character_name || ""),
-      result = executeMapCommands(page.commands),
-      scene = selectSceneEvent(result.source, {
-        inventory: state.actor.inventory,
-        tanId: state.actor.tanId,
-        freeWork: state.tasks.freeWork,
-        canGetItem: true,
-        canGetCaihua: true,
-      }),
+      scene = eventScene(e, state),
       isNpc = scene?.type === 0 && scene.id !== undefined,
       actorName = isNpc
         ? String(npcRecord(scene.id!).name || "江湖人物")
@@ -1981,6 +1995,16 @@ function draw(ctx: CanvasRenderingContext2D, state: WorldSave) {
   ctx.font = "10px monospace";
   ctx.fillStyle = "#9aaa9e";
   ctx.fillText(`MAP ${map.id}  ${pos.x},${pos.y}`, W - 14, 19);
+}
+function eventScene(event: MapEvent, state: WorldSave) {
+  const result = executeMapCommands(activePage(event).commands);
+  return selectSceneEvent(result.source, {
+    inventory: state.actor.inventory,
+    tanId: state.actor.tanId,
+    freeWork: state.tasks.freeWork,
+    canGetItem: true,
+    canGetCaihua: true,
+  });
 }
 function drawTile(
   ctx: CanvasRenderingContext2D,
