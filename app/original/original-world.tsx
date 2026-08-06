@@ -15,7 +15,7 @@ import {
   resolveSceneEvent,
   type SceneActorState,
 } from "../game-core/scene-event";
-import { selectSceneEvent } from "../game-core/rmxp-events";
+import { executeMapCommands, selectSceneEvent } from "../game-core/rmxp-events";
 import { originalTables } from "../game-core/original-data";
 import {
   attemptJoin,
@@ -1914,16 +1914,36 @@ function draw(ctx: CanvasRenderingContext2D, state: WorldSave) {
     if (e.x < sx || e.y < sy || e.x >= sx + 20 || e.y >= sy + 15) continue;
     const page = activePage(e),
       g = page.graphic || {},
-      name = String(g.character_name || "");
-    if (name)
+      name = String(g.character_name || ""),
+      result = executeMapCommands(page.commands),
+      scene = selectSceneEvent(result.source, {
+        inventory: state.actor.inventory,
+        tanId: state.actor.tanId,
+        freeWork: state.tasks.freeWork,
+        canGetItem: true,
+        canGetCaihua: true,
+      }),
+      isNpc = scene?.type === 0 && scene.id !== undefined,
+      actorName = isNpc
+        ? String(npcRecord(scene.id!).name || "江湖人物")
+        : e.name,
+      near = Math.abs(e.x - pos.x) + Math.abs(e.y - pos.y) <= 2;
+    if (name || isNpc) {
       drawActor(
         ctx,
         (e.x - sx) * T + 16,
         (e.y - sy) * T + 23,
-        hash(e.name),
+        hash(actorName),
         false,
       );
-    else if (page.commands.some((c) => c.code === 201)) {
+      drawNpcMarker(
+        ctx,
+        (e.x - sx) * T + 16,
+        (e.y - sy) * T + 23,
+        actorName,
+        near,
+      );
+    } else if (page.commands.some((c) => c.code === 201)) {
       ctx.fillStyle = "rgba(210,177,92,.65)";
       ctx.fillRect((e.x - sx) * T + 12, (e.y - sy) * T + 12, 8, 8);
     }
@@ -1934,14 +1954,22 @@ function draw(ctx: CanvasRenderingContext2D, state: WorldSave) {
     state.tasks.wantedY >= sy &&
     state.tasks.wantedX < sx + 20 &&
     state.tasks.wantedY < sy + 15
-  )
+  ) {
+    const wx = (state.tasks.wantedX - sx) * T + 16,
+      wy = (state.tasks.wantedY - sy) * T + 23,
+      near =
+        Math.abs(state.tasks.wantedX - pos.x) +
+          Math.abs(state.tasks.wantedY - pos.y) <=
+        2;
     drawActor(
       ctx,
-      (state.tasks.wantedX - sx) * T + 16,
-      (state.tasks.wantedY - sy) * T + 23,
-      state.tasks.wantedGender ? "#a94b57" : "#80403b",
+      wx,
+      wy,
+      state.tasks.wantedGender ? "#e45d6d" : "#c44f45",
       false,
     );
+    drawNpcMarker(ctx, wx, wy, "通缉犯", near, true);
+  }
   drawActor(ctx, (pos.x - sx) * T + 16, (pos.y - sy) * T + 23, "#dce8ec", true);
   ctx.fillStyle = "rgba(5,10,7,.75)";
   ctx.fillRect(0, 0, W, 30);
@@ -1992,8 +2020,11 @@ function drawActor(
   color: string,
   hero: boolean,
 ) {
-  ctx.fillStyle = "rgba(0,0,0,.25)";
-  ctx.fillRect(x - 9, y + 5, 18, 4);
+  ctx.fillStyle = "rgba(0,0,0,.5)";
+  ctx.fillRect(x - 10, y + 5, 20, 5);
+  ctx.fillStyle = hero ? "#d8f3ff" : "#fff0b0";
+  ctx.fillRect(x - 8, y - 14, 16, 10);
+  ctx.fillRect(x - 9, y - 8, 18, 16);
   ctx.fillStyle = "#26221d";
   ctx.fillRect(x - 7, y - 13, 14, 8);
   ctx.fillStyle = "#dfb78d";
@@ -2003,6 +2034,32 @@ function drawActor(
   ctx.fillStyle = hero ? "#657f97" : "#40362e";
   ctx.fillRect(x - 8, y + 7, 6, 7);
   ctx.fillRect(x + 2, y + 7, 6, 7);
+}
+function drawNpcMarker(
+  ctx: CanvasRenderingContext2D,
+  x: number,
+  y: number,
+  name: string,
+  near: boolean,
+  hostile = false,
+) {
+  const pulse = Math.sin(Date.now() / 180) > 0,
+    accent = hostile ? "#ff6a63" : "#ffd866";
+  ctx.strokeStyle = near ? accent : "rgba(255,216,102,.72)";
+  ctx.lineWidth = near ? 3 : 2;
+  ctx.strokeRect(x - 11, y + 8, 22, near ? 5 : 3);
+  ctx.fillStyle = accent;
+  ctx.fillRect(x - 2, y - 27 - (pulse ? 1 : 0), 5, 7);
+  ctx.fillRect(x - 2, y - 18 - (pulse ? 1 : 0), 5, 3);
+  if (!near) return;
+  const label = name.length > 7 ? `${name.slice(0, 7)}…` : name;
+  ctx.font = "bold 10px sans-serif";
+  ctx.textAlign = "center";
+  const width = Math.ceil(ctx.measureText(label).width) + 8;
+  ctx.fillStyle = "rgba(7,12,9,.92)";
+  ctx.fillRect(x - width / 2, y - 43, width, 13);
+  ctx.fillStyle = accent;
+  ctx.fillText(label, x, y - 33);
 }
 function hash(text: string) {
   let n = 0;
