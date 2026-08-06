@@ -2,7 +2,9 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import {
   attemptJoin,
+  bookStudyOptions,
   buyGood,
+  canReadBook,
   npcOptions,
   shopGoods,
   studyOnce,
@@ -69,4 +71,19 @@ test("unconditional teacher accepts disciple and study consumes potential", () =
   const learned = studyOnce(a, 1, 20, 0.5);
   assert.equal(learned.ok, true);
   assert.equal(a.potential, before - 1);
+});
+
+test("秘籍沿用原作技能表并要求读书识字与自创门派", () => {
+  const a = actor();
+  assert.equal(canReadBook(a, 11).ok, false);
+  a.skills["11"] = { level: 1, points: 0 };
+  assert.equal(canReadBook(a, 11).ok, true);
+  assert.equal(a.classId, 9);
+  assert.deepEqual(
+    bookStudyOptions(11).map((entry) => [entry.id, entry.maxLevel]),
+    [
+      [2, 250],
+      [43, 200],
+    ],
+  );
 });

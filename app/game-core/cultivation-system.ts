@@ -1,6 +1,7 @@
 import type { SceneActorState } from "./scene-event";
 import { fullHp } from "./inventory-system";
 import { effectiveLevel } from "./skill-system";
+import { originalTables } from "./original-data";
 
 const forceId = (actor: SceneActorState) => actor.skillUse[3] || 1;
 const magicId = (actor: SceneActorState) => actor.skillUse[5] || 8;
@@ -92,4 +93,57 @@ export function healWounds(actor: SceneActorState) {
   actor.maxHp = Math.min(healthy, actor.maxHp + 10 + Math.floor(level / 5));
   actor.fp -= 50;
   return true;
+}
+
+export function practiceOptions(actor: SceneActorState) {
+  return [...new Set(actor.skillUse.slice(0, 3))]
+    .filter((id) => id > 11 && actor.skills[String(id)])
+    .map((id) => ({
+      id,
+      name: String(originalTables.kungfus[id]?.name || id),
+      level: actor.skills[String(id)].level,
+    }));
+}
+
+export function practiceOnce(actor: SceneActorState, id: number) {
+  const skill = actor.skills[String(id)],
+    type = Number(originalTables.kungfus[id]?.type || 0),
+    basic = actor.skills[String(type)],
+    healthy = fullHp(actor);
+  if (!skill || id < 12) return { ok: false, text: "这门功夫无法练习。" };
+  if (actor.maxHp < healthy)
+    return { ok: false, text: "你身上有伤，无法专心练功。" };
+  if (type !== 9) {
+    if (actor.weaponId > 0) {
+      const weaponBasic =
+        Number(originalTables.weapons[actor.weaponId]?.type || 0) + 3;
+      if (type !== weaponBasic)
+        return { ok: false, text: "手中兵器与这门功夫不合。" };
+    } else if (type !== 2)
+      return { ok: false, text: "这门功夫需要配合相应兵器。" };
+  }
+  if (!basic || basic.level === 0)
+    return { ok: false, text: "相应的基本功夫尚未学会。" };
+  if (basic.level < skill.level || skill.level === 255)
+    return { ok: false, text: "基本功夫不足，暂时无法继续练习。" };
+  if (actor.exp < Math.floor(skill.level ** 3 / 10))
+    return { ok: false, text: "实战经验不足，无法领悟下一层。" };
+  if (actor.maxFp < effectiveLevel(actor, id) * 10)
+    return { ok: false, text: "内力修为不足，无法继续练功。" };
+  skill.points += Math.floor(basic.level / 5) + 1;
+  const needed = (skill.level + 1) ** 2;
+  if (skill.points >= needed) {
+    skill.level += 1;
+    skill.points = 0;
+    return {
+      ok: true,
+      leveled: true,
+      text: `${originalTables.kungfus[id]?.name}提高到 ${skill.level} 级。`,
+    };
+  }
+  return {
+    ok: true,
+    leveled: false,
+    text: `${originalTables.kungfus[id]?.name}：${skill.points}/${needed}`,
+  };
 }

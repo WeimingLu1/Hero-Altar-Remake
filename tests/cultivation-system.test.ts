@@ -5,6 +5,7 @@ import {
   fullFp,
   healWounds,
   meditateForce,
+  practiceOnce,
   recoverHp,
   setForcePower,
 } from "../app/game-core/cultivation-system";
@@ -81,4 +82,18 @@ test("疗伤恢复伤势上限并固定消耗五十内力", () => {
   assert.equal(healWounds(a), true);
   assert.equal(a.maxHp, 150);
   assert.equal(a.fp, 150);
+});
+
+test("练功按基本功夫速度、经验与内力门槛增长专门功夫", () => {
+  const a = actor();
+  a.skills["2"] = { level: 100, points: 0 };
+  a.skills["12"] = { level: 100, points: 10180 };
+  a.skillUse[0] = 12;
+  a.maxFp = 1500;
+  a.maxHp = a.hp = 475;
+  const result = practiceOnce(a, 12);
+  assert.equal(result.ok, true);
+  assert.equal(result.leveled, true);
+  assert.equal(a.skills["12"].level, 101);
+  assert.equal(a.skills["12"].points, 0);
 });

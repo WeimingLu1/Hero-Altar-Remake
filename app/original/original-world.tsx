@@ -18,7 +18,9 @@ import {
 import { selectSceneEvent } from "../game-core/rmxp-events";
 import {
   attemptJoin,
+  bookStudyOptions,
   buyGood,
+  canReadBook,
   npcOptionLabel,
   npcOptions,
   npcRecord,
@@ -57,6 +59,8 @@ import {
   recoverHp,
   setForcePower,
   setMagicPower,
+  practiceOnce,
+  practiceOptions,
 } from "../game-core/cultivation-system";
 import "./world.css";
 import "./choice.css";
@@ -151,11 +155,21 @@ export default function OriginalWorld() {
       null,
     ),
     [shop, setShop] = useState<{ id: number; index: number } | null>(null),
-    [study, setStudy] = useState<{ id: number; index: number } | null>(null);
+    [study, setStudy] = useState<{
+      id: number;
+      index: number;
+      book?: boolean;
+    } | null>(null);
+  const [studyActive, setStudyActive] = useState(false);
   const [battle, setBattle] = useState<OriginalBattle | null>(null);
   const [specialMenu, setSpecialMenu] = useState<number | null>(null);
   const [menu, setMenu] = useState<{ tab: number; index: number } | null>(null);
   const [cultivation, setCultivation] = useState<number | null>(null);
+  const [cultivationActive, setCultivationActive] = useState(false);
+  const [caihua, setCaihua] = useState<{
+    step: 1 | 2;
+    index: number;
+  } | null>(null);
   const canvas = useRef<HTMLCanvasElement>(null),
     file = useRef<HTMLInputElement>(null),
     stateRef = useRef<WorldSave>(state),
@@ -246,6 +260,7 @@ export default function OriginalWorld() {
         study ||
         battle ||
         menu ||
+        caihua ||
         cultivation !== null
       )
         return;
@@ -273,7 +288,18 @@ export default function OriginalWorld() {
         runAt(nx, ny, true);
       } else sync(s);
     },
-    [battle, cultivation, eventText, menu, npcMenu, runAt, shop, study, sync],
+    [
+      battle,
+      caihua,
+      cultivation,
+      eventText,
+      menu,
+      npcMenu,
+      runAt,
+      shop,
+      study,
+      sync,
+    ],
   );
   const interact = useCallback(() => {
     const p = stateRef.current.position,
@@ -348,6 +374,20 @@ export default function OriginalWorld() {
       if (!entry) return;
       const next = structuredClone(stateRef.current),
         result = activateEntry(next.actor, entry);
+      if ("bookId" in result && result.bookId) {
+        if (result.bookId === 20 && next.actor.gender === 0) {
+          setCaihua({ step: 1, index: 0 });
+          sync(next);
+          setMenu(null);
+          return;
+        }
+        const readable = canReadBook(next.actor, result.bookId);
+        if (readable.ok) setStudy({ id: result.bookId, index: 0, book: true });
+        sync(next);
+        setNotice(readable.text);
+        setMenu(null);
+        return;
+      }
       sync(next);
       setNotice(result.text);
       const count = bagEntries(next.actor).length;
@@ -390,14 +430,18 @@ export default function OriginalWorld() {
   }, [buyAt, shop]);
   const studyAt = useCallback(
     (id: number, index: number) => {
-      const item = studyOptions(id)[index];
-      if (!item) return;
+      const item = (study?.book ? bookStudyOptions(id) : studyOptions(id))[
+        index
+      ];
+      if (!item) return undefined;
       const next = structuredClone(stateRef.current),
         r = studyOnce(next.actor, item.id, item.maxLevel);
       sync(next);
       setNotice(r.text);
+      if (!r.ok || r.leveled) setStudyActive(false);
+      return r;
     },
-    [sync],
+    [study?.book, sync],
   );
   const studySelected = useCallback(() => {
     if (study) studyAt(study.id, study.index);
@@ -435,7 +479,12 @@ export default function OriginalWorld() {
       } else if (index === 4) {
         text = `当前加力设为 ${setForcePower(next.actor, next.actor.fpPlus + 10)}。`;
       } else {
-        text = `当前法点设为 ${setMagicPower(next.actor, next.actor.mpPlus + 10)}。`;
+        const options = practiceOptions(next.actor);
+        if (index >= 6) {
+          text = practiceOnce(next.actor, options[index - 6]?.id || 0).text;
+        } else {
+          text = `当前法点设为 ${setMagicPower(next.actor, next.actor.mpPlus + 10)}。`;
+        }
       }
       sync(next);
       setNotice(text);
@@ -481,14 +530,39 @@ export default function OriginalWorld() {
           else if (cancel) leaveBattle();
           return;
         }
+        if (caihua) {
+          if (["arrowup", "arrowdown", "w", "s"].includes(k))
+            setCaihua({ ...caihua, index: (caihua.index + 1) % 2 });
+          else if (confirm) {
+            if (caihua.index === 1) setCaihua(null);
+            else if (caihua.step === 1) setCaihua({ step: 2, index: 0 });
+            else {
+              const next = structuredClone(stateRef.current);
+              next.actor.gender = 2;
+              const readable = canReadBook(next.actor, 20);
+              sync(next);
+              setCaihua(null);
+              if (readable.ok) setStudy({ id: 20, index: 0, book: true });
+              setNotice(readable.text);
+            }
+          } else if (cancel) setCaihua(null);
+          return;
+        }
         if (cultivation !== null) {
-          const length = 6;
+          const length = 6 + practiceOptions(stateRef.current.actor).length;
+          if (cultivationActive) {
+            if (cancel) setCultivationActive(false);
+            return;
+          }
           if (k === "arrowup" || k === "w")
             setCultivation((cultivation + length - 1) % length);
           else if (k === "arrowdown" || k === "s")
             setCultivation((cultivation + 1) % length);
-          else if (confirm) cultivate(cultivation);
-          else if (cancel || k === "r") setCultivation(null);
+          else if (confirm) {
+            if (cultivation <= 1 || cultivation >= 6)
+              setCultivationActive(true);
+            else cultivate(cultivation);
+          } else if (cancel || k === "r") setCultivation(null);
           return;
         }
         if (menu) {
@@ -551,7 +625,13 @@ export default function OriginalWorld() {
           return;
         }
         if (study) {
-          const list = studyOptions(study.id);
+          const list = study.book
+            ? bookStudyOptions(study.id)
+            : studyOptions(study.id);
+          if (studyActive) {
+            if (cancel) setStudyActive(false);
+            return;
+          }
           if (k === "arrowup" || k === "w")
             setStudy({
               ...study,
@@ -559,7 +639,7 @@ export default function OriginalWorld() {
             });
           else if (k === "arrowdown" || k === "s")
             setStudy({ ...study, index: (study.index + 1) % list.length });
-          else if (confirm) studySelected();
+          else if (confirm) setStudyActive(true);
           else if (cancel) setStudy(null);
           return;
         }
@@ -582,9 +662,11 @@ export default function OriginalWorld() {
   }, [
     battle,
     buySelected,
+    caihua,
     chooseNpc,
     cultivate,
     cultivation,
+    cultivationActive,
     eventText,
     fight,
     interact,
@@ -594,11 +676,13 @@ export default function OriginalWorld() {
     save,
     shop,
     study,
+    studyActive,
     studySelected,
     activateBagEntry,
     activateSkill,
     specialMenu,
     fightSpecial,
+    sync,
   ]);
   useEffect(() => {
     const id = setInterval(() => {
@@ -629,6 +713,16 @@ export default function OriginalWorld() {
     }, 15000);
     return () => window.clearInterval(id);
   }, [battle, sync]);
+  useEffect(() => {
+    if (!cultivationActive || cultivation === null) return;
+    const id = window.setInterval(() => cultivate(cultivation), 1000 / 120);
+    return () => window.clearInterval(id);
+  }, [cultivate, cultivation, cultivationActive]);
+  useEffect(() => {
+    if (!studyActive || !study) return;
+    const id = window.setInterval(() => studySelected(), 1000 / 120);
+    return () => window.clearInterval(id);
+  }, [study, studyActive, studySelected]);
   useEffect(() => {
     let raf = 0;
     const frame = () => {
@@ -714,10 +808,11 @@ export default function OriginalWorld() {
         )}{" "}
         {study && (
           <Choice
-            title="请教何种功夫"
-            items={studyOptions(study.id).map(
-              (g) => `${g.name} · 上限${g.maxLevel}`,
-            )}
+            title={studyActive ? "研习中 · X 停止" : "请教何种功夫"}
+            items={(study.book
+              ? bookStudyOptions(study.id)
+              : studyOptions(study.id)
+            ).map((g) => `${g.name} · 上限${g.maxLevel}`)}
             index={study.index}
             choose={(i) => {
               setStudy({ ...study, index: i });
@@ -754,7 +849,7 @@ export default function OriginalWorld() {
         )}
         {cultivation !== null && (
           <Choice
-            title="修炼调息"
+            title={cultivationActive ? "修炼中 · X 停止" : "修炼调息"}
             items={[
               "打坐 · 提升内力",
               "冥思 · 提升法力",
@@ -762,9 +857,24 @@ export default function OriginalWorld() {
               "疗伤 · 恢复伤势",
               `加力 +10 · 当前 ${state.actor.fpPlus}`,
               `法点 +10 · 当前 ${state.actor.mpPlus}`,
+              ...practiceOptions(state.actor).map(
+                (skill) => `练习 ${skill.name} · ${skill.level} 级`,
+              ),
             ]}
             index={cultivation}
             choose={cultivate}
+          />
+        )}
+        {caihua && (
+          <Choice
+            title={
+              caihua.step === 1
+                ? "欲练此功，必先净身。是否继续？"
+                : "此举不可逆转，当真决定继续？"
+            }
+            items={["确定", "放弃"]}
+            index={caihua.index}
+            choose={(index) => setCaihua({ ...caihua, index })}
           />
         )}
       </section>
