@@ -49,6 +49,15 @@ import {
   toggleParry,
 } from "../game-core/skill-system";
 import { battleSpecials } from "../game-core/special-system";
+import { digestActor } from "../game-core/survival-system";
+import {
+  healWounds,
+  meditateForce,
+  meditateMagic,
+  recoverHp,
+  setForcePower,
+  setMagicPower,
+} from "../game-core/cultivation-system";
 import "./world.css";
 import "./choice.css";
 import "./battle.css";
@@ -146,6 +155,7 @@ export default function OriginalWorld() {
   const [battle, setBattle] = useState<OriginalBattle | null>(null);
   const [specialMenu, setSpecialMenu] = useState<number | null>(null);
   const [menu, setMenu] = useState<{ tab: number; index: number } | null>(null);
+  const [cultivation, setCultivation] = useState<number | null>(null);
   const canvas = useRef<HTMLCanvasElement>(null),
     file = useRef<HTMLInputElement>(null),
     stateRef = useRef<WorldSave>(state),
@@ -229,7 +239,16 @@ export default function OriginalWorld() {
   );
   const move = useCallback(
     (dx: number, dy: number) => {
-      if (eventText || npcMenu || shop || study || battle || menu) return;
+      if (
+        eventText ||
+        npcMenu ||
+        shop ||
+        study ||
+        battle ||
+        menu ||
+        cultivation !== null
+      )
+        return;
       const s = structuredClone(stateRef.current),
         map = getOriginalMap(s.position.mapId);
       const direction = dx < 0 ? 4 : dx > 0 ? 6 : dy < 0 ? 8 : 2,
@@ -254,7 +273,7 @@ export default function OriginalWorld() {
         runAt(nx, ny, true);
       } else sync(s);
     },
-    [battle, eventText, menu, npcMenu, runAt, shop, study, sync],
+    [battle, cultivation, eventText, menu, npcMenu, runAt, shop, study, sync],
   );
   const interact = useCallback(() => {
     const p = stateRef.current.position,
@@ -383,6 +402,46 @@ export default function OriginalWorld() {
   const studySelected = useCallback(() => {
     if (study) studyAt(study.id, study.index);
   }, [study, studyAt]);
+  const cultivate = useCallback(
+    (index: number) => {
+      const next = structuredClone(stateRef.current);
+      let text = "";
+      if (index === 0) {
+        const result = meditateForce(next.actor);
+        text = !result.ok
+          ? "尚未装备内功。"
+          : result.capped
+            ? "内功修为不足，内力上限无法继续提高。"
+            : result.increased
+              ? "打坐周天完成，内力上限提高一点。"
+              : "你凝神打坐，内息渐长。";
+      } else if (index === 1) {
+        const result = meditateMagic(next.actor);
+        text = !result.ok
+          ? "尚未装备法术。"
+          : result.capped
+            ? "法术修为不足，法力上限无法继续提高。"
+            : result.increased
+              ? "冥思完成，法力上限提高一点。"
+              : "你闭目冥思，法力渐长。";
+      } else if (index === 2) {
+        text = recoverHp(next.actor)
+          ? "吸气调息，气血已经恢复。"
+          : "当前无法吸气恢复。";
+      } else if (index === 3) {
+        text = healWounds(next.actor)
+          ? "运功疗伤，伤势有所恢复。"
+          : "当前条件不足以疗伤。";
+      } else if (index === 4) {
+        text = `当前加力设为 ${setForcePower(next.actor, next.actor.fpPlus + 10)}。`;
+      } else {
+        text = `当前法点设为 ${setMagicPower(next.actor, next.actor.mpPlus + 10)}。`;
+      }
+      sync(next);
+      setNotice(text);
+    },
+    [sync],
+  );
   useEffect(() => {
     const down = (e: KeyboardEvent) => {
         const k = e.key.toLowerCase();
@@ -420,6 +479,16 @@ export default function OriginalWorld() {
           if (k === "q" || k === "c") setSpecialMenu(0);
           else if (confirm) fight();
           else if (cancel) leaveBattle();
+          return;
+        }
+        if (cultivation !== null) {
+          const length = 6;
+          if (k === "arrowup" || k === "w")
+            setCultivation((cultivation + length - 1) % length);
+          else if (k === "arrowdown" || k === "s")
+            setCultivation((cultivation + 1) % length);
+          else if (confirm) cultivate(cultivation);
+          else if (cancel || k === "r") setCultivation(null);
           return;
         }
         if (menu) {
@@ -496,6 +565,7 @@ export default function OriginalWorld() {
         }
         if (confirm) interact();
         else if (k === "f") save();
+        else if (k === "r") setCultivation(0);
         else if (["m", "e", "tab"].includes(k)) setMenu({ tab: 0, index: 0 });
         else if (cancel) location.href = "/";
       },
@@ -513,6 +583,8 @@ export default function OriginalWorld() {
     battle,
     buySelected,
     chooseNpc,
+    cultivate,
+    cultivation,
     eventText,
     fight,
     interact,
@@ -548,6 +620,15 @@ export default function OriginalWorld() {
     }, 30);
     return () => clearInterval(id);
   }, [move]);
+  useEffect(() => {
+    if (battle) return;
+    const id = window.setInterval(() => {
+      const next = structuredClone(stateRef.current);
+      digestActor(next.actor);
+      sync(next);
+    }, 15000);
+    return () => window.clearInterval(id);
+  }, [battle, sync]);
   useEffect(() => {
     let raf = 0;
     const frame = () => {
@@ -671,6 +752,21 @@ export default function OriginalWorld() {
             activateKf={activateSkill}
           />
         )}
+        {cultivation !== null && (
+          <Choice
+            title="修炼调息"
+            items={[
+              "打坐 · 提升内力",
+              "冥思 · 提升法力",
+              "吸气 · 恢复气血",
+              "疗伤 · 恢复伤势",
+              `加力 +10 · 当前 ${state.actor.fpPlus}`,
+              `法点 +10 · 当前 ${state.actor.mpPlus}`,
+            ]}
+            index={cultivation}
+            choose={cultivate}
+          />
+        )}
       </section>
       <aside>
         <div>
@@ -697,6 +793,9 @@ export default function OriginalWorld() {
           <button onClick={() => setMenu({ tab: 0, index: 0 })}>
             行囊 <kbd>M</kbd>
           </button>
+          <button onClick={() => setCultivation(0)}>
+            修炼 <kbd>R</kbd>
+          </button>
           <button onClick={exportJson}>下载 JSON</button>
           <button onClick={() => file.current?.click()}>读取 JSON</button>
         </nav>
@@ -705,7 +804,7 @@ export default function OriginalWorld() {
         移动 <kbd>WASD</kbd>
         <kbd>方向键</kbd> · 互动 <kbd>Z</kbd>
         <kbd>Enter</kbd> · 菜单 <kbd>M</kbd>
-        <kbd>Tab</kbd> · 返回 <kbd>Esc</kbd>
+        <kbd>Tab</kbd> · 修炼 <kbd>R</kbd> · 返回 <kbd>Esc</kbd>
       </footer>
       <input
         hidden
