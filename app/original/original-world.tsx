@@ -125,6 +125,16 @@ import "./menu.css";
 const W = 640,
   H = 480,
   T = 32;
+
+const organizedBagEntries = (actor: SceneActorState) =>
+  bagEntries(actor).sort(
+    (a, b) =>
+      a.category.localeCompare(b.category, "zh-CN") ||
+      Number(b.equipped) - Number(a.equipped) ||
+      a.id - b.id,
+  );
+const organizedSkills = (actor: SceneActorState) =>
+  learnedSkills(actor).sort((a, b) => a.type - b.type || a.id - b.id);
 type WorldSave = {
   format: "rmxp-hero-original-world-save";
   version: 1;
@@ -1585,8 +1595,8 @@ export default function OriginalWorld() {
           return;
         }
         if (menu) {
-          const entries = bagEntries(stateRef.current.actor),
-            skills = learnedSkills(stateRef.current.actor),
+          const entries = organizedBagEntries(stateRef.current.actor),
+            skills = organizedSkills(stateRef.current.actor),
             length =
               menu.tab === 0
                 ? Math.max(1, entries.length)
@@ -2717,7 +2727,7 @@ function GameMenu({
   openCheat: () => void;
 }) {
   const tabs = ["行囊", "状态", "功夫"],
-    entries = bagEntries(actor),
+    entries = organizedBagEntries(actor),
     stats = derivedStats(actor),
     profile = actorStatusProfile(actor);
   return (
@@ -2740,22 +2750,33 @@ function GameMenu({
         <section className="bag-list">
           {entries.length ? (
             entries.map((entry, i) => (
+              <div className="inventory-fragment" key={entry.key}>
+                {(i === 0 || entries[i - 1].category !== entry.category) && (
+                  <header className="equipment-category">
+                    <span>{entry.category}</span>
+                    <small>
+                      {entries.filter((item) => item.category === entry.category).length} 件
+                    </small>
+                  </header>
+                )}
               <button
-                key={entry.key}
                 className={menu.index === i ? "active" : ""}
                 onMouseEnter={() => setMenu({ tab: 0, index: i })}
                 onClick={() => activate(entry)}
               >
                 <i className={`item-pixel kind-${entry.kind}`} />
                 <span>
+                  <small className="item-slot">{entry.slot}</small>
                   <b>
                     {entry.name}
                     {entry.equipped ? "〔装备中〕" : ""}
                   </b>
                   <small>{entry.description}</small>
+                  <em className="item-bonuses">{entry.bonuses}</em>
                 </span>
                 <em>×{entry.amount}</em>
               </button>
+              </div>
             ))
           ) : (
             <p>行囊空空如也。</p>
@@ -3070,28 +3091,41 @@ function SkillRows({
   setMenu: (value: { tab: number; index: number }) => void;
   activate: (id?: number, parry?: boolean) => void;
 }) {
-  const skills = learnedSkills(actor);
+  const skills = organizedSkills(actor);
   return (
     <section className="kungfu-list">
       {skills.length ? (
         skills.map((skill, i) => (
+          <div className="kungfu-fragment" key={skill.id}>
+            {(i === 0 || skills[i - 1].category !== skill.category) && (
+              <header className="kungfu-category">
+                <span>{skill.category}</span>
+                <small>
+                  {skills.filter((item) => item.category === skill.category).length} 门
+                </small>
+              </header>
+            )}
           <button
             className={index === i ? "active" : ""}
-            key={skill.id}
             onMouseEnter={() => setMenu({ tab: 2, index: i })}
             onClick={() => activate(skill.id)}
           >
             <b>
-              {skill.name}
-              {skill.equipped ? "〔运用〕" : ""}
-              {skill.parrying ? "〔招架〕" : ""}
+              <small>{skill.category}</small>
+              <span>{skill.name}</span>
             </b>
             <span>{skill.level} 级</span>
             <em>
               {levelTitle(skill.level)} · 第 {levelTier(skill.level)}/50 阶 ·{" "}
               {skill.points} 点
             </em>
+            <i className="skill-tags">
+              {skill.equipped && <span>当前运用</span>}
+              {skill.parrying && <span>用于招架</span>}
+              {!skill.equipped && !skill.parrying && <span>已习得</span>}
+            </i>
           </button>
+          </div>
         ))
       ) : (
         <p>尚未学会任何功夫，可向江湖人物拜师请教。</p>

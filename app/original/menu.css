@@ -51,7 +51,30 @@
   align-content: start;
   gap: 6px;
 }
-.bag-list > button {
+.inventory-fragment,
+.kungfu-fragment {
+  display: contents;
+}
+.equipment-category,
+.kungfu-category {
+  grid-column: 1/-1;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-top: 5px;
+  padding: 8px 11px;
+  color: #d9bd72;
+  border-left: 3px solid #c49d4f;
+  background: linear-gradient(90deg, #9d763327, transparent 72%);
+  letter-spacing: 0.16em;
+}
+.equipment-category small,
+.kungfu-category small {
+  color: #716b5e;
+  font: 9px monospace;
+  letter-spacing: 0;
+}
+.bag-list button {
   display: grid;
   grid-template-columns: 34px minmax(0, 1fr) 42px;
   align-items: center;
@@ -64,7 +87,7 @@
   background: #ffffff05;
   color: #ddd3b5;
 }
-.bag-list > button.active {
+.bag-list button.active {
   border-color: #b39b58;
   background: #82663338;
 }
@@ -79,6 +102,18 @@
   overflow: hidden;
   text-overflow: ellipsis;
   max-width: 410px;
+}
+.bag-list .item-slot {
+  width: max-content;
+  color: #c7a858;
+  font: 8px monospace;
+  letter-spacing: 0.12em;
+}
+.bag-list .item-bonuses {
+  width: auto;
+  color: #7fa489;
+  text-align: left;
+  font: 9px monospace;
 }
 .bag-list em {
   width: 42px;
@@ -239,9 +274,36 @@
 .kungfu-list em {
   color: #aca58e;
 }
+.kungfu-list button > b {
+  display: grid;
+  gap: 3px;
+}
+.kungfu-list button > b small {
+  color: #8e7950;
+  font: 8px monospace;
+  letter-spacing: 0.13em;
+}
+.kungfu-list button > b span {
+  color: #e7d9b6;
+  font-size: 13px;
+}
 .kungfu-list em {
-  grid-column: 1/3;
+  grid-column: 1/2;
   font-size: 10px;
+}
+.skill-tags {
+  grid-column: 2;
+  display: flex;
+  justify-content: flex-end;
+  gap: 4px;
+  font-style: normal;
+}
+.skill-tags span {
+  padding: 3px 6px;
+  color: #d8bd73;
+  border: 1px solid #b9924355;
+  background: #8d69252e;
+  font: 8px monospace;
 }
 .game-menu > footer {
   grid-area: help;

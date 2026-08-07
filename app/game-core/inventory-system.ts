@@ -9,6 +9,9 @@ export type BagEntry = {
   name: string;
   description: string;
   equipped: boolean;
+  category: string;
+  slot: string;
+  bonuses: string;
 };
 const pair = (value: unknown): [number, number] =>
   Array.isArray(value)
@@ -62,12 +65,44 @@ export function bagEntries(actor: SceneActorState): BagEntry[] {
             : kind === 3
               ? actor.armorIds.includes(id)
               : false,
+        category: entryCategory(kind, record),
+        slot: entrySlot(kind, record),
+        bonuses: entryBonuses(record),
       },
     ];
   });
 }
 function record(entry: BagEntry): OriginalRecord {
   return table(entry.kind)[entry.id] || {};
+}
+const weaponKinds = ["剑器", "刀兵", "杖棍", "鞭索"];
+const armorKinds = ["衣装", "内甲", "饰品", "鞋履", "腰带", "披风", "工具"];
+function entryCategory(kind: number, item: OriginalRecord) {
+  if (kind === 1) return item.is_book ? "武学秘籍" : "消耗与杂物";
+  if (kind === 2) return `武器 · ${weaponKinds[Number(item.type || 0)] || "奇门"}`;
+  return `防具 · ${armorKinds[Number(item.kind || 0)] || "其他"}`;
+}
+function entrySlot(kind: number, item: OriginalRecord) {
+  if (kind === 1) return item.is_book ? "研读" : "使用";
+  if (kind === 2) return "主手武器";
+  return armorKinds[Number(item.kind || 0)] || "防具";
+}
+function entryBonuses(item: OriginalRecord) {
+  const labels: Array<[string, string]> = [
+    ["add_atk", "攻击"],
+    ["add_def", "防御"],
+    ["add_hit", "命中"],
+    ["add_eva", "闪避"],
+    ["add_str", "膂力"],
+    ["add_agi", "敏捷"],
+    ["add_int", "悟性"],
+    ["add_bon", "根骨"],
+  ];
+  const values = labels.flatMap(([key, label]) => {
+    const value = Number(item[key] || 0);
+    return value ? [`${label}${value > 0 ? "+" : ""}${value}`] : [];
+  });
+  return values.length ? values.join(" · ") : "无常驻属性加成";
 }
 export function equipmentBonus(
   actor: SceneActorState,

@@ -80,3 +80,17 @@ test("equipment slots and bonuses follow original records", () => {
   assert.equal(derivedStats(a).atk, 17);
   assert.equal(derivedStats(a).pdef, 5);
 });
+
+test("行囊条目公开现代装备界面所需的门类、槽位与属性摘要", () => {
+  const a = actor();
+  a.inventory["2:16"] = 1;
+  a.inventory["3:24"] = 1;
+  const entries = bagEntries(a);
+  const sword = entries.find((entry) => entry.key === "2:16")!;
+  const armor = entries.find((entry) => entry.key === "3:24")!;
+  assert.equal(sword.category, "武器 · 剑器");
+  assert.equal(sword.slot, "主手武器");
+  assert.match(sword.bonuses, /攻击\+65/);
+  assert.equal(armor.category, "防具 · 内甲");
+  assert.match(armor.bonuses, /防御\+60/);
+});
