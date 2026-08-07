@@ -73,3 +73,14 @@ test("砍坛主写入击杀名单但不按普通NPC扣除道德", () => {
   assert.deepEqual(a.killList, [163]);
   assert.equal(a.morals, 128);
 });
+
+test("清虚道长首次掉落三角石板并在战果中明确提示", () => {
+  const a = actor();
+  const first = settleVictoryLoot(a, 102, true);
+  assert.deepEqual(a.stoneList, [102]);
+  assert.equal(first.items.includes("三角石板"), true);
+  assert.match(first.text, /战利品：.*三角石板/);
+  const repeated = settleVictoryLoot(a, 102, true);
+  assert.deepEqual(a.stoneList, [102]);
+  assert.doesNotMatch(repeated.text, /三角石板/);
+});

@@ -94,3 +94,13 @@ test("行囊条目公开现代装备界面所需的门类、槽位与属性摘�
   assert.equal(armor.category, "防具 · 内甲");
   assert.match(armor.bonuses, /防御\+60/);
 });
+
+test("原版石板来源记录在行囊合并显示为关键物品", () => {
+  const a = actor();
+  a.stoneList = [102, 111];
+  const stone = bagEntries(a).find((entry) => entry.key === "stone:19")!;
+  assert.equal(stone.name, "三角石板");
+  assert.equal(stone.amount, 2);
+  assert.equal(stone.slot, "关键物品");
+  assert.equal(stone.bonuses, "已收集 2/6");
+});

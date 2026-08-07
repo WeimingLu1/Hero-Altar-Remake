@@ -22,7 +22,10 @@ export function settleVictoryLoot(
     const id = Math.abs(signedId);
     if (kind === 1 && id === 19) {
       actor.stoneList ||= [];
-      if (!actor.stoneList.includes(enemyId)) actor.stoneList.push(enemyId);
+      if (!actor.stoneList.includes(enemyId)) {
+        actor.stoneList.push(enemyId);
+        names.push(String(originalTables.items[19]?.name || "三角石板"));
+      }
       continue;
     }
     if (kind === 1 && id >= 21 && id <= 28 && actor.tanId + 20 !== id) continue;

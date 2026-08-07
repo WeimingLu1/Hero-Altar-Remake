@@ -43,7 +43,7 @@ export function fullHp(actor: SceneActorState) {
   return value;
 }
 export function bagEntries(actor: SceneActorState): BagEntry[] {
-  return Object.entries(actor.inventory).flatMap(([key, amount]) => {
+  const entries = Object.entries(actor.inventory).flatMap(([key, amount]) => {
     const [kind, id] = key.split(":").map(Number),
       record = table(kind)[id];
     if (!record || amount <= 0 || kind < 1 || kind > 3) return [];
@@ -71,6 +71,23 @@ export function bagEntries(actor: SceneActorState): BagEntry[] {
       },
     ];
   });
+  const stoneCount = actor.stoneList?.length || 0;
+  if (stoneCount > 0) {
+    const stone = originalTables.items[19] || {};
+    entries.push({
+      key: "stone:19",
+      kind: 1,
+      id: 19,
+      amount: stoneCount,
+      name: String(stone.name || "三角石板"),
+      description: String(stone.description || "六芒星阵所需的古老石板。"),
+      equipped: false,
+      category: "消耗与杂物",
+      slot: "关键物品",
+      bonuses: `已收集 ${stoneCount}/6`,
+    });
+  }
+  return entries;
 }
 function record(entry: BagEntry): OriginalRecord {
   return table(entry.kind)[entry.id] || {};
