@@ -539,7 +539,7 @@ export default function OriginalWorld() {
       return;
     }
     if (!runAt(p.x + d[0], p.y + d[1]))
-      setNotice("靠近人物并按 Z / Enter 互动");
+      setNotice("靠近人物并按 E / Enter 互动");
   }, [runAt]);
   const chooseNpc = useCallback(
     (id: number, option: NpcOption) => {
@@ -1122,7 +1122,7 @@ export default function OriginalWorld() {
         text = applyCheatQuick(next.actor, action);
       sync(next);
       setCheatConfirm(null);
-      setNotice(`${text} 按 F 可保存进度。`);
+      setNotice(`${text} 点击右上角“保存”可保存进度。`);
     },
     [sync],
   );
@@ -1131,7 +1131,7 @@ export default function OriginalWorld() {
       const next = structuredClone(stateRef.current),
         text = adjustCheatStat(next.actor, index, direction);
       sync(next);
-      setNotice(`${text} 按 F 可保存进度。`);
+      setNotice(`${text} 点击右上角“保存”可保存进度。`);
     },
     [sync],
   );
@@ -1142,7 +1142,7 @@ export default function OriginalWorld() {
       if (!row) return;
       const text = adjustCheatSkill(next.actor, row.id, direction);
       sync(next);
-      setNotice(`${text} 按 F 可保存进度。`);
+      setNotice(`${text} 点击右上角“保存”可保存进度。`);
     },
     [sync],
   );
@@ -1150,18 +1150,11 @@ export default function OriginalWorld() {
     const down = (e: KeyboardEvent) => {
         const k = e.key.toLowerCase();
         if (
-          [
-            "arrowup",
-            "arrowdown",
-            "arrowleft",
-            "arrowright",
-            " ",
-            "tab",
-          ].includes(k)
+          ["arrowup", "arrowdown", "arrowleft", "arrowright", "tab"].includes(k)
         )
           e.preventDefault();
         keys.current.add(k);
-        const confirm = ["z", "enter", " "].includes(k),
+        const confirm = ["e", "enter"].includes(k),
           cancel = ["x", "escape"].includes(k);
         if (screen !== "play") {
           if (screen === "title") {
@@ -1243,7 +1236,7 @@ export default function OriginalWorld() {
                   : Math.max(1, skills.length);
           if (k === "q")
             setCheatMenu({ tab: (cheatMenu.tab + 2) % 3, index: 0 });
-          else if (k === "e" || k === "tab")
+          else if (k === "tab")
             setCheatMenu({ tab: (cheatMenu.tab + 1) % 3, index: 0 });
           else if (k === "arrowup" || k === "w")
             setCheatMenu({
@@ -1269,7 +1262,7 @@ export default function OriginalWorld() {
             changeCheatStat(cheatMenu.index, 1);
           else if (confirm && cheatMenu.tab === 2)
             changeCheatSkill(cheatMenu.index, 1);
-          else if (cancel || k === "k" || k === "f5") setCheatMenu(null);
+          else if (cancel || k === "k") setCheatMenu(null);
           return;
         }
         if (life) {
@@ -1477,7 +1470,7 @@ export default function OriginalWorld() {
           else if (k === "arrowdown" || k === "s")
             setFlyMenu((flyMenu + 1) % length);
           else if (confirm) flyTo(flyMenu);
-          else if (cancel || k === "h" || k === "f6") setFlyMenu(null);
+          else if (cancel || k === "h") setFlyMenu(null);
           return;
         }
         if (itemConfirm) {
@@ -1532,7 +1525,7 @@ export default function OriginalWorld() {
             activateSkill(skills[menu.index]?.id);
           else if ((k === "c" || k === "r") && menu.tab === 2)
             activateSkill(skills[menu.index]?.id, true);
-          else if (cancel || k === "m" || k === "e") setMenu(null);
+          else if (cancel || k === "m") setMenu(null);
           return;
         }
         if (eventText && (confirm || cancel)) {
@@ -1588,15 +1581,14 @@ export default function OriginalWorld() {
           return;
         }
         if (confirm) interact();
-        else if (k === "f") save();
-        else if (k === "k" || k === "f5") setCheatMenu({ tab: 0, index: 0 });
+        else if (k === "k") setCheatMenu({ tab: 0, index: 0 });
         else if (k === "r") setCultivation(0);
-        else if (k === "h" || k === "f6") openFlyMenu();
+        else if (k === "h") openFlyMenu();
         else if (k === "t")
           setEventText(
             `任务簿\n${taskJournal(stateRef.current.tasks).join("\n")}`,
           );
-        else if (["m", "e", "tab"].includes(k)) setMenu({ tab: 0, index: 0 });
+        else if (["m", "tab"].includes(k)) setMenu({ tab: 0, index: 0 });
         else if (cancel) location.href = "/";
       },
       up = (e: KeyboardEvent) => {
@@ -1811,7 +1803,7 @@ export default function OriginalWorld() {
               </button>
             ))}
           </nav>
-          <em>W/S 或方向键选择 · Z/Enter 确认</em>
+          <em>W/S 或方向键选择 · E/Enter 确认</em>
         </section>
         <input
           hidden
@@ -1831,7 +1823,7 @@ export default function OriginalWorld() {
           <p>{String(originalText.scroll_start || "").trim()}</p>
         </div>
         <button onClick={() => setScreen("create")}>跳过序章，创建人物</button>
-        <small>Z/Enter 或 X/Esc 跳过</small>
+        <small>E/Enter 或 X/Esc 跳过</small>
       </main>
     );
   if (screen === "help")
@@ -1839,10 +1831,10 @@ export default function OriginalWorld() {
       <main className="launch-screen help-screen">
         <section>
           <h1>操作说明</h1>
-          <p>移动：WASD / 方向键　互动：Z / Enter / 空格</p>
-          <p>行囊与人物：M / E / Tab　修炼：R　轻功：H / F6</p>
-          <p>任务簿：T　保存：F　战斗绝招：Q　战斗物品：I</p>
-          <p>秘技菜单：K / F5（可直接强化资源、数值和已学功夫）</p>
+          <p>移动：WASD / 方向键　互动与确认：E / Enter</p>
+          <p>行囊与人物：M / Tab　修炼：R　轻功：H</p>
+          <p>任务簿：T　保存：点击右上角按钮　战斗绝招：Q　战斗物品：I</p>
+          <p>秘技菜单：K（可直接强化资源、数值和已学功夫）</p>
           <p>返回与逃跑：X / Esc；生死战也可用 G 尝试逃跑。</p>
           <button onClick={() => setScreen("title")}>返回标题</button>
         </section>
@@ -1927,7 +1919,7 @@ export default function OriginalWorld() {
             </div>
           )}
           <p>{notice}</p>
-          <footer>W/S 选择 · A/D 调整 · Z/Enter 确认 · X/Esc 返回</footer>
+          <footer>W/S 选择 · A/D 调整 · E/Enter 确认 · X/Esc 返回</footer>
         </section>
       </main>
     );
@@ -1941,9 +1933,7 @@ export default function OriginalWorld() {
           <span>正式版 · 69 MAPS</span>
         </div>
         <div className="header-actions">
-          <button onClick={save}>
-            保存 <kbd>F</kbd>
-          </button>
+          <button onClick={save}>保存</button>
           <button onClick={() => setScreen("title")}>主菜单</button>
         </div>
       </header>
@@ -2169,11 +2159,11 @@ export default function OriginalWorld() {
       </aside>
       <footer>
         移动 <kbd>WASD</kbd>
-        <kbd>方向键</kbd> · 互动 <kbd>Z</kbd>
+        <kbd>方向键</kbd> · 互动 <kbd>E</kbd>
         <kbd>Enter</kbd> · 菜单 <kbd>M</kbd>
-        <kbd>Tab</kbd> · 修炼 <kbd>R</kbd> · 轻功 <kbd>H</kbd>
-        <kbd>F6</kbd> · 任务 <kbd>T</kbd> · 保存 <kbd>F</kbd> · 返回
-        <kbd>Esc</kbd> · 秘技 <kbd>K</kbd>/<kbd>F5</kbd>
+        <kbd>Tab</kbd> · 修炼 <kbd>R</kbd> · 轻功 <kbd>H</kbd>· 任务{" "}
+        <kbd>T</kbd> · 保存（右上角） · 返回 <kbd>Esc</kbd> · 秘技
+        <kbd>K</kbd>
       </footer>
       <input
         hidden
@@ -2202,7 +2192,7 @@ function Arcade({
             {name}
           </b>
         ))}
-        <small>W/S 选择 · Z/Enter 确认 · X/Esc 返回</small>
+        <small>W/S 选择 · E/Enter 确认 · X/Esc 返回</small>
       </section>
     );
   if (game.kind === "dance") {
@@ -2241,7 +2231,7 @@ function Arcade({
         ┐<span style={{ left: shotX - 90, top: shotY - 80 }}>●</span>
       </div>
       <small>
-        Z/Enter 开始游标，再按一次投球 · 命中区 110–128 · X/Esc 离开
+        E/Enter 开始游标，再按一次投球 · 命中区 110–128 · X/Esc 离开
       </small>
     </section>
   );
@@ -2310,7 +2300,7 @@ function Choice({
           {i === index && <i>◆</i>}
         </button>
       ))}
-      <small>W/S 选择 · Z 确认 · X 返回</small>
+      <small>W/S 选择 · E/Enter 确认 · X/Esc 返回</small>
     </div>
   );
 }
@@ -2371,7 +2361,7 @@ function BattleView({
       </div>
       <nav>
         <button onClick={battle.finished ? leave : fight}>
-          {battle.finished ? "处理战果" : "普通攻击"} <kbd>Z</kbd>
+          {battle.finished ? "处理战果" : "普通攻击"} <kbd>E</kbd>
         </button>
         <button onClick={openSpecial} disabled={Boolean(battle.finished)}>
           绝招 <kbd>Q</kbd>
@@ -2427,7 +2417,7 @@ function SpecialPicker({
       ) : (
         <p>当前装配的功夫没有可用绝招。</p>
       )}
-      <footer>W/S 选择 · Z 施展 · X 返回</footer>
+      <footer>W/S 选择 · E/Enter 施展 · X/Esc 返回</footer>
     </div>
   );
 }
@@ -2525,7 +2515,7 @@ function GameMenu({
         />
       )}
       <footer>
-        A/D 或 Tab 切页 · W/S 选择 · Z 装配 · C/R 设为招架 · X 关闭
+        A/D 或 Tab 切页 · W/S 选择 · E/Enter 装配 · C/R 设为招架 · X/Esc 关闭
       </footer>
     </div>
   );
@@ -2626,7 +2616,7 @@ function CheatMenu({
           ))}
       </section>
       <footer>
-        W/S 选择 · Q/E/Tab 切页 · A/D 调整 · Z 增加/施展 · K/F5 关闭
+        W/S 选择 · Q/Tab 切页 · A/D 调整 · E/Enter 增加/施展 · K/Esc 关闭
       </footer>
     </div>
   );
