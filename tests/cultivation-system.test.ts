@@ -63,6 +63,15 @@ test("打坐速度、双倍内力阈值与上限增长保持原作整数公式",
   assert.equal(a.fp, 0);
 });
 
+test("打坐达到当前内功允许的内力上限时报告封顶", () => {
+  const a = actor();
+  a.maxFp = fullFp(a);
+  a.fp = a.maxFp * 2;
+  const result = meditateForce(a);
+  assert.equal(result.capped, true);
+  assert.equal(a.fp, a.maxFp);
+});
+
 test("加力被限制为内功有效等级的一半", () => {
   const a = actor();
   assert.equal(setForcePower(a, 999), 75);

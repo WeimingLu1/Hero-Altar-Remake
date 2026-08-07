@@ -9,6 +9,7 @@ import {
   npcOptionLabel,
   shopGoods,
   studyOnce,
+  npcStatus,
 } from "../app/game-core/npc-system";
 import type { SceneActorState } from "../app/game-core/scene-event";
 const actor = (): SceneActorState => ({
@@ -55,6 +56,14 @@ test("merchant menu and stock come from enemy database", () => {
   assert.equal(goods.length, 2);
   assert.equal(goods[0].name, "白玉豆腐");
   assert.equal(npcOptionLabel.battle, "战斗");
+});
+test("NPC 状态完整展示原作描述、装备、携带物品与武功", () => {
+  const status = npcStatus(3).join("\n");
+  assert.match(status, /人物描述：六扇门里的捕快/);
+  assert.match(status, /装备：武器/);
+  assert.match(status, /携带物品：/);
+  assert.match(status, /武功：/);
+  assert.doesNotMatch(status, /身上没有可见物品/);
 });
 test("buy uses original price and item indexing", () => {
   const a = actor(),

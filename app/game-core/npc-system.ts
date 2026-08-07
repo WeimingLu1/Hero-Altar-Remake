@@ -44,15 +44,45 @@ export const npcOptionLabel: Record<NpcOption, string> = {
 
 export function npcStatus(id: number) {
   const npc = enemy(id),
-    items = ((npc.sell_item as number[][]) || [])
-      .map(([k, i]) => String(table(k)[i]?.name || ""))
-      .filter(Boolean);
+    description = ((npc.des_text as string[]) || []).filter(Boolean).join(""),
+    equipment = [
+      Number(npc.weapon_id || 0) > 0
+        ? `武器·${originalTables.weapons[Number(npc.weapon_id)]?.name || npc.weapon_id}`
+        : "",
+      Number(npc.armor_id || 0) > 0
+        ? `防具·${originalTables.armors[Number(npc.armor_id)]?.name || npc.armor_id}`
+        : "",
+    ].filter(Boolean),
+    carried = [npc.item1, npc.item2, npc.item3, npc.item4]
+      .filter((entry): entry is number[] => Array.isArray(entry))
+      .map(([kind, itemId]) =>
+        kind > 0 && itemId > 0 ? String(table(kind)[itemId]?.name || "") : "",
+      )
+      .filter(Boolean),
+    goods = ((npc.sell_item as number[][]) || [])
+      .map(([kind, itemId]) => String(table(kind)[itemId]?.name || ""))
+      .filter(Boolean),
+    skills = ((npc.skill_list as number[][]) || [])
+      .map(
+        ([skillId, level]) =>
+          `${originalTables.kungfus[skillId]?.name || `功夫${skillId}`} ${level}级`,
+      )
+      .filter(Boolean),
+    activeSkills = [...new Set((npc.skill_use as number[]) || [])]
+      .filter((skillId) => skillId > 0)
+      .map((skillId) => String(originalTables.kungfus[skillId]?.name || skillId));
   return [
-    `${npc.name || "无名氏"}看起来约${Math.max(1, Math.floor(Number(npc.age || 10) / 10))}0多岁`,
-    `气血 ${npc.hp || 0}/${npc.maxhp || 0} · 内力 ${npc.fp || 0}/${npc.maxfp || 0}`,
-    `膂力 ${npc.str || 0} · 敏捷 ${npc.agi || 0} · 悟性 ${npc.int || 0}`,
-    items.length ? `出售：${items.join("、")}` : "身上没有可见物品",
-    ...((npc.des_text as string[]) || []).filter(Boolean),
+    `【${npc.name || "无名氏"}】${Number(npc.gender) === 1 ? "女" : "男"} · ${npc.age || 0}岁`,
+    description ? `人物描述：${description}` : "人物描述：此人沉默寡言，来历不明。",
+    `气血 ${npc.hp || 0}/${npc.maxhp || 0} · 内力 ${npc.fp || 0}/${npc.maxfp || 0} · 法力 ${npc.mp || 0}/${npc.maxmp || 0}`,
+    `膂力 ${npc.str || 0} · 敏捷 ${npc.agi || 0} · 悟性 ${npc.int || 0} · 根骨 ${npc.base_bon || 0}`,
+    `攻击 ${npc.atk || npc.base_atk || 0} · 防御 ${npc.pdef || npc.base_def || 0} · 闪避 ${npc.eva || npc.base_eva || 0} · 命中 ${npc.base_hit || 0}`,
+    `经验 ${npc.exp || 0} · 银两 ${npc.gold || 0} · 道德 ${npc.morals || 0}`,
+    `装备：${equipment.length ? equipment.join("、") : "无"}`,
+    `携带物品：${carried.length ? [...new Set(carried)].join("、") : "无"}`,
+    `武功：${skills.length ? skills.join("、") : "未显露武功"}`,
+    `正在运用：${activeSkills.length ? activeSkills.join("、") : "基本功夫"}`,
+    ...(goods.length ? [`出售货物：${goods.join("、")}`] : []),
   ];
 }
 

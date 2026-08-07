@@ -943,7 +943,8 @@ export default function OriginalWorld() {
   const cultivate = useCallback(
     (index: number) => {
       const next = structuredClone(stateRef.current);
-      let text = "";
+      let text = "",
+        keepGoing = true;
       if (index === 0) {
         const available = cultivationAvailability(next.actor, "meditate");
         if (!available.ok) {
@@ -954,10 +955,11 @@ export default function OriginalWorld() {
         text = !result.ok
           ? "尚未装备内功。"
           : result.capped
-            ? "内功修为不足，内力上限无法继续提高。"
+            ? "内力已达当前内功修为上限，已自动停止打坐。"
             : result.increased
               ? "打坐周天完成，内力上限提高一点。"
               : "你凝神打坐，内息渐长。";
+        keepGoing = result.ok && !result.capped;
       } else if (index === 1) {
         const available = cultivationAvailability(next.actor, "magic");
         if (!available.ok) {
@@ -968,10 +970,11 @@ export default function OriginalWorld() {
         text = !result.ok
           ? "尚未装备法术。"
           : result.capped
-            ? "法术修为不足，法力上限无法继续提高。"
+            ? "法力已达当前法术修为上限，已自动停止冥思。"
             : result.increased
               ? "冥思完成，法力上限提高一点。"
               : "你闭目冥思，法力渐长。";
+        keepGoing = result.ok && !result.capped;
       } else if (index === 2) {
         const available = cultivationAvailability(next.actor, "recover");
         if (!available.ok) {
@@ -1017,7 +1020,7 @@ export default function OriginalWorld() {
       }
       sync(next);
       setNotice(text);
-      return true;
+      return keepGoing;
     },
     [sync],
   );
@@ -2536,8 +2539,10 @@ function Choice({
   message?: string;
   wide?: boolean;
 }) {
+  const density =
+    items.length > 18 ? " three-column dense" : items.length > 8 ? " two-column" : "";
   return (
-    <div className={`world-choice${wide ? " wide" : ""}`}>
+    <div className={`world-choice large${wide ? " wide" : ""}${density}`}>
       <b>{title}</b>
       <div className="choice-items">
         {items.map((item, i) => (
