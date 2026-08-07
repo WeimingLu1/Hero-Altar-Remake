@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import maps from "../game-data/maps.json";
+import { friendlyEventName } from "../app/game-core/original-world";
 import {
   executeMapCommands,
   selectSceneEvent,
@@ -48,4 +49,10 @@ test("transfer and Scene_Event hooks retain exact arguments", () => {
     fade: 0,
   });
   assert.deepEqual(result.sceneEvent, { type: 13, id: 64, extra: 0 });
+});
+
+test("internal transfer event names resolve to their destination map", () => {
+  assert.equal(friendlyEventName("EV010", 24), "五指山");
+  assert.equal(friendlyEventName("出口", 24), "出口");
+  assert.equal(friendlyEventName("125"), "");
 });

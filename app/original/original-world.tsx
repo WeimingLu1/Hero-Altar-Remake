@@ -2,6 +2,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import {
   activePage,
+  friendlyEventName,
   getOriginalMap,
   originalStart,
   tileAt,
@@ -2051,7 +2052,7 @@ function eventVisual(event: MapEvent, state: WorldSave): EventVisual {
       canGetCaihua: true,
     }),
     graphic = String(page.graphic?.character_name || ""),
-    cleanName = /^\d+$/.test(event.name.trim()) ? "" : event.name.trim();
+    cleanName = friendlyEventName(event.name, result.transfer?.mapId);
   if (scene?.type === 0 && scene.id !== undefined)
     return {
       kind: "npc",
