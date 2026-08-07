@@ -1148,6 +1148,16 @@ export default function OriginalWorld() {
   );
   useEffect(() => {
     const down = (e: KeyboardEvent) => {
+        const target = e.target as HTMLElement | null;
+        if (e.isComposing || e.keyCode === 229) return;
+        if (
+          target?.tagName === "INPUT" ||
+          target?.tagName === "TEXTAREA" ||
+          target?.isContentEditable
+        ) {
+          if (e.key === "Escape") target.blur();
+          return;
+        }
         const k = e.key.toLowerCase();
         if (
           ["arrowup", "arrowdown", "arrowleft", "arrowright", "tab"].includes(k)
@@ -1171,10 +1181,6 @@ export default function OriginalWorld() {
           }
           if (screen === "help") {
             if (confirm || cancel) setScreen("title");
-            return;
-          }
-          if ((e.target as HTMLElement)?.tagName === "INPUT") {
-            if (cancel) (e.target as HTMLInputElement).blur();
             return;
           }
           if (creator.step === 1) {
@@ -1438,8 +1444,10 @@ export default function OriginalWorld() {
           if (k === "q" || k === "c") setSpecialMenu(0);
           else if (k === "i") setBattleItem(0);
           else if (k === "g") fleeBattle();
-          else if (confirm) fight();
-          else if (cancel) {
+          else if (confirm) {
+            if (battle.finished) leaveBattle();
+            else fight();
+          } else if (cancel) {
             if (battle.mode === "spar") leaveBattle();
             else fleeBattle();
           }
@@ -1877,6 +1885,7 @@ export default function OriginalWorld() {
                     setCreator({ ...creator, name: e.target.value, index: 1 })
                   }
                   onKeyDown={(e) => {
+                    if (e.nativeEvent.isComposing) return;
                     if (e.key === "Enter") {
                       e.currentTarget.blur();
                       setCreator({ ...creator, index: 2 });
@@ -1992,7 +2001,7 @@ export default function OriginalWorld() {
             hp={state.actor.hp}
             maxHp={state.actor.maxHp}
             fight={fight}
-            leave={battle.mode === "spar" ? leaveBattle : fleeBattle}
+            leave={leaveBattle}
             openSpecial={() => setSpecialMenu(0)}
             openItem={() => setBattleItem(0)}
             flee={fleeBattle}
