@@ -46,6 +46,8 @@ test("连续请教和修炼时仍可用 W/S 停止并切换项目", () => {
   );
   assert.match(source, /progress=\{studyProgress\}/);
   assert.match(source, /progress=\{cultivationProgress\}/);
+  assert.match(source, /message=\{notice\}/);
+  assert.match(source, /wide/);
 });
 
 test("外部资源数值使用紧凑格式并保留完整提示", () => {

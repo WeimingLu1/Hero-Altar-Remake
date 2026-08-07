@@ -6,6 +6,7 @@ import {
   fullFp,
   healWounds,
   meditateForce,
+  practiceOptions,
   practiceOnce,
   recoverHp,
   setForcePower,
@@ -114,4 +115,15 @@ test("练功按基本功夫速度、经验与内力门槛增长专门功夫", ()
   assert.equal(result.leveled, true);
   assert.equal(a.skills["12"].level, 101);
   assert.equal(a.skills["12"].points, 0);
+});
+
+test("R 修炼菜单列出全部已学可练专门功夫而非仅限已运用功夫", () => {
+  const a = actor();
+  a.skills["2"] = { level: 100, points: 0 };
+  a.skills["12"] = { level: 50, points: 0 };
+  a.skillUse[0] = 0;
+  const options = practiceOptions(a);
+  assert.equal(options.some((skill) => skill.id === 12), true);
+  assert.equal(options.find((skill) => skill.id === 12)?.equipped, false);
+  assert.equal(options.some((skill) => skill.id === 16), false);
 });

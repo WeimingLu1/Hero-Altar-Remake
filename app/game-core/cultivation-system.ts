@@ -196,12 +196,19 @@ export function healWounds(actor: SceneActorState) {
 }
 
 export function practiceOptions(actor: SceneActorState) {
-  return [...new Set(actor.skillUse.slice(0, 3))]
-    .filter((id) => id > 11 && actor.skills[String(id)])
+  const equipped = new Set(actor.skillUse.slice(0, 3));
+  return Object.keys(actor.skills)
+    .map(Number)
+    .filter((id) => {
+      const type = Number(originalTables.kungfus[id]?.type || 0);
+      return id > 11 && ((type >= 2 && type <= 7) || type === 9);
+    })
+    .sort((a, b) => a - b)
     .map((id) => ({
       id,
       name: String(originalTables.kungfus[id]?.name || id),
       level: actor.skills[String(id)].level,
+      equipped: equipped.has(id),
     }));
 }
 

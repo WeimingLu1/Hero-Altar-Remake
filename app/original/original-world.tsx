@@ -1801,7 +1801,9 @@ export default function OriginalWorld() {
   }, [battle, screen, sync]);
   useEffect(() => {
     if (!cultivationActive || cultivation === null) return;
-    const id = window.setInterval(() => cultivate(cultivation), 1000 / 120);
+    const id = window.setInterval(() => {
+      if (!cultivate(cultivation)) setCultivationActive(false);
+    }, 1000 / 120);
     return () => window.clearInterval(id);
   }, [cultivate, cultivation, cultivationActive]);
   useEffect(() => {
@@ -2119,6 +2121,8 @@ export default function OriginalWorld() {
             index={study.index}
             choose={beginStudyAt}
             progress={studyProgress}
+            message={notice}
+            wide
           />
         )}
         {battle && (
@@ -2231,12 +2235,15 @@ export default function OriginalWorld() {
               `加力 +10 · 当前 ${state.actor.fpPlus} · ${cultivationInfo[4].requirement}${cultivationInfo[4].ok ? "" : "〔不可用〕"}`,
               `法点 +10 · 当前 ${state.actor.mpPlus} · ${cultivationInfo[5].requirement}${cultivationInfo[5].ok ? "" : "〔不可用〕"}`,
               ...practiceOptions(state.actor).map(
-                (skill) => `练习 ${skill.name} · ${skill.level} 级`,
+                (skill) =>
+                  `自行练习 ${skill.name} · ${skill.level} 级${skill.equipped ? " · 已运用" : ""}`,
               ),
             ]}
             index={cultivation}
             choose={beginCultivation}
             progress={cultivationProgress}
+            message={notice}
+            wide
           />
         )}
         {caihua && (
@@ -2518,26 +2525,32 @@ function Choice({
   index,
   choose,
   progress,
+  message,
+  wide = false,
 }: {
   title: string;
   items: string[];
   index: number;
   choose: (index: number) => void;
   progress?: { label: string; value: number; max: number; detail: string };
+  message?: string;
+  wide?: boolean;
 }) {
   return (
-    <div className="world-choice">
+    <div className={`world-choice${wide ? " wide" : ""}`}>
       <b>{title}</b>
-      {items.map((item, i) => (
-        <button
-          className={i === index ? "active" : ""}
-          onClick={() => choose(i)}
-          key={`${item}-${i}`}
-        >
-          <span>{item}</span>
-          {i === index && <i>◆</i>}
-        </button>
-      ))}
+      <div className="choice-items">
+        {items.map((item, i) => (
+          <button
+            className={i === index ? "active" : ""}
+            onClick={() => choose(i)}
+            key={`${item}-${i}`}
+          >
+            <span>{item}</span>
+            {i === index && <i>◆</i>}
+          </button>
+        ))}
+      </div>
       {progress && (
         <div className="training-progress">
           <span>
@@ -2557,6 +2570,7 @@ function Choice({
           <small>{progress.detail}</small>
         </div>
       )}
+      {message && <p className="training-message">{message}</p>}
       <small>W/S 选择 · E/Enter 确认 · X/Esc 返回</small>
     </div>
   );
