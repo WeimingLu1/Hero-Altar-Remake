@@ -9,7 +9,8 @@ export type CheatQuickAction =
   | "potential"
   | "attributes"
   | "skills5"
-  | "master";
+  | "master"
+  | "maxAll";
 
 export const cheatQuickOptions: Array<{
   id: CheatQuickAction;
@@ -41,6 +42,12 @@ export const cheatQuickOptions: Array<{
     detail: "百万资源、五千内法、四维 30、已学功夫 255",
     dangerous: true,
   },
+  {
+    id: "maxAll",
+    name: "全参数理论 MAX",
+    detail: "全部资源、属性、容貌、福缘、年龄与已学功夫达到数据上限",
+    dangerous: true,
+  },
 ];
 
 const cap = (value: number, maximum: number) =>
@@ -63,15 +70,19 @@ export function applyCheatQuick(
   if (action === "experience") actor.exp = cap(actor.exp + 100000, 4294967295);
   if (action === "potential")
     actor.potential = cap(actor.potential + 10000, 4294967295);
-  if (action === "attributes" || action === "master") {
-    actor.baseStr = actor.str = 30;
-    actor.baseAgi = actor.agi = 30;
-    actor.baseInt = actor.int = 30;
-    actor.baseBon = actor.bon = 30;
+  if (action === "attributes" || action === "master" || action === "maxAll") {
+    const value = action === "maxAll" ? 255 : 30;
+    actor.baseStr = actor.str = value;
+    actor.baseAgi = actor.agi = value;
+    actor.baseInt = actor.int = value;
+    actor.baseBon = actor.bon = value;
   }
-  if (action === "skills5" || action === "master")
+  if (action === "skills5" || action === "master" || action === "maxAll")
     for (const skill of Object.values(actor.skills))
-      skill.level = action === "master" ? 255 : Math.min(255, skill.level + 5);
+      skill.level =
+        action === "master" || action === "maxAll"
+          ? 255
+          : Math.min(255, skill.level + 5);
   if (action === "master") {
     actor.gold = Math.max(actor.gold, 1000000);
     actor.exp = Math.max(actor.exp, 1000000);
@@ -80,6 +91,12 @@ export function applyCheatQuick(
     actor.maxMp = Math.max(actor.maxMp, 5000);
     applyCheatQuick(actor, "recover");
     return "宗师秘技生效：资源、属性和已学功夫已经强化。";
+  }
+  if (action === "maxAll") {
+    for (let index = 0; index < cheatStats.length; index++)
+      maxCheatStat(actor, index);
+    applyCheatQuick(actor, "recover");
+    return "全参数已经达到理论上限。";
   }
   return (
     cheatQuickOptions.find((item) => item.id === action)?.name || "秘技生效。"
@@ -112,6 +129,13 @@ export function adjustCheatStat(
   return `${stat.name}调整为 ${value}。`;
 }
 
+export function maxCheatStat(actor: SceneActorState, index: number) {
+  const stat = cheatStats[index];
+  if (!stat) return "没有这个数值。";
+  (actor as unknown as Record<string, unknown>)[stat.key] = stat.max;
+  return `${stat.name}已经达到理论上限 ${stat.max}。`;
+}
+
 export function cheatSkillRows(actor: SceneActorState) {
   return Object.entries(actor.skills)
     .filter(([, skill]) => skill.level > 0)
@@ -132,4 +156,12 @@ export function adjustCheatSkill(
   skill.level = Math.max(1, Math.min(255, skill.level + direction * 5));
   skill.points = 0;
   return `${originalTables.kungfus[id]?.name || id}调整为 ${skill.level} 级。`;
+}
+
+export function maxCheatSkill(actor: SceneActorState, id: number) {
+  const skill = actor.skills[String(id)];
+  if (!skill) return "尚未学会这门功夫。";
+  skill.level = 255;
+  skill.points = 0;
+  return `${originalTables.kungfus[id]?.name || id}已经达到返璞归真 255 级。`;
 }

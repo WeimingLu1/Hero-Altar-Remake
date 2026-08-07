@@ -46,6 +46,7 @@ import {
 import {
   bagEntries,
   derivedStats,
+  fullHp,
   maxFood,
   maxWater,
   activateEntry,
@@ -106,8 +107,11 @@ import {
   cheatQuickOptions,
   cheatSkillRows,
   cheatStats,
+  maxCheatSkill,
+  maxCheatStat,
   type CheatQuickAction,
 } from "../game-core/cheat-system";
+import { actorStatusProfile, levelTitle } from "../game-core/status-system";
 import "./world.css";
 import "./choice.css";
 import "./battle.css";
@@ -1146,6 +1150,26 @@ export default function OriginalWorld() {
     },
     [sync],
   );
+  const maximizeCheatStat = useCallback(
+    (index: number) => {
+      const next = structuredClone(stateRef.current),
+        text = maxCheatStat(next.actor, index);
+      sync(next);
+      setNotice(`${text} 点击右上角“保存”可保存进度。`);
+    },
+    [sync],
+  );
+  const maximizeCheatSkill = useCallback(
+    (index: number) => {
+      const next = structuredClone(stateRef.current),
+        row = cheatSkillRows(next.actor)[index];
+      if (!row) return;
+      const text = maxCheatSkill(next.actor, row.id);
+      sync(next);
+      setNotice(`${text} 点击右上角“保存”可保存进度。`);
+    },
+    [sync],
+  );
   useEffect(() => {
     const down = (e: KeyboardEvent) => {
         const target = e.target as HTMLElement | null;
@@ -1268,6 +1292,10 @@ export default function OriginalWorld() {
             changeCheatStat(cheatMenu.index, 1);
           else if (confirm && cheatMenu.tab === 2)
             changeCheatSkill(cheatMenu.index, 1);
+          else if (k === "m" && cheatMenu.tab === 1)
+            maximizeCheatStat(cheatMenu.index);
+          else if (k === "m" && cheatMenu.tab === 2)
+            maximizeCheatSkill(cheatMenu.index);
           else if (cancel || k === "k") setCheatMenu(null);
           return;
         }
@@ -1631,6 +1659,8 @@ export default function OriginalWorld() {
     interact,
     leaveBattle,
     menu,
+    maximizeCheatSkill,
+    maximizeCheatStat,
     itemConfirm,
     npcMenu,
     openFlyMenu,
@@ -1771,7 +1801,8 @@ export default function OriginalWorld() {
       setNotice("存档格式无效");
     }
   };
-  const map = getOriginalMap(state.position.mapId);
+  const map = getOriginalMap(state.position.mapId),
+    profile = actorStatusProfile(state.actor);
   const battleConsumables = bagEntries(state.actor).filter((entry) => {
     if (entry.kind !== 1) return false;
     const item = originalTables.items[entry.id] || {};
@@ -2058,11 +2089,13 @@ export default function OriginalWorld() {
             useQuick={useCheat}
             changeStat={changeCheatStat}
             changeSkill={changeCheatSkill}
+            maxStat={maximizeCheatStat}
+            maxSkill={maximizeCheatSkill}
           />
         )}
         {cheatConfirm && (
           <Choice
-            title="一键宗师会大幅改变成长数值，确定施展？"
+            title={`「${cheatQuickOptions.find((item) => item.id === cheatConfirm.action)?.name}」会大幅改变成长数值，确定施展？`}
             items={["确定施展", "暂不使用"]}
             index={cheatConfirm.index}
             choose={(index) => {
@@ -2122,24 +2155,89 @@ export default function OriginalWorld() {
         )}
       </section>
       <aside>
-        <div>
+        <div className="world-location">
           <small>当前位置</small>
           <b>{map.name}</b>
           <em>
             Map {map.id} · {map.width}×{map.height}
           </em>
         </div>
-        <div>
-          <small>气血 / 内力</small>
-          <b>
-            {state.actor.hp} / {state.actor.fp}
-          </b>
+        <div className="actor-identity">
+          <small>{profile.school}</small>
+          <b>{state.actor.name || "江湖少侠"}</b>
+          <em>
+            {state.actor.age} 岁 · {profile.gender} · 师承 {profile.teacher}
+          </em>
+          <strong>
+            武艺「{profile.realm}」 · 出手「{profile.attackWeight}」
+          </strong>
         </div>
-        <div>
-          <small>银两 / 潜能</small>
-          <b>
-            {state.actor.gold} / {state.actor.potential}
-          </b>
+        <div className="vital-stack">
+          <StatusBar
+            label="气血"
+            value={state.actor.hp}
+            max={state.actor.maxHp}
+          />
+          <StatusBar
+            label="内力"
+            value={state.actor.fp}
+            max={state.actor.maxFp}
+          />
+          <StatusBar
+            label="法力"
+            value={state.actor.mp}
+            max={state.actor.maxMp}
+          />
+          <StatusBar
+            label="饱食"
+            value={state.actor.food}
+            max={profile.maxFood}
+          />
+          <StatusBar
+            label="饮水"
+            value={state.actor.water}
+            max={profile.maxWater}
+          />
+        </div>
+        <div className="actor-numbers">
+          <span>
+            膂力 <b>{profile.stats.str}</b>
+          </span>
+          <span>
+            敏捷 <b>{profile.stats.agi}</b>
+          </span>
+          <span>
+            悟性 <b>{profile.stats.int}</b>
+          </span>
+          <span>
+            根骨 <b>{profile.stats.bon}</b>
+          </span>
+          <span>
+            攻击 <b>{profile.stats.atk}</b>
+          </span>
+          <span>
+            防御 <b>{profile.stats.pdef}</b>
+          </span>
+          <span>
+            命中 <b>{profile.stats.hit}</b>
+          </span>
+          <span>
+            闪避 <b>{profile.stats.eva}</b>
+          </span>
+        </div>
+        <div className="actor-resources">
+          <span>
+            银两 <b>{state.actor.gold.toLocaleString("zh-CN")}</b>
+          </span>
+          <span>
+            经验 <b>{state.actor.exp.toLocaleString("zh-CN")}</b>
+          </span>
+          <span>
+            潜能 <b>{state.actor.potential.toLocaleString("zh-CN")}</b>
+          </span>
+          <span>
+            名声 <b>{state.actor.morals}</b>
+          </span>
         </div>
         <p>{notice}</p>
         <nav>
@@ -2185,6 +2283,30 @@ export default function OriginalWorld() {
   );
 }
 
+function StatusBar({
+  label,
+  value,
+  max,
+}: {
+  label: string;
+  value: number;
+  max: number;
+}) {
+  const percent = Math.max(0, Math.min(100, (value / Math.max(1, max)) * 100));
+  return (
+    <label>
+      <span>
+        {label}{" "}
+        <em>
+          {value.toLocaleString("zh-CN")}/{max.toLocaleString("zh-CN")}
+        </em>
+      </span>
+      <i>
+        <b style={{ width: `${percent}%` }} />
+      </i>
+    </label>
+  );
+}
 function Arcade({
   game,
   actor,
@@ -2447,7 +2569,8 @@ function GameMenu({
 }) {
   const tabs = ["行囊", "状态", "功夫"],
     entries = bagEntries(actor),
-    stats = derivedStats(actor);
+    stats = derivedStats(actor),
+    profile = actorStatusProfile(actor);
   return (
     <div className="game-menu">
       <nav>
@@ -2491,29 +2614,144 @@ function GameMenu({
         </section>
       ) : menu.tab === 1 ? (
         <section className="status-grid">
-          <b>
-            {actor.name || "江湖少侠"} · {actor.age} 岁
-          </b>
-          <span>
-            气血 {actor.hp}/{actor.maxHp}
-          </span>
-          <span>
-            内力 {actor.fp}/{actor.maxFp}
-          </span>
-          <span>膂力 {stats.str}</span>
-          <span>敏捷 {stats.agi}</span>
-          <span>悟性 {stats.int}</span>
-          <span>根骨 {stats.bon}</span>
-          <span>攻击 {stats.atk}</span>
-          <span>防御 {stats.pdef}</span>
-          <span>
-            饱食 {actor.food}/{maxFood(actor)}
-          </span>
-          <span>
-            饮水 {actor.water}/{maxWater(actor)}
-          </span>
-          <span>经验 {actor.exp}</span>
-          <span>潜能 {actor.potential}</span>
+          <header>
+            <b>
+              {profile.school} · {actor.name || "江湖少侠"}
+            </b>
+            <small>
+              {actor.age} 岁 · {profile.gender} · 师承 {profile.teacher}
+            </small>
+            <strong>
+              武艺看起来「{profile.realm}」，出手似乎「{profile.attackWeight}」
+            </strong>
+            <em>{profile.appearance}</em>
+          </header>
+          <fieldset>
+            <legend>精气状态</legend>
+            <span>
+              气血{" "}
+              <b>
+                {actor.hp}/{actor.maxHp}
+              </b>
+            </span>
+            <span>
+              伤势上限{" "}
+              <b>
+                {actor.maxHp}/{fullHp(actor)}
+              </b>
+            </span>
+            <span>
+              内力{" "}
+              <b>
+                {actor.fp}/{actor.maxFp}（加力 {actor.fpPlus}）
+              </b>
+            </span>
+            <span>
+              法力{" "}
+              <b>
+                {actor.mp}/{actor.maxMp}（法点 {actor.mpPlus}）
+              </b>
+            </span>
+            <span>
+              饱食{" "}
+              <b>
+                {actor.food}/{maxFood(actor)}
+              </b>
+            </span>
+            <span>
+              饮水{" "}
+              <b>
+                {actor.water}/{maxWater(actor)}
+              </b>
+            </span>
+          </fieldset>
+          <fieldset>
+            <legend>先天与实战属性</legend>
+            <span>
+              膂力{" "}
+              <b>
+                {stats.str}/{actor.baseStr}
+              </b>
+            </span>
+            <span>
+              敏捷{" "}
+              <b>
+                {stats.agi}/{actor.baseAgi}
+              </b>
+            </span>
+            <span>
+              悟性{" "}
+              <b>
+                {stats.int}/{actor.baseInt}
+              </b>
+            </span>
+            <span>
+              根骨{" "}
+              <b>
+                {stats.bon}/{actor.baseBon}
+              </b>
+            </span>
+            <span>
+              攻击 <b>{stats.atk}</b>
+            </span>
+            <span>
+              防御 <b>{stats.pdef}</b>
+            </span>
+            <span>
+              命中 <b>{stats.hit}</b>
+            </span>
+            <span>
+              闪避 <b>{stats.eva}</b>
+            </span>
+          </fieldset>
+          <fieldset>
+            <legend>江湖履历</legend>
+            <span>
+              经验 <b>{actor.exp.toLocaleString("zh-CN")}</b>
+            </span>
+            <span>
+              潜能 <b>{actor.potential.toLocaleString("zh-CN")}</b>
+            </span>
+            <span>
+              银两 <b>{actor.gold.toLocaleString("zh-CN")}</b>
+            </span>
+            <span>
+              名声/道德 <b>{actor.morals}</b>
+            </span>
+            <span>
+              福缘 <b>{actor.luck}</b>
+            </span>
+            <span>
+              容貌 <b>{actor.face}</b>
+            </span>
+            <span>
+              击杀 <b>{actor.killList?.length || 0}</b>
+            </span>
+            <span>
+              坛位 <b>{actor.tanId}/8</b>
+            </span>
+          </fieldset>
+          <fieldset>
+            <legend>装备与战斗功夫</legend>
+            <span>
+              兵刃 <b>{profile.weapon}</b>
+            </span>
+            <span>
+              防具 <b>{profile.armor}</b>
+            </span>
+            <span>
+              攻击功夫 <b>{profile.combat.attack}</b>
+            </span>
+            <span>
+              轻功 <b>{profile.combat.dodge}</b>
+            </span>
+            <span>
+              招架 <b>{profile.combat.parry}</b>
+            </span>
+            <span>
+              已学功夫 <b>{Object.keys(actor.skills).length}/20</b>
+            </span>
+          </fieldset>
         </section>
       ) : (
         <SkillRows
@@ -2536,6 +2774,8 @@ function CheatMenu({
   useQuick,
   changeStat,
   changeSkill,
+  maxStat,
+  maxSkill,
 }: {
   actor: SceneActorState;
   menu: { tab: number; index: number };
@@ -2543,6 +2783,8 @@ function CheatMenu({
   useQuick: (action: CheatQuickAction) => void;
   changeStat: (index: number, direction: -1 | 1) => void;
   changeSkill: (index: number, direction: -1 | 1) => void;
+  maxStat: (index: number) => void;
+  maxSkill: (index: number) => void;
 }) {
   const tabs = ["快捷强化", "数值修改", "功夫提升"],
     skills = cheatSkillRows(actor);
@@ -2592,12 +2834,18 @@ function CheatMenu({
             >
               <span>
                 <b>{stat.name}</b>
-                <small>每次调整 {stat.step.toLocaleString("zh-CN")}</small>
+                <small>
+                  步进 {stat.step.toLocaleString("zh-CN")} · 理论上限{" "}
+                  {stat.max.toLocaleString("zh-CN")}
+                </small>
               </span>
               <strong>{Number(actor[stat.key]).toLocaleString("zh-CN")}</strong>
               <div>
                 <button onClick={() => changeStat(index, -1)}>−</button>
                 <button onClick={() => changeStat(index, 1)}>＋</button>
+                <button className="max" onClick={() => maxStat(index)}>
+                  MAX
+                </button>
               </div>
             </div>
           ))}
@@ -2617,6 +2865,9 @@ function CheatMenu({
                 <div>
                   <button onClick={() => changeSkill(index, -1)}>−</button>
                   <button onClick={() => changeSkill(index, 1)}>＋</button>
+                  <button className="max" onClick={() => maxSkill(index)}>
+                    MAX
+                  </button>
                 </div>
               </div>
             ))
@@ -2625,7 +2876,8 @@ function CheatMenu({
           ))}
       </section>
       <footer>
-        W/S 选择 · Q/Tab 切页 · A/D 调整 · E/Enter 增加/施展 · K/Esc 关闭
+        W/S 选择 · Q/Tab 切页 · A/D 调整 · E/Enter 增加/施展 · M 当前项 MAX ·
+        K/Esc 关闭
       </footer>
     </div>
   );
@@ -2658,7 +2910,9 @@ function SkillRows({
               {skill.parrying ? "〔招架〕" : ""}
             </b>
             <span>{skill.level} 级</span>
-            <em>{skill.points} 点</em>
+            <em>
+              {levelTitle(skill.level)} · {skill.points} 点
+            </em>
           </button>
         ))
       ) : (

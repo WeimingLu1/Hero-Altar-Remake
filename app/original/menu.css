@@ -126,18 +126,48 @@
 }
 .status-grid {
   display: grid;
-  grid-template-columns: repeat(2, 1fr);
   align-content: start;
-  gap: 9px;
+  gap: 8px;
 }
-.status-grid > b {
-  grid-column: 1/-1;
-  padding: 13px;
+.status-grid > header {
+  display: grid;
+  gap: 3px;
+  padding: 10px 12px;
   background: #ffffff09;
 }
-.status-grid span {
-  padding: 8px;
+.status-grid > header strong {
+  color: #dec477;
+}
+.status-grid > header small,
+.status-grid > header em {
+  color: #9d9682;
+}
+.status-grid fieldset {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 0 14px;
+  margin: 0;
+  padding: 5px 10px 8px;
+  border: 1px solid #ffffff16;
+}
+.status-grid legend {
+  padding: 0 6px;
+  color: #bd9f55;
+  font-size: 11px;
+}
+.status-grid fieldset span {
+  display: flex;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 5px 2px;
   border-bottom: 1px dotted #ffffff1b;
+  color: #aaa18b;
+  font-size: 11px;
+}
+.status-grid fieldset b {
+  color: #e1d7b9;
+  text-align: right;
+  font: 11px monospace;
 }
 .skill-list p,
 .skill-list button {
@@ -292,6 +322,11 @@
   border: 1px solid #b76bd66e;
   background: #8d43aa38;
   font-size: 18px;
+}
+.cheat-list > div button.max {
+  width: 44px;
+  color: #f4d88f;
+  font: 9px monospace;
 }
 .cheat-list > p {
   padding: 24px;

@@ -84,10 +84,11 @@
     linear-gradient(180deg, rgba(29, 45, 34, 0.98), rgba(11, 18, 13, 0.98)),
     #111a14;
   border-left: 1px solid rgba(180, 156, 91, 0.3);
-  padding: 26px 22px;
+  padding: 14px 14px;
   display: flex;
   flex-direction: column;
-  gap: 18px;
+  gap: 9px;
+  overflow-y: auto;
 }
 .world-shell aside > div {
   display: flex;
@@ -95,8 +96,53 @@
   gap: 5px;
 }
 .world-shell aside > div:first-child {
-  padding-bottom: 18px;
+  padding-bottom: 9px;
   border-bottom: 1px solid rgba(154, 174, 156, 0.2);
+}
+.actor-identity strong {
+  color: #dabb68;
+  font-size: 11px;
+}
+.vital-stack label {
+  display: grid;
+  gap: 2px;
+}
+.vital-stack label span {
+  display: flex;
+  justify-content: space-between;
+  font-size: 10px;
+  color: #aeb9ae;
+}
+.vital-stack label i {
+  height: 4px;
+  overflow: hidden;
+  background: #071009;
+}
+.vital-stack label i b {
+  display: block;
+  height: 100%;
+  background: linear-gradient(90deg, #668f5f, #cfb65f);
+}
+.actor-numbers,
+.actor-resources {
+  display: grid !important;
+  grid-template-columns: 1fr 1fr;
+  gap: 4px 10px !important;
+  padding: 7px;
+  border: 1px solid #ffffff12;
+  background: #ffffff05;
+}
+.actor-numbers span,
+.actor-resources span {
+  display: flex;
+  justify-content: space-between;
+  color: #89988d;
+  font-size: 10px;
+}
+.actor-numbers span b,
+.actor-resources span b {
+  color: #d8cda9;
+  font: 10px monospace;
 }
 .world-shell aside small {
   color: #79877c;
@@ -113,13 +159,15 @@
   line-height: 1.6;
   color: #a9b4aa;
   border-left: 3px solid #b79a55;
-  padding: 12px 0 12px 12px;
+  padding: 7px 0 7px 9px;
   background: linear-gradient(90deg, rgba(183, 154, 85, 0.08), transparent);
 }
 .world-shell aside nav {
   display: flex;
   flex-direction: column;
-  gap: 8px;
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 5px;
   margin-top: auto;
 }
 .world-dialog {

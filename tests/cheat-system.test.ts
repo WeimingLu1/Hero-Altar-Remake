@@ -5,6 +5,8 @@ import {
   adjustCheatSkill,
   adjustCheatStat,
   applyCheatQuick,
+  maxCheatSkill,
+  maxCheatStat,
 } from "../app/game-core/cheat-system";
 
 const actor = (): SceneActorState => ({
@@ -43,6 +45,17 @@ const actor = (): SceneActorState => ({
   fpPlus: 0,
   mpPlus: 0,
   xue6: false,
+});
+
+test("每项秘技支持直接达到标注的理论上限", () => {
+  const a = actor();
+  maxCheatStat(a, 6);
+  maxCheatSkill(a, 2);
+  assert.equal(a.face, 255);
+  assert.equal(a.skills["2"].level, 255);
+  applyCheatQuick(a, "maxAll");
+  assert.equal(a.gold, 4294967295);
+  assert.equal(a.baseStr, 255);
 });
 
 test("快捷秘技补满状态并增加资源", () => {
