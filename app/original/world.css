@@ -144,6 +144,17 @@
   color: #d8cda9;
   font: 10px monospace;
 }
+.world-shell aside .actor-resources b {
+  min-width: 0;
+  max-width: 72px;
+  overflow: hidden;
+  font: 10px monospace;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.world-shell aside .actor-resources span {
+  min-width: 0;
+}
 .world-shell aside small {
   color: #79877c;
 }

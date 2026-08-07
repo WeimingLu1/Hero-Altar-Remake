@@ -931,6 +931,15 @@ export default function OriginalWorld() {
   const studySelected = useCallback(() => {
     if (study) studyAt(study.id, study.index);
   }, [study, studyAt]);
+  const beginStudyAt = useCallback(
+    (index: number) => {
+      if (!study) return;
+      setStudy({ ...study, index });
+      const result = studyAt(study.id, index);
+      setStudyActive(Boolean(result?.ok && !result.leveled));
+    },
+    [study, studyAt],
+  );
   const cultivate = useCallback(
     (index: number) => {
       const next = structuredClone(stateRef.current);
@@ -991,7 +1000,12 @@ export default function OriginalWorld() {
       } else {
         const options = practiceOptions(next.actor);
         if (index >= 6) {
-          text = practiceOnce(next.actor, options[index - 6]?.id || 0).text;
+          const result = practiceOnce(next.actor, options[index - 6]?.id || 0);
+          text = result.text;
+          if (!result.ok) {
+            setNotice(text);
+            return false;
+          }
         } else {
           const available = cultivationAvailability(next.actor, "spell");
           if (!available.ok) {
@@ -1006,6 +1020,15 @@ export default function OriginalWorld() {
       return true;
     },
     [sync],
+  );
+  const beginCultivation = useCallback(
+    (index: number) => {
+      setCultivation(index);
+      if (index <= 1 || index >= 6) {
+        setCultivationActive(cultivate(index));
+      } else cultivate(index);
+    },
+    [cultivate],
   );
   const confirmBagAction = useCallback(
     (index: number) => {
@@ -1537,19 +1560,21 @@ export default function OriginalWorld() {
         if (cultivation !== null) {
           const length = 6 + practiceOptions(stateRef.current.actor).length;
           if (cultivationActive) {
-            if (cancel) setCultivationActive(false);
+            if (k === "arrowup" || k === "w") {
+              setCultivationActive(false);
+              setCultivation((cultivation + length - 1) % length);
+            } else if (k === "arrowdown" || k === "s") {
+              setCultivationActive(false);
+              setCultivation((cultivation + 1) % length);
+            } else if (confirm || cancel) setCultivationActive(false);
             return;
           }
           if (k === "arrowup" || k === "w")
             setCultivation((cultivation + length - 1) % length);
           else if (k === "arrowdown" || k === "s")
             setCultivation((cultivation + 1) % length);
-          else if (confirm) {
-            if (cultivation <= 1 || cultivation >= 6) {
-              if (cultivation >= 6 || cultivate(cultivation))
-                setCultivationActive(true);
-            } else cultivate(cultivation);
-          } else if (cancel || k === "r") setCultivation(null);
+          else if (confirm) beginCultivation(cultivation);
+          else if (cancel || k === "r") setCultivation(null);
           return;
         }
         if (menu) {
@@ -1617,7 +1642,16 @@ export default function OriginalWorld() {
             ? bookStudyOptions(study.id)
             : studyOptions(study.id);
           if (studyActive) {
-            if (cancel) setStudyActive(false);
+            if (k === "arrowup" || k === "w") {
+              setStudyActive(false);
+              setStudy({
+                ...study,
+                index: (study.index + list.length - 1) % list.length,
+              });
+            } else if (k === "arrowdown" || k === "s") {
+              setStudyActive(false);
+              setStudy({ ...study, index: (study.index + 1) % list.length });
+            } else if (confirm || cancel) setStudyActive(false);
             return;
           }
           if (k === "arrowup" || k === "w")
@@ -1627,7 +1661,7 @@ export default function OriginalWorld() {
             });
           else if (k === "arrowdown" || k === "s")
             setStudy({ ...study, index: (study.index + 1) % list.length });
-          else if (confirm) setStudyActive(true);
+          else if (confirm) beginStudyAt(study.index);
           else if (cancel) setStudy(null);
           return;
         }
@@ -1656,6 +1690,8 @@ export default function OriginalWorld() {
     battle,
     battleItem,
     battleOutcome,
+    beginCultivation,
+    beginStudyAt,
     buySelected,
     caihua,
     changeCheatSkill,
@@ -1831,6 +1867,53 @@ export default function OriginalWorld() {
     cultivationAvailability(state.actor, "force"),
     cultivationAvailability(state.actor, "spell"),
   ];
+  const studyList = study
+      ? study.book
+        ? bookStudyOptions(study.id)
+        : studyOptions(study.id)
+      : [],
+    selectedStudy = study ? studyList[study.index] : undefined,
+    selectedStudyState = selectedStudy
+      ? state.actor.skills[String(selectedStudy.id)] || { level: 0, points: 0 }
+      : undefined,
+    studyProgress = selectedStudyState
+      ? {
+          label: `${selectedStudy?.name} · ${selectedStudyState.level} 级${studyActive ? " · 自动研习中" : ""}`,
+          value: selectedStudyState.points,
+          max: (selectedStudyState.level + 1) ** 2,
+          detail: `潜能 ${state.actor.potential.toLocaleString("zh-CN")} · 银两 ${state.actor.gold.toLocaleString("zh-CN")}`,
+        }
+      : undefined,
+    practice =
+      cultivation !== null && cultivation >= 6
+        ? practiceOptions(state.actor)[cultivation - 6]
+        : undefined,
+    practiceState = practice
+      ? state.actor.skills[String(practice.id)]
+      : undefined,
+    cultivationProgress =
+      cultivation === 0
+        ? {
+            label: `打坐${cultivationActive ? "中" : "准备"} · 内力上限 ${state.actor.maxFp}`,
+            value: state.actor.fp,
+            max: Math.max(1, Math.min(state.actor.maxFp * 2, 65535)),
+            detail: `当前内力 ${state.actor.fp.toLocaleString("zh-CN")}；周天完成后上限 +1`,
+          }
+        : cultivation === 1
+          ? {
+              label: `冥思${cultivationActive ? "中" : "准备"} · 法力上限 ${state.actor.maxMp}`,
+              value: state.actor.mp,
+              max: Math.max(1, Math.min(state.actor.maxMp * 2, 65535)),
+              detail: `当前法力 ${state.actor.mp.toLocaleString("zh-CN")}；周天完成后上限 +1`,
+            }
+          : practice && practiceState
+            ? {
+                label: `${practice.name} · ${practice.level} 级${cultivationActive ? " · 练习中" : ""}`,
+                value: practiceState.points,
+                max: (practiceState.level + 1) ** 2,
+                detail: `经验 ${state.actor.exp.toLocaleString("zh-CN")} · 当前内力 ${state.actor.fp.toLocaleString("zh-CN")}`,
+              }
+            : undefined;
   if (screen === "title") {
     const titleItems = [
       hasSave ? "继续游戏" : "开始游戏",
@@ -2029,16 +2112,13 @@ export default function OriginalWorld() {
         )}{" "}
         {study && (
           <Choice
-            title={studyActive ? "研习中 · X 停止" : "请教何种功夫"}
-            items={(study.book
-              ? bookStudyOptions(study.id)
-              : studyOptions(study.id)
-            ).map((g) => `${g.name} · 上限${g.maxLevel}`)}
+            title={
+              studyActive ? "研习中 · E/X 停止 · W/S 换项" : "请教何种功夫"
+            }
+            items={studyList.map((g) => `${g.name} · 可教至 ${g.maxLevel} 级`)}
             index={study.index}
-            choose={(i) => {
-              setStudy({ ...study, index: i });
-              studyAt(study.id, i);
-            }}
+            choose={beginStudyAt}
+            progress={studyProgress}
           />
         )}
         {battle && (
@@ -2140,7 +2220,9 @@ export default function OriginalWorld() {
         )}
         {cultivation !== null && (
           <Choice
-            title={cultivationActive ? "修炼中 · X 停止" : "修炼调息"}
+            title={
+              cultivationActive ? "修炼中 · E/X 停止 · W/S 换项" : "修炼调息"
+            }
             items={[
               `打坐 · ${cultivationInfo[0].requirement}${cultivationInfo[0].ok ? "" : "〔不可用〕"}`,
               `冥思 · ${cultivationInfo[1].requirement}${cultivationInfo[1].ok ? "" : "〔不可用〕"}`,
@@ -2153,7 +2235,8 @@ export default function OriginalWorld() {
               ),
             ]}
             index={cultivation}
-            choose={cultivate}
+            choose={beginCultivation}
+            progress={cultivationProgress}
           />
         )}
         {caihua && (
@@ -2241,14 +2324,16 @@ export default function OriginalWorld() {
           </span>
         </div>
         <div className="actor-resources">
-          <span>
-            银两 <b>{state.actor.gold.toLocaleString("zh-CN")}</b>
+          <span title={`银两：${state.actor.gold.toLocaleString("zh-CN")}`}>
+            银两 <b>{compactNumber(state.actor.gold)}</b>
           </span>
-          <span>
-            经验 <b>{state.actor.exp.toLocaleString("zh-CN")}</b>
+          <span title={`经验：${state.actor.exp.toLocaleString("zh-CN")}`}>
+            经验 <b>{compactNumber(state.actor.exp)}</b>
           </span>
-          <span>
-            潜能 <b>{state.actor.potential.toLocaleString("zh-CN")}</b>
+          <span
+            title={`潜能：${state.actor.potential.toLocaleString("zh-CN")}`}
+          >
+            潜能 <b>{compactNumber(state.actor.potential)}</b>
           </span>
           <span>
             名声 <b>{state.actor.morals}</b>
@@ -2298,6 +2383,11 @@ export default function OriginalWorld() {
   );
 }
 
+const compactNumber = (value: number) =>
+  new Intl.NumberFormat("zh-CN", {
+    notation: "compact",
+    maximumFractionDigits: 1,
+  }).format(value);
 function StatusBar({
   label,
   value,
@@ -2427,11 +2517,13 @@ function Choice({
   items,
   index,
   choose,
+  progress,
 }: {
   title: string;
   items: string[];
   index: number;
   choose: (index: number) => void;
+  progress?: { label: string; value: number; max: number; detail: string };
 }) {
   return (
     <div className="world-choice">
@@ -2446,6 +2538,25 @@ function Choice({
           {i === index && <i>◆</i>}
         </button>
       ))}
+      {progress && (
+        <div className="training-progress">
+          <span>
+            <b>{progress.label}</b>
+            <em>
+              {progress.value.toLocaleString("zh-CN")} /{" "}
+              {progress.max.toLocaleString("zh-CN")}
+            </em>
+          </span>
+          <i>
+            <b
+              style={{
+                width: `${Math.max(0, Math.min(100, (progress.value / Math.max(1, progress.max)) * 100))}%`,
+              }}
+            />
+          </i>
+          <small>{progress.detail}</small>
+        </div>
+      )}
       <small>W/S 选择 · E/Enter 确认 · X/Esc 返回</small>
     </div>
   );

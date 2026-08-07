@@ -34,3 +34,21 @@ test("被砍头的地图人物会变成不可重复互动的遗骸", () => {
   assert.match(source, /kind !== "corpse"/);
   assert.match(source, /drawCorpseMarker/);
 });
+
+test("连续请教和修炼时仍可用 W/S 停止并切换项目", () => {
+  assert.match(
+    source,
+    /if \(studyActive\)[\s\S]*setStudyActive\(false\)[\s\S]*setStudy\(/,
+  );
+  assert.match(
+    source,
+    /if \(cultivationActive\)[\s\S]*setCultivationActive\(false\)[\s\S]*setCultivation\(/,
+  );
+  assert.match(source, /progress=\{studyProgress\}/);
+  assert.match(source, /progress=\{cultivationProgress\}/);
+});
+
+test("外部资源数值使用紧凑格式并保留完整提示", () => {
+  assert.match(source, /notation: "compact"/);
+  assert.match(source, /title=\{`银两：/);
+});
