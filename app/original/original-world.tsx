@@ -99,6 +99,15 @@ import {
   upgradeRoom,
 } from "../game-core/life-system";
 import { settleVictoryLoot } from "../game-core/battle-settlement";
+import {
+  adjustCheatSkill,
+  adjustCheatStat,
+  applyCheatQuick,
+  cheatQuickOptions,
+  cheatSkillRows,
+  cheatStats,
+  type CheatQuickAction,
+} from "../game-core/cheat-system";
 import "./world.css";
 import "./choice.css";
 import "./battle.css";
@@ -257,6 +266,14 @@ export default function OriginalWorld() {
   const [battleItem, setBattleItem] = useState<number | null>(null);
   const [specialMenu, setSpecialMenu] = useState<number | null>(null);
   const [menu, setMenu] = useState<{ tab: number; index: number } | null>(null);
+  const [cheatMenu, setCheatMenu] = useState<{
+    tab: number;
+    index: number;
+  } | null>(null);
+  const [cheatConfirm, setCheatConfirm] = useState<{
+    action: CheatQuickAction;
+    index: number;
+  } | null>(null);
   const [itemConfirm, setItemConfirm] = useState<{
     entry: BagEntry;
     index: number;
@@ -1094,6 +1111,41 @@ export default function OriginalWorld() {
     },
     [sync],
   );
+  const useCheat = useCallback(
+    (action: CheatQuickAction, confirmed = false) => {
+      const option = cheatQuickOptions.find((item) => item.id === action);
+      if (option?.dangerous && !confirmed) {
+        setCheatConfirm({ action, index: 1 });
+        return;
+      }
+      const next = structuredClone(stateRef.current),
+        text = applyCheatQuick(next.actor, action);
+      sync(next);
+      setCheatConfirm(null);
+      setNotice(`${text} 按 F 可保存进度。`);
+    },
+    [sync],
+  );
+  const changeCheatStat = useCallback(
+    (index: number, direction: -1 | 1) => {
+      const next = structuredClone(stateRef.current),
+        text = adjustCheatStat(next.actor, index, direction);
+      sync(next);
+      setNotice(`${text} 按 F 可保存进度。`);
+    },
+    [sync],
+  );
+  const changeCheatSkill = useCallback(
+    (index: number, direction: -1 | 1) => {
+      const next = structuredClone(stateRef.current),
+        row = cheatSkillRows(next.actor)[index];
+      if (!row) return;
+      const text = adjustCheatSkill(next.actor, row.id, direction);
+      sync(next);
+      setNotice(`${text} 按 F 可保存进度。`);
+    },
+    [sync],
+  );
   useEffect(() => {
     const down = (e: KeyboardEvent) => {
         const k = e.key.toLowerCase();
@@ -1167,6 +1219,57 @@ export default function OriginalWorld() {
             }
           } else if (confirm && creator.index === 4) finishCreation();
           else if (cancel) setCreator({ ...creator, step: 1, index: 0 });
+          return;
+        }
+        if (cheatConfirm) {
+          if (["arrowup", "arrowdown", "w", "s"].includes(k))
+            setCheatConfirm({
+              ...cheatConfirm,
+              index: (cheatConfirm.index + 1) % 2,
+            });
+          else if (confirm) {
+            if (cheatConfirm.index === 0) useCheat(cheatConfirm.action, true);
+            else setCheatConfirm(null);
+          } else if (cancel) setCheatConfirm(null);
+          return;
+        }
+        if (cheatMenu) {
+          const skills = cheatSkillRows(stateRef.current.actor),
+            length =
+              cheatMenu.tab === 0
+                ? cheatQuickOptions.length
+                : cheatMenu.tab === 1
+                  ? cheatStats.length
+                  : Math.max(1, skills.length);
+          if (k === "q")
+            setCheatMenu({ tab: (cheatMenu.tab + 2) % 3, index: 0 });
+          else if (k === "e" || k === "tab")
+            setCheatMenu({ tab: (cheatMenu.tab + 1) % 3, index: 0 });
+          else if (k === "arrowup" || k === "w")
+            setCheatMenu({
+              ...cheatMenu,
+              index: (cheatMenu.index + length - 1) % length,
+            });
+          else if (k === "arrowdown" || k === "s")
+            setCheatMenu({
+              ...cheatMenu,
+              index: (cheatMenu.index + 1) % length,
+            });
+          else if (["arrowleft", "a"].includes(k) && cheatMenu.tab === 1)
+            changeCheatStat(cheatMenu.index, -1);
+          else if (["arrowright", "d"].includes(k) && cheatMenu.tab === 1)
+            changeCheatStat(cheatMenu.index, 1);
+          else if (["arrowleft", "a"].includes(k) && cheatMenu.tab === 2)
+            changeCheatSkill(cheatMenu.index, -1);
+          else if (["arrowright", "d"].includes(k) && cheatMenu.tab === 2)
+            changeCheatSkill(cheatMenu.index, 1);
+          else if (confirm && cheatMenu.tab === 0)
+            useCheat(cheatQuickOptions[cheatMenu.index].id);
+          else if (confirm && cheatMenu.tab === 1)
+            changeCheatStat(cheatMenu.index, 1);
+          else if (confirm && cheatMenu.tab === 2)
+            changeCheatSkill(cheatMenu.index, 1);
+          else if (cancel || k === "k" || k === "f5") setCheatMenu(null);
           return;
         }
         if (life) {
@@ -1486,6 +1589,7 @@ export default function OriginalWorld() {
         }
         if (confirm) interact();
         else if (k === "f") save();
+        else if (k === "k" || k === "f5") setCheatMenu({ tab: 0, index: 0 });
         else if (k === "r") setCultivation(0);
         else if (k === "h" || k === "f6") openFlyMenu();
         else if (k === "t")
@@ -1511,6 +1615,10 @@ export default function OriginalWorld() {
     battleOutcome,
     buySelected,
     caihua,
+    changeCheatSkill,
+    changeCheatStat,
+    cheatConfirm,
+    cheatMenu,
     chooseNpc,
     confirmBagAction,
     cultivate,
@@ -1547,6 +1655,7 @@ export default function OriginalWorld() {
     screen,
     titleAction,
     titleIndex,
+    useCheat,
   ]);
   const arcadeKind = arcade?.kind;
   useEffect(() => {
@@ -1733,6 +1842,7 @@ export default function OriginalWorld() {
           <p>移动：WASD / 方向键　互动：Z / Enter / 空格</p>
           <p>行囊与人物：M / E / Tab　修炼：R　轻功：H / F6</p>
           <p>任务簿：T　保存：F　战斗绝招：Q　战斗物品：I</p>
+          <p>秘技菜单：K / F5（可直接强化资源、数值和已学功夫）</p>
           <p>返回与逃跑：X / Esc；生死战也可用 G 尝试逃跑。</p>
           <button onClick={() => setScreen("title")}>返回标题</button>
         </section>
@@ -1935,6 +2045,32 @@ export default function OriginalWorld() {
             setMenu={setMenu}
             activate={(entry) => setItemConfirm({ entry, index: 0 })}
             activateKf={activateSkill}
+            openCheat={() => {
+              setMenu(null);
+              setCheatMenu({ tab: 0, index: 0 });
+            }}
+          />
+        )}
+        {cheatMenu && (
+          <CheatMenu
+            actor={state.actor}
+            menu={cheatMenu}
+            setMenu={setCheatMenu}
+            useQuick={useCheat}
+            changeStat={changeCheatStat}
+            changeSkill={changeCheatSkill}
+          />
+        )}
+        {cheatConfirm && (
+          <Choice
+            title="一键宗师会大幅改变成长数值，确定施展？"
+            items={["确定施展", "暂不使用"]}
+            index={cheatConfirm.index}
+            choose={(index) => {
+              setCheatConfirm({ ...cheatConfirm, index });
+              if (index === 0) useCheat(cheatConfirm.action, true);
+              else setCheatConfirm(null);
+            }}
           />
         )}
         {itemConfirm && (
@@ -2014,6 +2150,9 @@ export default function OriginalWorld() {
           <button onClick={() => setCultivation(0)}>
             修炼 <kbd>R</kbd>
           </button>
+          <button onClick={() => setCheatMenu({ tab: 0, index: 0 })}>
+            秘技 <kbd>K</kbd>
+          </button>
           <button onClick={openFlyMenu}>
             轻功 <kbd>H</kbd>
           </button>
@@ -2034,7 +2173,7 @@ export default function OriginalWorld() {
         <kbd>Enter</kbd> · 菜单 <kbd>M</kbd>
         <kbd>Tab</kbd> · 修炼 <kbd>R</kbd> · 轻功 <kbd>H</kbd>
         <kbd>F6</kbd> · 任务 <kbd>T</kbd> · 保存 <kbd>F</kbd> · 返回
-        <kbd>Esc</kbd>
+        <kbd>Esc</kbd> · 秘技 <kbd>K</kbd>/<kbd>F5</kbd>
       </footer>
       <input
         hidden
@@ -2298,12 +2437,14 @@ function GameMenu({
   setMenu,
   activate,
   activateKf,
+  openCheat,
 }: {
   actor: SceneActorState;
   menu: { tab: number; index: number };
   setMenu: (value: { tab: number; index: number } | null) => void;
   activate: (entry?: BagEntry) => void;
   activateKf: (id?: number, parry?: boolean) => void;
+  openCheat: () => void;
 }) {
   const tabs = ["行囊", "状态", "功夫"],
     entries = bagEntries(actor),
@@ -2320,6 +2461,9 @@ function GameMenu({
             {tab}
           </button>
         ))}
+        <button className="cheat-entry" onClick={openCheat}>
+          秘技
+        </button>
       </nav>
       {menu.tab === 0 ? (
         <section className="bag-list">
@@ -2382,6 +2526,107 @@ function GameMenu({
       )}
       <footer>
         A/D 或 Tab 切页 · W/S 选择 · Z 装配 · C/R 设为招架 · X 关闭
+      </footer>
+    </div>
+  );
+}
+function CheatMenu({
+  actor,
+  menu,
+  setMenu,
+  useQuick,
+  changeStat,
+  changeSkill,
+}: {
+  actor: SceneActorState;
+  menu: { tab: number; index: number };
+  setMenu: (value: { tab: number; index: number } | null) => void;
+  useQuick: (action: CheatQuickAction) => void;
+  changeStat: (index: number, direction: -1 | 1) => void;
+  changeSkill: (index: number, direction: -1 | 1) => void;
+}) {
+  const tabs = ["快捷强化", "数值修改", "功夫提升"],
+    skills = cheatSkillRows(actor);
+  return (
+    <div className="cheat-menu">
+      <header>
+        <div>
+          <small>江湖秘卷 · 修改立即生效</small>
+          <h2>秘技</h2>
+        </div>
+        <button onClick={() => setMenu(null)}>关闭 ×</button>
+      </header>
+      <aside>秘技会改变正常成长节奏，建议先下载 JSON 备份。</aside>
+      <nav>
+        {tabs.map((tab, index) => (
+          <button
+            key={tab}
+            className={menu.tab === index ? "active" : ""}
+            onClick={() => setMenu({ tab: index, index: 0 })}
+          >
+            {tab}
+          </button>
+        ))}
+      </nav>
+      <section className="cheat-list">
+        {menu.tab === 0 &&
+          cheatQuickOptions.map((option, index) => (
+            <button
+              key={option.id}
+              className={`${menu.index === index ? "active" : ""} ${option.dangerous ? "danger" : ""}`}
+              onMouseEnter={() => setMenu({ tab: 0, index })}
+              onClick={() => useQuick(option.id)}
+            >
+              <span>
+                <b>{option.name}</b>
+                <small>{option.detail}</small>
+              </span>
+              <em>{option.dangerous ? "需确认" : "施展"}</em>
+            </button>
+          ))}
+        {menu.tab === 1 &&
+          cheatStats.map((stat, index) => (
+            <div
+              key={stat.key}
+              className={menu.index === index ? "active" : ""}
+              onMouseEnter={() => setMenu({ tab: 1, index })}
+            >
+              <span>
+                <b>{stat.name}</b>
+                <small>每次调整 {stat.step.toLocaleString("zh-CN")}</small>
+              </span>
+              <strong>{Number(actor[stat.key]).toLocaleString("zh-CN")}</strong>
+              <div>
+                <button onClick={() => changeStat(index, -1)}>−</button>
+                <button onClick={() => changeStat(index, 1)}>＋</button>
+              </div>
+            </div>
+          ))}
+        {menu.tab === 2 &&
+          (skills.length ? (
+            skills.map((skill, index) => (
+              <div
+                key={skill.id}
+                className={menu.index === index ? "active" : ""}
+                onMouseEnter={() => setMenu({ tab: 2, index })}
+              >
+                <span>
+                  <b>{skill.name}</b>
+                  <small>每次调整 5 级 · 上限 255</small>
+                </span>
+                <strong>{skill.level} 级</strong>
+                <div>
+                  <button onClick={() => changeSkill(index, -1)}>−</button>
+                  <button onClick={() => changeSkill(index, 1)}>＋</button>
+                </div>
+              </div>
+            ))
+          ) : (
+            <p>尚未学会任何功夫。先拜师学艺，再来提升等级。</p>
+          ))}
+      </section>
+      <footer>
+        W/S 选择 · Q/E/Tab 切页 · A/D 调整 · Z 增加/施展 · K/F5 关闭
       </footer>
     </div>
   );

@@ -29,6 +29,10 @@
   background: #6f593b55;
   box-shadow: inset 0 -2px #c9a957;
 }
+.game-menu > nav .cheat-entry {
+  color: #d9a8ff;
+  background: linear-gradient(180deg, #6a36802e, transparent);
+}
 .game-menu section {
   min-width: 0;
   overflow: auto;
@@ -163,6 +167,144 @@
   color: #9d947b;
   font: 10px monospace;
 }
+.cheat-menu {
+  position: absolute;
+  inset: 12px;
+  z-index: 20;
+  display: grid;
+  grid-template-rows: auto auto auto minmax(0, 1fr) auto;
+  overflow: hidden;
+  color: #f3eaff;
+  border: 2px solid #be82e6;
+  background:
+    radial-gradient(circle at 85% 5%, #8c3fc934, transparent 38%),
+    linear-gradient(145deg, #181021f8, #09070df8);
+  box-shadow:
+    0 22px 70px #000,
+    inset 0 0 50px #b367de0f;
+}
+.cheat-menu > header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 12px 16px 8px;
+}
+.cheat-menu > header small {
+  color: #bca6c9;
+  letter-spacing: 0.12em;
+}
+.cheat-menu h2 {
+  margin: 2px 0 0;
+  color: #f0c9ff;
+  font-size: 24px;
+  letter-spacing: 0.25em;
+  text-shadow: 0 0 18px #cc79ff80;
+}
+.cheat-menu > header button {
+  padding: 7px 10px;
+  color: #d8c8df;
+  border: 1px solid #ffffff26;
+  background: #ffffff08;
+}
+.cheat-menu > aside {
+  margin: 0 16px 8px;
+  padding: 7px 10px;
+  color: #e4cba0;
+  border-left: 3px solid #c69b45;
+  background: #c69b4514;
+  font-size: 11px;
+}
+.cheat-menu > nav {
+  display: flex;
+  padding: 0 16px;
+  border-bottom: 1px solid #9f6db74d;
+}
+.cheat-menu > nav button {
+  flex: 1;
+  padding: 9px;
+  color: #a994b5;
+  border: 0;
+  background: transparent;
+}
+.cheat-menu > nav button.active {
+  color: #f1ceff;
+  background: #a957d326;
+  box-shadow: inset 0 -2px #ce80f3;
+}
+.cheat-list {
+  overflow: auto;
+  padding: 10px 16px;
+}
+.cheat-list > button,
+.cheat-list > div {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto auto;
+  align-items: center;
+  gap: 12px;
+  width: 100%;
+  min-height: 48px;
+  padding: 8px 10px;
+  color: #e9dff0;
+  border: 1px solid transparent;
+  border-bottom-color: #ffffff12;
+  background: #ffffff04;
+  text-align: left;
+}
+.cheat-list > button > span,
+.cheat-list > div > span {
+  display: grid;
+  gap: 3px;
+}
+.cheat-list small {
+  color: #9f91a8;
+}
+.cheat-list em {
+  color: #cba6dd;
+  font-size: 11px;
+}
+.cheat-list > .active {
+  border-color: #c372e8;
+  background: linear-gradient(90deg, #9e49c43b, #ffffff08);
+  box-shadow: inset 3px 0 #e49cff;
+}
+.cheat-list > .danger {
+  color: #ffc6bd;
+}
+.cheat-list > .danger.active {
+  border-color: #e36763;
+  background: linear-gradient(90deg, #a62e3545, #ffffff08);
+  box-shadow: inset 3px 0 #ff7770;
+}
+.cheat-list strong {
+  min-width: 90px;
+  color: #f1ccff;
+  text-align: right;
+  font: 700 13px monospace;
+}
+.cheat-list > div > div {
+  display: flex;
+  gap: 5px;
+}
+.cheat-list > div button {
+  width: 34px;
+  height: 30px;
+  color: #f2ddfa;
+  border: 1px solid #b76bd66e;
+  background: #8d43aa38;
+  font-size: 18px;
+}
+.cheat-list > p {
+  padding: 24px;
+  color: #b9a7c2;
+  text-align: center;
+}
+.cheat-menu > footer {
+  padding: 9px 12px;
+  color: #a997b3;
+  border-top: 1px solid #ffffff12;
+  text-align: center;
+  font: 10px monospace;
+}
 @media (max-width: 700px) {
   .game-menu {
     inset: 6px;
@@ -173,5 +315,18 @@
   }
   .status-grid {
     grid-template-columns: 1fr 1fr;
+  }
+  .cheat-menu {
+    inset: 5px;
+  }
+  .cheat-list {
+    padding: 7px;
+  }
+  .cheat-list > button,
+  .cheat-list > div {
+    gap: 6px;
+  }
+  .cheat-list strong {
+    min-width: 62px;
   }
 }
