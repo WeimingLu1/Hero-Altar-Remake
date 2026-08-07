@@ -132,7 +132,16 @@ export function finishFreeWork(
   actor.hp -= cost;
   tasks.freeWork = 0;
   const scale = fast ? 5 : 1;
-  return { ok: true, text: reward(actor, 20 * scale, 10 * scale, 50 * scale) };
+  const descriptions =
+      ((originalText.work_text as string[][]) || [])[id - 1] || [],
+    finished = String(
+      originalText.finish_work_text || "费了老大力气，总算干完了！",
+    ),
+    result = reward(actor, 20 * scale, 10 * scale, 50 * scale);
+  return {
+    ok: true,
+    text: [...descriptions, finished, result].join("\n"),
+  };
 }
 
 const tableFor = (kind: number) =>
@@ -403,11 +412,13 @@ export function acceptWantedTask(
     areas = (originalTasks.bad_area as number[][][]) || [],
     index = random(maps.length),
     first = ((originalText.bad_name1 as string[]) || ["赵"])[random(8)] || "赵",
-    second = ((originalText.bad_name2 as string[]) || ["某"])[random(8)] || "某";
+    second =
+      ((originalText.bad_name2 as string[]) || ["某"])[random(8)] || "某";
   tasks.wantedPlace = maps[index] || 3;
   tasks.wantedStarted = tasks.clock;
   tasks.wantedName = first + second;
-  tasks.wantedGender = ((originalText.bad_name2 as string[]) || []).indexOf(second) > 3 ? 0 : 1;
+  tasks.wantedGender =
+    ((originalText.bad_name2 as string[]) || []).indexOf(second) > 3 ? 0 : 1;
   tasks.wantedCount++;
   if (tasks.wantedCount > 10) {
     tasks.wantedTurn++;
@@ -484,20 +495,22 @@ export function finishWantedTask(actor: SceneActorState, tasks: TaskState) {
 }
 
 export function completeHiddenQuest(actor: SceneActorState, npcId: number) {
-  const quest = (originalTasks.quest_list as Record<
-    string,
-    [[number, number, number, number], [number, number, number]]
-  >)?.[String(npcId)];
+  const quest = (
+    originalTasks.quest_list as Record<
+      string,
+      [[number, number, number, number], [number, number, number]]
+    >
+  )?.[String(npcId)];
   if (!quest) return { ok: false, text: "" };
   const [request, prize] = quest,
     [questType, type1, id1, num1] = request,
     [type2, id2, num2] = prize,
     requestKey = `${type1}:${id1}`,
     prizeKey = `${type2}:${id2}`;
-  if ((actor.inventory[requestKey] || 0) < num1)
-    return { ok: false, text: "" };
+  if ((actor.inventory[requestKey] || 0) < num1) return { ok: false, text: "" };
   if (bagIsFull(actor) && !actor.inventory[prizeKey]) {
-    const releasesSlot = questType === 1 && (actor.inventory[requestKey] || 0) === num1;
+    const releasesSlot =
+      questType === 1 && (actor.inventory[requestKey] || 0) === num1;
     if (!releasesSlot) return { ok: false, text: "背包已满，无法收下交换物。" };
   }
   if (questType === 1) {

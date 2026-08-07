@@ -4,6 +4,7 @@ import {
   attemptEscape,
   battleRound,
   beginOriginalBattle,
+  endSpar,
 } from "../app/game-core/original-battle";
 import type { SceneActorState } from "../app/game-core/scene-event";
 const actor = (): SceneActorState => ({
@@ -58,4 +59,35 @@ test("original sparring round is deterministic and changes combat state", () => 
   assert.equal(a.hp, b.hp);
   assert.equal(one.turn, 1);
   assert.ok(one.log.length >= 3);
+});
+
+test("weapon attack text uses the equipped weapon name", () => {
+  const a = actor();
+  a.weaponId = 1;
+  a.skills["4"] = { level: 100, points: 0 };
+  const round = battleRound(beginOriginalBattle(1, 7), a);
+  assert.equal(
+    round.log.some((line) => line.includes("weapon")),
+    false,
+  );
+  assert.equal(
+    round.log.some((line) => line.includes("菜刀")),
+    true,
+  );
+});
+
+test("铸剑挑战按原作在双方半血时判定胜负", () => {
+  const a = actor(),
+    battle = beginOriginalBattle(149, 1, undefined, "story");
+  battle.enemyHp = Math.floor(battle.enemyMaxHp / 2);
+  assert.equal(battleRound(battle, a).finished, "win");
+});
+
+test("生死战失败不会套用切磋的自动回血", () => {
+  const a = actor(),
+    battle = beginOriginalBattle(1, 1, undefined, "lethal");
+  a.hp = 0;
+  battle.finished = "lose";
+  endSpar(a, battle);
+  assert.equal(a.hp, 0);
 });

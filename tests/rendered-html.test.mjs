@@ -17,26 +17,26 @@ async function render(path = "/") {
   );
 }
 
-test("root route renders the complete official game directly", async () => {
+test("root route renders the original title and new-game entry", async () => {
   const response = await render();
   assert.equal(response.status, 200);
   assert.match(response.headers.get("content-type") ?? "", /^text\/html\b/i);
   const html = await response.text();
   assert.match(html, /<title>英雄坛说：云游志<\/title>/);
-  assert.match(html, /正式版 · 69 MAPS/);
-  assert.match(html, /下载 JSON/);
+  assert.match(html, /开始游戏/);
+  assert.match(html, /开始新游戏/);
+  assert.match(html, /读取 JSON 存档/);
   assert.doesNotMatch(html, /初入江湖/);
   assert.doesNotMatch(html, /原版世界/);
-  assert.match(html, /<canvas/);
 });
 
-test("server-renders the complete original-world runtime", async () => {
+test("original route renders the same official title runtime", async () => {
   const response = await render("/original");
   assert.equal(response.status, 200);
   const html = await response.text();
-  assert.match(html, /正式版 · 69 MAPS/);
-  assert.match(html, /JSON/);
-  assert.match(html, /<canvas/);
+  assert.match(html, /英雄坛说/);
+  assert.match(html, /开始新游戏/);
+  assert.match(html, /操作说明/);
 });
 
 test("local saves are restored only after hydration", async () => {
@@ -45,7 +45,8 @@ test("local saves are restored only after hydration", async () => {
     "utf8",
   );
   assert.match(source, /useState<WorldSave>\(fresh\)/);
-  assert.match(source, /setTimeout\(\(\) => sync\(loadLocalSave\(\)\), 0\)/);
+  assert.match(source, /setTimeout\(\(\) => \{/);
+  assert.match(source, /if \(exists\) sync\(loadLocalSave\(\)\)/);
   assert.doesNotMatch(source, /useState<WorldSave>\(loadLocalSave\)/);
   assert.match(source, /savedAt: ""/);
 });

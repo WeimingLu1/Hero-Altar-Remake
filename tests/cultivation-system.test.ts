@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import type { SceneActorState } from "../app/game-core/scene-event";
 import {
+  cultivationAvailability,
   fullFp,
   healWounds,
   meditateForce,
@@ -64,6 +65,23 @@ test("打坐速度、双倍内力阈值与上限增长保持原作整数公式",
 test("加力被限制为内功有效等级的一半", () => {
   const a = actor();
   assert.equal(setForcePower(a, 999), 75);
+});
+
+test("未装备内功或法术时原作所有对应调息操作均不可进入", () => {
+  const a = actor();
+  a.skillUse[3] = 0;
+  for (const action of ["meditate", "recover", "heal", "force"] as const)
+    assert.equal(cultivationAvailability(a, action).ok, false);
+  assert.equal(cultivationAvailability(a, "magic").ok, false);
+  assert.equal(cultivationAvailability(a, "spell").ok, false);
+});
+
+test("吸气与疗伤逐项报告原作门槛", () => {
+  const a = actor();
+  assert.match(cultivationAvailability(a, "recover").text, /内力不足/);
+  a.fp = 100;
+  a.maxFp = 149;
+  assert.match(cultivationAvailability(a, "heal").text, /内力上限不足/);
 });
 
 test("吸气按缺失气血和内功等级计算内力消耗", () => {

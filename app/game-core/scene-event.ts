@@ -8,6 +8,7 @@ import {
 
 export type SceneEventCall = { type: number; id?: number; extra?: number };
 export type SceneActorState = {
+  name?: string;
   inventory: Record<string, number>;
   gold: number;
   hp: number;

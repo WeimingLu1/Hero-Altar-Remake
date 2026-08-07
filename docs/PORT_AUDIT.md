@@ -18,7 +18,7 @@ test or runtime check. Data extraction alone is not implementation evidence.
 | ------------------------ | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ----------- |
 | Map loading and transfer | All 69 maps load; all used RMXP command codes have adapters and tests                                                                                                                                                                     | Implemented |
 | Map event hooks          | All 215 `Scene_Event` calls parse; event types 0-16 route; all command codes used by the 69 maps have executable adapters                                                                                                                 | Implemented |
-| NPC interaction          | Talk/status/spar/trade/join/study, bespoke task owners, altar chain, forge master, home owner and all ten hidden exchanges are available                                                                                                  | Implemented |
+| NPC interaction          | Talk/status/lethal battle/trade/join/study, bespoke task owners, altar chain, forge master, home owner and all ten hidden exchanges are available                                                                                         | Implemented |
 | Inventory/equipment      | Indexed original data, use/equip bonuses, books, battle/menu item occasions, drops, stone records and 20-slot capacity rules tested                                                                                                       | Implemented |
 | Combat                   | Normal attack, skills 1-40, cooldowns, magic/status effects, battle items, agility-based escalating flee, gold/drop rewards, kill/spare moral changes and lethal/story outcomes execute                                                   | Implemented |
 | Tasks                    | All `$data_tasks` families are executable: visit/find/kill, wanted criminals, volunteer/stone work, ten hidden exchanges, teacher requirements and nine-altar progression; deadlines and rewards are tested                               | Implemented |
@@ -27,13 +27,14 @@ test or runtime check. Data extraction alone is not implementation evidence.
 | Forging/housing          | Four-round weapon-matching forge challenge, four custom weapon types, editable names, original reforge costs/affix formulas, custom stat bonuses, Peach Blossom ownership, three room levels and five furniture types execute and persist | Implemented |
 | Time/survival            | Original 15-second digestion, hunger/thirst decay, passive recovery, aging, drinking, wine time changes and all task deadlines run from the persisted game clock                                                                          | Implemented |
 | Save files               | Versioned local JSON import/export, normalization and editable actor/world/task/forge/home/minigame fields                                                                                                                                | Implemented |
-| Keyboard                 | Mac/Windows-compatible WASD/arrows, Z/Enter/Space, X/Escape, C/Q/I/G/F/L and every modal have keyboard and clickable controls                                                                                                             | Implemented |
+| Keyboard                 | Mac/Windows-compatible WASD/arrows, Z/Enter/Space, X/Escape, M/R/H/F6/T/Q/I/G/F and every modal have keyboard and clickable controls                                                                                                      | Implemented |
 | Visual redraw            | Source bitmaps are not shipped; maps, terrain, buildings, figures, objects, effects and UI are rendered from new programmatic pixel primitives, palettes and CSS                                                                          | Implemented |
-| Production               | Production build plus 59 logic and 2 server-render tests pass; matching commit/archive is deployed by Sites with a succeeded status                                                                                                       | Implemented |
+| Production               | Production build plus 66 core logic and 3 server-render tests pass; matching commit/archive is deployed by Sites with a succeeded status                                                                                                  | Implemented |
 
 ## Completion gate
 
-The offline single-player port passes the completion gate. The source inventory
+The detailed requirement-by-requirement evidence is maintained in
+`docs/STRICT_PARITY_AUDIT.md`. The offline single-player port passes the completion gate. The source inventory
 has coverage tests, production build succeeds, and `/original` exposes keyboard
 flows for save, travel, NPC interaction, training, shopping, lethal and sparring
 combat, tasks, minigames, forging, and housing. Original network-only scenes are

@@ -53,6 +53,106 @@ function cultivate(
 export const meditateForce = (actor: SceneActorState) => cultivate(actor, "fp");
 export const meditateMagic = (actor: SceneActorState) => cultivate(actor, "mp");
 
+export type CultivationAvailability = {
+  ok: boolean;
+  text: string;
+  requirement: string;
+};
+
+export function cultivationAvailability(
+  actor: SceneActorState,
+  action: "meditate" | "magic" | "recover" | "heal" | "force" | "spell",
+): CultivationAvailability {
+  const innerLevel = effectiveLevel(actor, forceId(actor));
+  if (action === "magic" || action === "spell") {
+    if (magicId(actor) < 12)
+      return {
+        ok: false,
+        text: "你尚未装备法术。",
+        requirement: "需先在功夫页运用一门法术",
+      };
+    return {
+      ok: true,
+      text: action === "magic" ? "可以开始冥思。" : "可以调整法点。",
+      requirement:
+        action === "magic"
+          ? `已装备法术 · 有效等级 ${effectiveLevel(actor, magicId(actor))}`
+          : `范围 0–${Math.floor(effectiveLevel(actor, magicId(actor)) / 2)}`,
+    };
+  }
+  if (forceId(actor) < 12)
+    return {
+      ok: false,
+      text: "你尚未装备内功。",
+      requirement: "需先在功夫页运用一门内功",
+    };
+  if (action === "recover") {
+    if (actor.fp < 20)
+      return {
+        ok: false,
+        text: "你的内力不足。",
+        requirement: "当前内力至少 20",
+      };
+    if (actor.hp === actor.maxHp)
+      return {
+        ok: false,
+        text: "你的气血已经全满。",
+        requirement: "气血未满时可用",
+      };
+    return {
+      ok: true,
+      text: "可以吸气恢复气血。",
+      requirement: "消耗量按缺失气血计算",
+    };
+  }
+  if (action === "heal") {
+    const healthy = fullHp(actor);
+    if (innerLevel < 45)
+      return {
+        ok: false,
+        text: "你的内功修为不足以疗伤。",
+        requirement: "内功有效等级至少 45",
+      };
+    if (actor.maxFp < 150)
+      return {
+        ok: false,
+        text: "你的内力上限不足。",
+        requirement: "内力上限至少 150",
+      };
+    if (actor.fp < 100)
+      return {
+        ok: false,
+        text: "你的内力不足。",
+        requirement: "当前内力至少 100；成功消耗 50",
+      };
+    if (actor.maxHp === healthy)
+      return {
+        ok: false,
+        text: "你目前并未受伤。",
+        requirement: "气血上限低于健康上限时可用",
+      };
+    if (actor.maxHp < Math.floor(healthy / 3))
+      return {
+        ok: false,
+        text: "你伤势过重，无法自行运功疗伤。",
+        requirement: "当前气血上限不得低于健康上限三分之一",
+      };
+    return {
+      ok: true,
+      text: "可以运功疗伤。",
+      requirement: "成功恢复伤势上限并消耗 50 内力",
+    };
+  }
+  return {
+    ok: true,
+    text: action === "meditate" ? "可以开始打坐。" : "可以调整加力。",
+    requirement:
+      action === "meditate"
+        ? `已装备内功 · 有效等级 ${innerLevel}`
+        : `范围 0–${Math.floor(innerLevel / 2)}`,
+  };
+}
+
 export function setForcePower(actor: SceneActorState, value: number) {
   const maximum = Math.floor(effectiveLevel(actor, forceId(actor)) / 2);
   actor.fpPlus = Math.max(0, Math.min(Math.floor(value), maximum));

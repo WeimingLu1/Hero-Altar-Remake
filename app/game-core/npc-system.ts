@@ -36,7 +36,7 @@ export function npcOptions(id: number, actor: SceneActorState): NpcOption[] {
 export const npcOptionLabel: Record<NpcOption, string> = {
   talk: "交谈",
   status: "查看",
-  battle: "切磋",
+  battle: "战斗",
   trade: "交易",
   join: "拜师",
   study: "请教",

@@ -3,10 +3,52 @@ import test from "node:test";
 import maps from "../game-data/maps.json";
 import { friendlyEventName } from "../app/game-core/original-world";
 import {
+  resolveSceneEvent,
+  type SceneActorState,
+} from "../app/game-core/scene-event";
+import {
   executeMapCommands,
   selectSceneEvent,
   supportedEventCodes,
 } from "../app/game-core/rmxp-events";
+
+const actor = (): SceneActorState => ({
+  inventory: {},
+  gold: 0,
+  hp: 100,
+  maxHp: 100,
+  fp: 0,
+  maxFp: 0,
+  food: 100,
+  water: 100,
+  exp: 0,
+  potential: 0,
+  morals: 128,
+  tanId: 0,
+  teacherId: 0,
+  classId: 0,
+  gender: 0,
+  face: 20,
+  mp: 0,
+  maxMp: 0,
+  age: 14,
+  baseBon: 20,
+  baseInt: 20,
+  baseAgi: 20,
+  baseStr: 20,
+  bon: 20,
+  int: 20,
+  agi: 20,
+  str: 20,
+  luck: 20,
+  skills: {},
+  weaponId: 0,
+  armorIds: [],
+  skillUse: [0, 0, 0, 0, 0, 0],
+  fpPlus: 0,
+  mpPlus: 0,
+  xue6: false,
+});
 
 test("every command code used by the 69 shipped maps has an adapter", () => {
   const codes = new Set<number>();
@@ -55,4 +97,36 @@ test("internal transfer event names resolve to their destination map", () => {
   assert.equal(friendlyEventName("EV010", 24), "五指山");
   assert.equal(friendlyEventName("出口", 24), "出口");
   assert.equal(friendlyEventName("125"), "");
+});
+
+test("all 215 original Scene_Event interactables resolve to executable browser behavior", () => {
+  const calls: Array<{ type: number; id?: number; extra?: number }> = [];
+  for (const map of maps.maps)
+    for (const event of map.events)
+      for (const page of event.pages) {
+        const source = page.commands
+          .filter(
+            (command: any) => command.code === 355 || command.code === 655,
+          )
+          .map((command: any) => String(command.parameters[0] || ""))
+          .join("\n");
+        for (const match of source.matchAll(
+          /Scene_Event\.new\(\s*(-?\d+)(?:\s*,\s*(-?\d+))?(?:\s*,\s*(-?\d+))?/g,
+        ))
+          calls.push({
+            type: Number(match[1]),
+            id: match[2] === undefined ? undefined : Number(match[2]),
+            extra: match[3] === undefined ? undefined : Number(match[3]),
+          });
+      }
+  assert.equal(calls.length, 215);
+  const a = actor();
+  a.maxFp = a.fp = 1000;
+  a.roomLevel = 3;
+  for (const call of calls)
+    assert.doesNotMatch(resolveSceneEvent(call, a).tag, /^unknown:/);
+  assert.deepEqual(
+    [...new Set(calls.map((call) => call.type))].sort((a, b) => a - b),
+    [0, 1, 2, 4, 5, 6, 7, 8, 9, 10, 11, 13, 14, 15, 16],
+  );
 });

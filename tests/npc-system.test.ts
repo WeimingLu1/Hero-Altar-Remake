@@ -6,6 +6,7 @@ import {
   buyGood,
   canReadBook,
   npcOptions,
+  npcOptionLabel,
   shopGoods,
   studyOnce,
 } from "../app/game-core/npc-system";
@@ -53,6 +54,7 @@ test("merchant menu and stock come from enemy database", () => {
   const goods = shopGoods(1);
   assert.equal(goods.length, 2);
   assert.equal(goods[0].name, "白玉豆腐");
+  assert.equal(npcOptionLabel.battle, "战斗");
 });
 test("buy uses original price and item indexing", () => {
   const a = actor(),

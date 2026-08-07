@@ -16,7 +16,11 @@ import {
   type SceneActorState,
 } from "../game-core/scene-event";
 import { executeMapCommands, selectSceneEvent } from "../game-core/rmxp-events";
-import { originalTables } from "../game-core/original-data";
+import {
+  originalSystem,
+  originalTables,
+  originalText,
+} from "../game-core/original-data";
 import {
   attemptJoin,
   bookStudyOptions,
@@ -49,6 +53,7 @@ import {
   type BagEntry,
 } from "../game-core/inventory-system";
 import {
+  effectiveLevel,
   equipSkill,
   learnedSkills,
   toggleParry,
@@ -74,6 +79,7 @@ import {
   type TaskState,
 } from "../game-core/task-system";
 import {
+  cultivationAvailability,
   healWounds,
   meditateForce,
   meditateMagic,
@@ -125,7 +131,16 @@ type ArcadeState =
       flight: number;
     };
 type LifeState = { kind: "forge" | "home"; index: number };
+type LaunchScreen = "title" | "intro" | "create" | "help" | "play";
+type CreatorState = {
+  step: 1 | 2;
+  index: number;
+  name: string;
+  gender: number;
+  attrs: [number, number, number, number];
+};
 const newActor = (): SceneActorState => ({
+  name: "江湖少侠",
   inventory: {},
   gold: 100,
   hp: 100,
@@ -217,6 +232,16 @@ export default function OriginalWorld() {
   const [state, setState] = useState<WorldSave>(fresh),
     [notice, setNotice] = useState("原版地图数据已载入"),
     [eventText, setEventText] = useState("");
+  const [screen, setScreen] = useState<LaunchScreen>("title");
+  const [titleIndex, setTitleIndex] = useState(0);
+  const [hasSave, setHasSave] = useState(false);
+  const [creator, setCreator] = useState<CreatorState>({
+    step: 1,
+    index: 0,
+    name: "",
+    gender: 0,
+    attrs: [20, 20, 20, 20],
+  });
   const [npcMenu, setNpcMenu] = useState<{ id: number; index: number } | null>(
       null,
     ),
@@ -232,8 +257,13 @@ export default function OriginalWorld() {
   const [battleItem, setBattleItem] = useState<number | null>(null);
   const [specialMenu, setSpecialMenu] = useState<number | null>(null);
   const [menu, setMenu] = useState<{ tab: number; index: number } | null>(null);
+  const [itemConfirm, setItemConfirm] = useState<{
+    entry: BagEntry;
+    index: number;
+  } | null>(null);
   const [cultivation, setCultivation] = useState<number | null>(null);
   const [cultivationActive, setCultivationActive] = useState(false);
+  const [flyMenu, setFlyMenu] = useState<number | null>(null);
   const [caihua, setCaihua] = useState<{
     step: 1 | 2;
     index: number;
@@ -242,6 +272,7 @@ export default function OriginalWorld() {
   const [life, setLife] = useState<LifeState | null>(null);
   const canvas = useRef<HTMLCanvasElement>(null),
     file = useRef<HTMLInputElement>(null),
+    nameInput = useRef<HTMLInputElement>(null),
     stateRef = useRef<WorldSave>(state),
     keys = useRef(new Set<string>()),
     held = useRef<Record<string, number>>({});
@@ -250,7 +281,11 @@ export default function OriginalWorld() {
     setState(structuredClone(next));
   }, []);
   useEffect(() => {
-    const id = window.setTimeout(() => sync(loadLocalSave()), 0);
+    const id = window.setTimeout(() => {
+      const exists = localStorage.getItem("rmxp-original-world-v1") !== null;
+      setHasSave(exists);
+      if (exists) sync(loadLocalSave());
+    }, 0);
     return () => window.clearTimeout(id);
   }, [sync]);
   const save = useCallback(() => {
@@ -503,7 +538,9 @@ export default function OriginalWorld() {
           return;
         }
         if (id === 25) {
-          const result = acceptFreeWork(next.actor, tasks, random);
+          const result = acceptFreeWork(next.actor, tasks, (max) =>
+            Math.floor(Math.random() * Math.max(1, max)),
+          );
           sync(next);
           setEventText(`${npcRecord(id).name}\n${result.text}`);
           setNpcMenu(null);
@@ -588,7 +625,14 @@ export default function OriginalWorld() {
         setEventText(`${npcRecord(id).name}\n${r.lines.join("\n")}`);
       } else if (option === "status") setEventText(npcStatus(id).join("\n"));
       else if (option === "battle")
-        setBattle(beginOriginalBattle(id, id + next.position.mapId));
+        setBattle(
+          beginOriginalBattle(
+            id,
+            id + next.position.mapId,
+            undefined,
+            "lethal",
+          ),
+        );
       else if (option === "trade") setShop({ id, index: 0 });
       else if (option === "join") {
         const r = attemptJoin(id, next.actor);
@@ -696,6 +740,32 @@ export default function OriginalWorld() {
         next.actor.weaponId = 0;
         next.actor.forgeChallengeStep = 0;
       }
+      if (
+        battle.finished === "lose" &&
+        battle.mode !== "spar" &&
+        battle.enemyId !== 149
+      ) {
+        const enemyMorals = Number(
+            (battle.enemyOverride || originalTables.enemies[battle.enemyId])
+              ?.morals || 0,
+          ),
+          spared = next.actor.morals >= 128 && enemyMorals > 0;
+        if (spared) {
+          next.actor.hp = 1;
+          sync(next);
+          setBattle(null);
+          setNotice(`${battle.enemyName}收手道：“承让了。”`);
+        } else {
+          sync(loadLocalSave());
+          setBattle(null);
+          setScreen("title");
+          setNotice("你已身死，未保存的进度已经失去。 ");
+        }
+        setBattleOutcome(null);
+        setBattleItem(null);
+        setSpecialMenu(null);
+        return;
+      }
       endSpar(next.actor, battle);
       sync(next);
       setBattle(nextBattle);
@@ -710,8 +780,12 @@ export default function OriginalWorld() {
               ? "战斗得胜"
               : "手下留情"
           : battle.finished === "lose"
-            ? "切磋结束，已恢复少量气血"
-            : "你退出了切磋",
+            ? battle.mode === "spar"
+              ? "切磋结束，已恢复少量气血"
+              : "挑战失败"
+            : battle.mode === "spar"
+              ? "你退出了切磋"
+              : "你脱离了战斗",
       );
     },
     [battle, sync],
@@ -826,6 +900,11 @@ export default function OriginalWorld() {
       const next = structuredClone(stateRef.current);
       let text = "";
       if (index === 0) {
+        const available = cultivationAvailability(next.actor, "meditate");
+        if (!available.ok) {
+          setNotice(available.text);
+          return false;
+        }
         const result = meditateForce(next.actor);
         text = !result.ok
           ? "尚未装备内功。"
@@ -835,6 +914,11 @@ export default function OriginalWorld() {
               ? "打坐周天完成，内力上限提高一点。"
               : "你凝神打坐，内息渐长。";
       } else if (index === 1) {
+        const available = cultivationAvailability(next.actor, "magic");
+        if (!available.ok) {
+          setNotice(available.text);
+          return false;
+        }
         const result = meditateMagic(next.actor);
         text = !result.ok
           ? "尚未装备法术。"
@@ -844,28 +928,164 @@ export default function OriginalWorld() {
               ? "冥思完成，法力上限提高一点。"
               : "你闭目冥思，法力渐长。";
       } else if (index === 2) {
+        const available = cultivationAvailability(next.actor, "recover");
+        if (!available.ok) {
+          setNotice(available.text);
+          return false;
+        }
         text = recoverHp(next.actor)
           ? "吸气调息，气血已经恢复。"
           : "当前无法吸气恢复。";
       } else if (index === 3) {
+        const available = cultivationAvailability(next.actor, "heal");
+        if (!available.ok) {
+          setNotice(available.text);
+          return false;
+        }
         text = healWounds(next.actor)
           ? "运功疗伤，伤势有所恢复。"
           : "当前条件不足以疗伤。";
       } else if (index === 4) {
+        const available = cultivationAvailability(next.actor, "force");
+        if (!available.ok) {
+          setNotice(available.text);
+          return false;
+        }
         text = `当前加力设为 ${setForcePower(next.actor, next.actor.fpPlus + 10)}。`;
       } else {
         const options = practiceOptions(next.actor);
         if (index >= 6) {
           text = practiceOnce(next.actor, options[index - 6]?.id || 0).text;
         } else {
+          const available = cultivationAvailability(next.actor, "spell");
+          if (!available.ok) {
+            setNotice(available.text);
+            return false;
+          }
           text = `当前法点设为 ${setMagicPower(next.actor, next.actor.mpPlus + 10)}。`;
         }
       }
       sync(next);
       setNotice(text);
+      return true;
     },
     [sync],
   );
+  const confirmBagAction = useCallback(
+    (index: number) => {
+      if (!itemConfirm) return;
+      if (index === 0) activateBagEntry(itemConfirm.entry);
+      setItemConfirm(null);
+    },
+    [activateBagEntry, itemConfirm],
+  );
+  const openFlyMenu = useCallback(() => {
+    const current = stateRef.current,
+      dodgeId = current.actor.skillUse[2] || 9,
+      outside = (originalSystem.outside_map as number[] | undefined) || [];
+    if (effectiveLevel(current.actor, dodgeId) < 30) {
+      setNotice("轻功有效等级达到 30 级后才能施展轻功。 ");
+      return;
+    }
+    if (!outside.includes(current.position.mapId)) {
+      setNotice("原作只允许在室外施展轻功。 ");
+      return;
+    }
+    if (current.actor.fp < 200) {
+      setNotice("你内力不足，无法施展轻功。 ");
+      return;
+    }
+    setFlyMenu(0);
+  }, []);
+  const flyTo = useCallback(
+    (index: number) => {
+      const target = ((originalSystem.fly_position as number[][] | undefined) ||
+        [])[index];
+      if (!target || stateRef.current.actor.fp < 200) {
+        setFlyMenu(null);
+        setNotice("你内力不足，无法施展轻功。 ");
+        return;
+      }
+      const next = structuredClone(stateRef.current);
+      next.actor.fp -= 200;
+      next.position = {
+        mapId: target[0],
+        x: target[1],
+        y: target[2],
+        direction: target[3],
+      };
+      sync(next);
+      setFlyMenu(null);
+      setNotice(
+        `施展轻功抵达${getOriginalMap(target[0]).name}，消耗 200 内力。`,
+      );
+    },
+    [sync],
+  );
+  const beginCreation = useCallback(() => {
+    setCreator({
+      step: 1,
+      index: 0,
+      name: "",
+      gender: 0,
+      attrs: [20, 20, 20, 20],
+    });
+    setScreen("intro");
+  }, []);
+  const titleAction = useCallback(
+    (index: number) => {
+      if (index === 0) {
+        if (hasSave) setScreen("play");
+        else beginCreation();
+      } else if (index === 1) beginCreation();
+      else if (index === 2) file.current?.click();
+      else setScreen("help");
+    },
+    [beginCreation, hasSave],
+  );
+  const finishCreation = useCallback(() => {
+    const name = creator.name.trim(),
+      total = creator.attrs.reduce((sum, value) => sum + value, 0),
+      duplicate = originalTables.enemies.some(
+        (record) => String(record?.name || "") === name,
+      );
+    if (!name || [...name].length > 8) {
+      setNotice("姓名须为 1–8 个字符。 ");
+      return;
+    }
+    if (duplicate) {
+      setNotice("姓名与江湖人物重名，请重新输入。 ");
+      return;
+    }
+    if (total !== 80) {
+      setNotice(`四项先天属性之和必须正好为 80（当前 ${total}）。`);
+      return;
+    }
+    const next = fresh(),
+      [baseStr, baseAgi, baseInt, baseBon] = creator.attrs;
+    next.actor = {
+      ...newActor(),
+      name,
+      gender: creator.gender,
+      baseStr,
+      baseAgi,
+      baseInt,
+      baseBon,
+      str: baseStr,
+      agi: baseAgi,
+      int: baseInt,
+      bon: baseBon,
+      face: Math.floor(Math.random() * 20) + 30 - baseStr,
+      luck: Math.floor(Math.random() * 20) + 10,
+      inventory: { "3:4": 1 },
+    };
+    next.savedAt = new Date().toISOString();
+    sync(next);
+    localStorage.setItem("rmxp-original-world-v1", JSON.stringify(next));
+    setHasSave(true);
+    setNotice(`${name}踏入江湖。`);
+    setScreen("play");
+  }, [creator, sync]);
   const rememberArcadeScore = useCallback(
     (kind: "dance" | "ball", score: number) => {
       const next = structuredClone(stateRef.current);
@@ -891,6 +1111,64 @@ export default function OriginalWorld() {
         keys.current.add(k);
         const confirm = ["z", "enter", " "].includes(k),
           cancel = ["x", "escape"].includes(k);
+        if (screen !== "play") {
+          if (screen === "title") {
+            if (k === "arrowup" || k === "w")
+              setTitleIndex((titleIndex + 3) % 4);
+            else if (k === "arrowdown" || k === "s")
+              setTitleIndex((titleIndex + 1) % 4);
+            else if (confirm) titleAction(titleIndex);
+            return;
+          }
+          if (screen === "intro") {
+            if (confirm || cancel) setScreen("create");
+            return;
+          }
+          if (screen === "help") {
+            if (confirm || cancel) setScreen("title");
+            return;
+          }
+          if ((e.target as HTMLElement)?.tagName === "INPUT") {
+            if (cancel) (e.target as HTMLInputElement).blur();
+            return;
+          }
+          if (creator.step === 1) {
+            if (k === "arrowup" || k === "w")
+              setCreator({ ...creator, index: (creator.index + 2) % 3 });
+            else if (k === "arrowdown" || k === "s")
+              setCreator({ ...creator, index: (creator.index + 1) % 3 });
+            else if (
+              creator.index === 0 &&
+              ["arrowleft", "arrowright", "a", "d"].includes(k)
+            )
+              setCreator({ ...creator, gender: (creator.gender + 1) % 2 });
+            else if (confirm && creator.index === 1) nameInput.current?.focus();
+            else if (confirm && creator.index === 2) {
+              if (!creator.name.trim()) setNotice("请先输入姓名。 ");
+              else setCreator({ ...creator, step: 2, index: 0 });
+            } else if (cancel) setScreen("title");
+            return;
+          }
+          if (k === "arrowup" || k === "w")
+            setCreator({ ...creator, index: (creator.index + 4) % 5 });
+          else if (k === "arrowdown" || k === "s")
+            setCreator({ ...creator, index: (creator.index + 1) % 5 });
+          else if (
+            creator.index < 4 &&
+            ["arrowleft", "arrowright", "a", "d"].includes(k)
+          ) {
+            const attrs = [...creator.attrs] as CreatorState["attrs"],
+              delta = ["arrowright", "d"].includes(k) ? 1 : -1,
+              total = attrs.reduce((sum, value) => sum + value, 0),
+              value = attrs[creator.index] + delta;
+            if (value >= 10 && value <= 30 && (delta < 0 || total < 80)) {
+              attrs[creator.index] = value;
+              setCreator({ ...creator, attrs });
+            }
+          } else if (confirm && creator.index === 4) finishCreation();
+          else if (cancel) setCreator({ ...creator, step: 1, index: 0 });
+          return;
+        }
         if (life) {
           const length =
             life.kind === "forge"
@@ -1089,6 +1367,26 @@ export default function OriginalWorld() {
           } else if (cancel) setCaihua(null);
           return;
         }
+        if (flyMenu !== null) {
+          const length = ((originalSystem.fly_menu as string[]) || []).length;
+          if (k === "arrowup" || k === "w")
+            setFlyMenu((flyMenu + length - 1) % length);
+          else if (k === "arrowdown" || k === "s")
+            setFlyMenu((flyMenu + 1) % length);
+          else if (confirm) flyTo(flyMenu);
+          else if (cancel || k === "h" || k === "f6") setFlyMenu(null);
+          return;
+        }
+        if (itemConfirm) {
+          if (["arrowup", "arrowdown", "w", "s"].includes(k))
+            setItemConfirm({
+              ...itemConfirm,
+              index: (itemConfirm.index + 1) % 2,
+            });
+          else if (confirm) confirmBagAction(itemConfirm.index);
+          else if (cancel) setItemConfirm(null);
+          return;
+        }
         if (cultivation !== null) {
           const length = 6 + practiceOptions(stateRef.current.actor).length;
           if (cultivationActive) {
@@ -1100,9 +1398,10 @@ export default function OriginalWorld() {
           else if (k === "arrowdown" || k === "s")
             setCultivation((cultivation + 1) % length);
           else if (confirm) {
-            if (cultivation <= 1 || cultivation >= 6)
-              setCultivationActive(true);
-            else cultivate(cultivation);
+            if (cultivation <= 1 || cultivation >= 6) {
+              if (cultivation >= 6 || cultivate(cultivation))
+                setCultivationActive(true);
+            } else cultivate(cultivation);
           } else if (cancel || k === "r") setCultivation(null);
           return;
         }
@@ -1124,7 +1423,8 @@ export default function OriginalWorld() {
           else if (k === "arrowdown" || k === "s")
             setMenu({ ...menu, index: (menu.index + 1) % length });
           else if (confirm && menu.tab === 0)
-            activateBagEntry(entries[menu.index]);
+            entries[menu.index] &&
+              setItemConfirm({ entry: entries[menu.index], index: 0 });
           else if (confirm && menu.tab === 2)
             activateSkill(skills[menu.index]?.id);
           else if ((k === "c" || k === "r") && menu.tab === 2)
@@ -1187,6 +1487,7 @@ export default function OriginalWorld() {
         if (confirm) interact();
         else if (k === "f") save();
         else if (k === "r") setCultivation(0);
+        else if (k === "h" || k === "f6") openFlyMenu();
         else if (k === "t")
           setEventText(
             `任务簿\n${taskJournal(stateRef.current.tasks).join("\n")}`,
@@ -1211,15 +1512,20 @@ export default function OriginalWorld() {
     buySelected,
     caihua,
     chooseNpc,
+    confirmBagAction,
     cultivate,
     cultivation,
     cultivationActive,
     eventText,
     fight,
+    flyMenu,
+    flyTo,
     interact,
     leaveBattle,
     menu,
+    itemConfirm,
     npcMenu,
+    openFlyMenu,
     save,
     shop,
     study,
@@ -1236,6 +1542,11 @@ export default function OriginalWorld() {
     settleBattle,
     sync,
     consumeBattleItem,
+    creator,
+    finishCreation,
+    screen,
+    titleAction,
+    titleIndex,
   ]);
   const arcadeKind = arcade?.kind;
   useEffect(() => {
@@ -1268,6 +1579,7 @@ export default function OriginalWorld() {
     return () => window.clearInterval(id);
   }, [arcadeKind]);
   useEffect(() => {
+    if (screen !== "play") return;
     const id = setInterval(() => {
       const now = Date.now(),
         moves: Array<[string[], number, number]> = [
@@ -1286,9 +1598,9 @@ export default function OriginalWorld() {
       }
     }, 30);
     return () => clearInterval(id);
-  }, [move]);
+  }, [move, screen]);
   useEffect(() => {
-    if (battle) return;
+    if (battle || screen !== "play") return;
     const id = window.setInterval(() => {
       const next = structuredClone(stateRef.current);
       digestActor(next.actor);
@@ -1296,7 +1608,7 @@ export default function OriginalWorld() {
       sync(next);
     }, 15000);
     return () => window.clearInterval(id);
-  }, [battle, sync]);
+  }, [battle, screen, sync]);
   useEffect(() => {
     if (!cultivationActive || cultivation === null) return;
     const id = window.setInterval(() => cultivate(cultivation), 1000 / 120);
@@ -1339,6 +1651,12 @@ export default function OriginalWorld() {
       )
         throw 0;
       sync(normalize(x));
+      localStorage.setItem(
+        "rmxp-original-world-v1",
+        JSON.stringify(normalize(x)),
+      );
+      setHasSave(true);
+      setScreen("play");
       setNotice("JSON 读取成功");
     } catch {
       setNotice("存档格式无效");
@@ -1350,6 +1668,160 @@ export default function OriginalWorld() {
     const item = originalTables.items[entry.id] || {};
     return !item.is_book && [0, 1].includes(Number(item.occasion || 0));
   });
+  const cultivationInfo = [
+    cultivationAvailability(state.actor, "meditate"),
+    cultivationAvailability(state.actor, "magic"),
+    cultivationAvailability(state.actor, "recover"),
+    cultivationAvailability(state.actor, "heal"),
+    cultivationAvailability(state.actor, "force"),
+    cultivationAvailability(state.actor, "spell"),
+  ];
+  if (screen === "title") {
+    const titleItems = [
+      hasSave ? "继续游戏" : "开始游戏",
+      "开始新游戏",
+      "读取 JSON 存档",
+      "操作说明",
+    ];
+    return (
+      <main className="launch-screen title-screen">
+        <div className="title-mountains" aria-hidden="true" />
+        <section className="title-card">
+          <small>RMXP 原版规则网页重制</small>
+          <h1>英雄坛说</h1>
+          <p>云游志</p>
+          <nav>
+            {titleItems.map((item, index) => (
+              <button
+                className={titleIndex === index ? "active" : ""}
+                key={item}
+                onMouseEnter={() => setTitleIndex(index)}
+                onClick={() => titleAction(index)}
+              >
+                {item}
+              </button>
+            ))}
+          </nav>
+          <em>W/S 或方向键选择 · Z/Enter 确认</em>
+        </section>
+        <input
+          hidden
+          ref={file}
+          type="file"
+          accept=".json,application/json"
+          onChange={(e) => void importJson(e.target.files?.[0])}
+        />
+      </main>
+    );
+  }
+  if (screen === "intro")
+    return (
+      <main className="launch-screen intro-screen">
+        <h1>序 · 时空转换</h1>
+        <div className="intro-viewport">
+          <p>{String(originalText.scroll_start || "").trim()}</p>
+        </div>
+        <button onClick={() => setScreen("create")}>跳过序章，创建人物</button>
+        <small>Z/Enter 或 X/Esc 跳过</small>
+      </main>
+    );
+  if (screen === "help")
+    return (
+      <main className="launch-screen help-screen">
+        <section>
+          <h1>操作说明</h1>
+          <p>移动：WASD / 方向键　互动：Z / Enter / 空格</p>
+          <p>行囊与人物：M / E / Tab　修炼：R　轻功：H / F6</p>
+          <p>任务簿：T　保存：F　战斗绝招：Q　战斗物品：I</p>
+          <p>返回与逃跑：X / Esc；生死战也可用 G 尝试逃跑。</p>
+          <button onClick={() => setScreen("title")}>返回标题</button>
+        </section>
+      </main>
+    );
+  if (screen === "create") {
+    const attrNames = ["膂力", "敏捷", "悟性", "根骨"],
+      total = creator.attrs.reduce((sum, value) => sum + value, 0);
+    return (
+      <main className="launch-screen create-screen">
+        <section className="creator-card">
+          <header>
+            <small>创建人物 · {creator.step}/2</small>
+            <h1>{creator.step === 1 ? "决定你的身份" : "分配先天属性"}</h1>
+          </header>
+          {creator.step === 1 ? (
+            <div className="creator-fields">
+              <button
+                className={creator.index === 0 ? "active" : ""}
+                onClick={() =>
+                  setCreator({
+                    ...creator,
+                    index: 0,
+                    gender: (creator.gender + 1) % 2,
+                  })
+                }
+              >
+                性别 <b>{creator.gender === 0 ? "男" : "女"}</b>
+                <small>A/D 或左右键切换</small>
+              </button>
+              <label className={creator.index === 1 ? "active" : ""}>
+                姓名
+                <input
+                  ref={nameInput}
+                  maxLength={8}
+                  value={creator.name}
+                  placeholder="输入 1–8 个字符"
+                  onFocus={() => setCreator({ ...creator, index: 1 })}
+                  onChange={(e) =>
+                    setCreator({ ...creator, name: e.target.value, index: 1 })
+                  }
+                  onKeyDown={(e) => {
+                    if (e.key === "Enter") {
+                      e.currentTarget.blur();
+                      setCreator({ ...creator, index: 2 });
+                    } else if (e.key === "Escape") e.currentTarget.blur();
+                  }}
+                />
+              </label>
+              <button
+                className={creator.index === 2 ? "active" : ""}
+                onClick={() => {
+                  if (!creator.name.trim()) setNotice("请先输入姓名。 ");
+                  else setCreator({ ...creator, step: 2, index: 0 });
+                }}
+              >
+                下一步
+              </button>
+            </div>
+          ) : (
+            <div className="creator-fields attributes">
+              {attrNames.map((name, index) => (
+                <button
+                  className={creator.index === index ? "active" : ""}
+                  key={name}
+                  onClick={() => setCreator({ ...creator, index })}
+                >
+                  {name}
+                  <b>{creator.attrs[index]}</b>
+                  <small>范围 10–30 · A/D 调整</small>
+                </button>
+              ))}
+              <strong className={total === 80 ? "ready" : ""}>
+                已分配 {total}/80
+              </strong>
+              <button
+                className={creator.index === 4 ? "active" : ""}
+                onClick={finishCreation}
+              >
+                踏入江湖
+              </button>
+            </div>
+          )}
+          <p>{notice}</p>
+          <footer>W/S 选择 · A/D 调整 · Z/Enter 确认 · X/Esc 返回</footer>
+        </section>
+      </main>
+    );
+  }
   return (
     <main className="world-shell">
       <header>
@@ -1358,9 +1830,12 @@ export default function OriginalWorld() {
           <b>云游志</b>
           <span>正式版 · 69 MAPS</span>
         </div>
-        <button onClick={save}>
-          保存 <kbd>F</kbd>
-        </button>
+        <div className="header-actions">
+          <button onClick={save}>
+            保存 <kbd>F</kbd>
+          </button>
+          <button onClick={() => setScreen("title")}>主菜单</button>
+        </div>
       </header>
       <section className="world-frame">
         <canvas ref={canvas} width={W} height={H} />
@@ -1458,20 +1933,38 @@ export default function OriginalWorld() {
             actor={state.actor}
             menu={menu}
             setMenu={setMenu}
-            activate={activateBagEntry}
+            activate={(entry) => setItemConfirm({ entry, index: 0 })}
             activateKf={activateSkill}
+          />
+        )}
+        {itemConfirm && (
+          <Choice
+            title={`${itemConfirm.entry.equipped ? "卸下" : itemConfirm.entry.kind === 1 ? "使用" : "装备"}「${itemConfirm.entry.name}」？`}
+            items={["确定", "取消"]}
+            index={itemConfirm.index}
+            choose={confirmBagAction}
+          />
+        )}
+        {flyMenu !== null && (
+          <Choice
+            title="轻功 · 消耗 200 内力"
+            items={((originalSystem.fly_menu as string[]) || []).map(
+              (name) => `飞往${name}`,
+            )}
+            index={flyMenu}
+            choose={flyTo}
           />
         )}
         {cultivation !== null && (
           <Choice
             title={cultivationActive ? "修炼中 · X 停止" : "修炼调息"}
             items={[
-              "打坐 · 提升内力",
-              "冥思 · 提升法力",
-              "吸气 · 恢复气血",
-              "疗伤 · 恢复伤势",
-              `加力 +10 · 当前 ${state.actor.fpPlus}`,
-              `法点 +10 · 当前 ${state.actor.mpPlus}`,
+              `打坐 · ${cultivationInfo[0].requirement}${cultivationInfo[0].ok ? "" : "〔不可用〕"}`,
+              `冥思 · ${cultivationInfo[1].requirement}${cultivationInfo[1].ok ? "" : "〔不可用〕"}`,
+              `吸气 · ${cultivationInfo[2].requirement}${cultivationInfo[2].ok ? "" : "〔不可用〕"}`,
+              `疗伤 · ${cultivationInfo[3].requirement}${cultivationInfo[3].ok ? "" : "〔不可用〕"}`,
+              `加力 +10 · 当前 ${state.actor.fpPlus} · ${cultivationInfo[4].requirement}${cultivationInfo[4].ok ? "" : "〔不可用〕"}`,
+              `法点 +10 · 当前 ${state.actor.mpPlus} · ${cultivationInfo[5].requirement}${cultivationInfo[5].ok ? "" : "〔不可用〕"}`,
               ...practiceOptions(state.actor).map(
                 (skill) => `练习 ${skill.name} · ${skill.level} 级`,
               ),
@@ -1521,6 +2014,9 @@ export default function OriginalWorld() {
           <button onClick={() => setCultivation(0)}>
             修炼 <kbd>R</kbd>
           </button>
+          <button onClick={openFlyMenu}>
+            轻功 <kbd>H</kbd>
+          </button>
           <button
             onClick={() =>
               setEventText(`任务簿\n${taskJournal(state.tasks).join("\n")}`)
@@ -1536,7 +2032,9 @@ export default function OriginalWorld() {
         移动 <kbd>WASD</kbd>
         <kbd>方向键</kbd> · 互动 <kbd>Z</kbd>
         <kbd>Enter</kbd> · 菜单 <kbd>M</kbd>
-        <kbd>Tab</kbd> · 修炼 <kbd>R</kbd> · 返回 <kbd>Esc</kbd>
+        <kbd>Tab</kbd> · 修炼 <kbd>R</kbd> · 轻功 <kbd>H</kbd>
+        <kbd>F6</kbd> · 任务 <kbd>T</kbd> · 保存 <kbd>F</kbd> · 返回
+        <kbd>Esc</kbd>
       </footer>
       <input
         hidden
@@ -1850,7 +2348,9 @@ function GameMenu({
         </section>
       ) : menu.tab === 1 ? (
         <section className="status-grid">
-          <b>江湖少侠 · {actor.age} 岁</b>
+          <b>
+            {actor.name || "江湖少侠"} · {actor.age} 岁
+          </b>
           <span>
             气血 {actor.hp}/{actor.maxHp}
           </span>

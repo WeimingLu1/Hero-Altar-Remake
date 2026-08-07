@@ -104,7 +104,10 @@ test("义工随机编号、体力消耗与普通模式奖励保持原作", () =>
     tasks = freshTaskState();
   assert.equal(acceptFreeWork(a, tasks, () => 1).ok, true);
   assert.equal(tasks.freeWork, 2);
-  assert.equal(finishFreeWork(a, tasks, 2).ok, true);
+  const finished = finishFreeWork(a, tasks, 2);
+  assert.equal(finished.ok, true);
+  assert.match(finished.text, /挑水挑水我挑水/);
+  assert.match(finished.text, /费了老大力气/);
   assert.equal(a.hp, 60);
   assert.equal(a.exp, 1020);
   assert.equal(a.potential, 10);

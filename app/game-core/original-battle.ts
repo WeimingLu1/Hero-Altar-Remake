@@ -6,7 +6,7 @@ import {
 } from "./combat";
 import { originalTables, type OriginalRecord } from "./original-data";
 import type { SceneActorState } from "./scene-event";
-import { derivedStats } from "./inventory-system";
+import { derivedStats, fullHp } from "./inventory-system";
 import { combatSkillProfile, effectiveLevel, skillLevel } from "./skill-system";
 import {
   battleSpecials,
@@ -75,6 +75,7 @@ function moveFor(
   random: RandomInt,
   user: string,
   target: string,
+  weaponName = "",
 ): Move {
   const kungfu =
     originalTables.kungfus[kfId] || originalTables.kungfus[2] || {};
@@ -88,7 +89,8 @@ function moveFor(
     text: String(row[1] || "user挥拳攻向target")
       .replaceAll("user", user)
       .replaceAll("target", target)
-      .replaceAll("position", "要害"),
+      .replaceAll("position", "要害")
+      .replaceAll("weapon", weaponName),
     hitType: Number(row[2] || 0),
     ap: Number(row[3] || 0),
     dp: Number(row[4] || 0),
@@ -395,16 +397,32 @@ function enemyTurn(
       ((record.skill_list as number[][]) || []).find(
         (row) => row[0] === enemyId,
       )?.[1] || 0,
-    em = moveFor(record, enemyId, enemyLevel, random, battle.enemyName, "你"),
+    em = moveFor(
+      record,
+      enemyId,
+      enemyLevel,
+      random,
+      battle.enemyName,
+      "你",
+      String(originalTables.weapons[battle.enemyWeaponId]?.name || ""),
+    ),
     attacker = enemy(record, battle.enemyFp, em, battle),
     target = player(actor, blank, battle),
     received = attackEffect(attacker, target, random);
   battle.log.push(em.text, resultText(received, "你"));
   battle.enemyFp = attacker.fp;
   actor.hp = Math.max(0, actor.hp - received.hurt);
-  if (actor.hp <= 0) {
+  const defeatAt =
+    battle.mode === "story" && battle.enemyId === 149
+      ? Math.floor(fullHp(actor) / 2)
+      : 0;
+  if (actor.hp <= defeatAt) {
     battle.finished = "lose";
-    battle.log.push("你眼前一黑，已无力再战。切磋到此为止。");
+    battle.log.push(
+      battle.mode === "spar"
+        ? "你眼前一黑，已无力再战。切磋到此为止。"
+        : "你已无力再战。",
+    );
   }
 }
 
@@ -478,7 +496,11 @@ export function battleRound(source: OriginalBattle, actor: SceneActorState) {
   const battle = structuredClone(source);
   if (battle.finished) return battle;
   tick(battle, actor);
-  if (battle.enemyHp <= 0) {
+  const victoryAt =
+    battle.mode === "story" && battle.enemyId === 149
+      ? Math.floor(battle.enemyMaxHp / 2)
+      : 0;
+  if (battle.enemyHp <= victoryAt) {
     battle.finished = "win";
     battle.log.push(`${battle.enemyName}倒在苍鹰利爪之下。`);
     return battle;
@@ -496,6 +518,7 @@ export function battleRound(source: OriginalBattle, actor: SceneActorState) {
       random,
       "你",
       battle.enemyName,
+      String(originalTables.weapons[actor.weaponId]?.name || ""),
     ),
     pc = player(actor, pm, battle),
     blank: Move = {
@@ -521,7 +544,7 @@ export function battleRound(source: OriginalBattle, actor: SceneActorState) {
   actor.fp = pc.fp;
   battle.enemyHp = Math.max(0, battle.enemyHp - dealt.hurt);
   battle.log.push(resultText(dealt, battle.enemyName));
-  if (battle.enemyHp <= 0) {
+  if (battle.enemyHp <= victoryAt) {
     battle.finished = "win";
     battle.log.push(`${battle.enemyName}收招认输。`);
     return battle;
@@ -531,7 +554,7 @@ export function battleRound(source: OriginalBattle, actor: SceneActorState) {
   return battle;
 }
 export function endSpar(actor: SceneActorState, battle: OriginalBattle) {
-  if (battle.finished === "lose")
+  if (battle.mode === "spar" && battle.finished === "lose")
     actor.hp = Math.max(1, Math.floor(actor.maxHp / 10));
   return actor;
 }
@@ -551,7 +574,11 @@ export function specialRound(
     return battle;
   }
   tick(battle, actor);
-  if (battle.enemyHp <= 0) {
+  const victoryAt =
+    battle.mode === "story" && battle.enemyId === 149
+      ? Math.floor(battle.enemyMaxHp / 2)
+      : 0;
+  if (battle.enemyHp <= victoryAt) {
     battle.finished = "win";
     battle.log.push(`${battle.enemyName}倒在苍鹰利爪之下。`);
     return battle;
@@ -962,14 +989,18 @@ export function specialRound(
       ? [0, Math.floor(level / 25) + 1, Math.floor(level / 20) + 1][specialId]
       : 0);
   if (cooldown > 0) battle.cooldowns[String(specialId)] = cooldown;
-  if (battle.enemyHp <= 0) {
+  if (battle.enemyHp <= victoryAt) {
     battle.finished = "win";
     battle.log.push(`${battle.enemyName}收招认输。`);
     return battle;
   }
-  if (actor.hp <= 0) {
+  const defeatAt =
+    battle.mode === "story" && battle.enemyId === 149
+      ? Math.floor(fullHp(actor) / 2)
+      : 0;
+  if (actor.hp <= defeatAt) {
     battle.finished = "lose";
-    battle.log.push("法术反噬耗尽气血，你已无力再战。切磋到此为止。");
+    battle.log.push("法术反噬耗损气血，你已无力再战。 ");
     return battle;
   }
   enemyTurn(battle, actor, record, random, blank);
