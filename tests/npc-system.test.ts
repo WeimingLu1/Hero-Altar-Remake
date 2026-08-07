@@ -84,6 +84,18 @@ test("unconditional teacher accepts disciple and study consumes potential", () =
   assert.equal(a.potential, before - 1);
 });
 
+test("白瑞德拜师按实时实战根骨计算基本内功加成", () => {
+  const a = actor();
+  a.maxFp = 1200;
+  a.skills["1"] = { level: 120, points: 0 };
+  // 存档缓存仍是 20，但原版 getter 与状态栏的实时实战根骨已是 32。
+  assert.equal(a.bon, 20);
+  const join = attemptJoin(111, a);
+  assert.equal(join.ok, true);
+  assert.equal(a.teacherId, 111);
+  assert.equal(a.classId, 6);
+});
+
 test("秘籍沿用原作技能表并要求读书识字与自创门派", () => {
   const a = actor();
   assert.equal(canReadBook(a, 11).ok, false);

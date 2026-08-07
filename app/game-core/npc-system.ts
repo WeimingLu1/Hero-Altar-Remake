@@ -4,6 +4,7 @@ import {
   originalText,
   type OriginalRecord,
 } from "./original-data";
+import { derivedStats } from "./inventory-system";
 import type { SceneActorState } from "./scene-event";
 
 export type NpcOption =
@@ -124,15 +125,16 @@ function condition(actor: SceneActorState, type: number, num: number) {
   if (type === -2) return actor.maxFp >= num;
   if (type === -3) return actor.face >= num;
   if (type === -12) return actor.maxMp >= num;
+  const derived = derivedStats(actor);
   const attrs = [
     actor.baseBon,
     actor.baseInt,
     actor.baseAgi,
     actor.baseStr,
-    actor.bon,
-    actor.int,
-    actor.agi,
-    actor.str,
+    derived.bon,
+    derived.int,
+    derived.agi,
+    derived.str,
   ];
   if (type >= -11 && type <= -4) {
     const value = attrs[type + 11];
