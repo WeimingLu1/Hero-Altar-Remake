@@ -6,9 +6,10 @@ import {
 } from "./original-data";
 import { derivedStats } from "./inventory-system";
 import type { SceneActorState } from "./scene-event";
+import { npcLoreStatus } from "./npc-lore";
 
 export type NpcOption =
-  "talk" | "status" | "battle" | "trade" | "join" | "study";
+  "talk" | "chat" | "status" | "battle" | "trade" | "join" | "study";
 export type ShopGood = {
   kind: 1 | 2 | 3;
   id: number;
@@ -28,7 +29,7 @@ const table = (kind: number) =>
 export function npcOptions(id: number, actor: SceneActorState): NpcOption[] {
   const npc = enemy(id),
     type = Number(npc.type || 0);
-  const result: NpcOption[] = ["talk", "status", "battle"];
+  const result: NpcOption[] = ["talk", "chat", "status", "battle"];
   if (type === -1) result.push("trade");
   else if (type > 0) result.push(actor.teacherId === id ? "study" : "join");
   else if (id === 7 || id === 31) result.push("study");
@@ -36,6 +37,7 @@ export function npcOptions(id: number, actor: SceneActorState): NpcOption[] {
 }
 export const npcOptionLabel: Record<NpcOption, string> = {
   talk: "交谈",
+  chat: "自由对话",
   status: "查看",
   battle: "战斗",
   trade: "交易",
@@ -75,6 +77,7 @@ export function npcStatus(id: number) {
   return [
     `【${npc.name || "无名氏"}】${Number(npc.gender) === 1 ? "女" : "男"} · ${npc.age || 0}岁`,
     description ? `人物描述：${description}` : "人物描述：此人沉默寡言，来历不明。",
+    ...npcLoreStatus(id),
     `气血 ${npc.hp || 0}/${npc.maxhp || 0} · 内力 ${npc.fp || 0}/${npc.maxfp || 0} · 法力 ${npc.mp || 0}/${npc.maxmp || 0}`,
     `实战四维：膂力 ${npc.str || 0} · 敏捷 ${npc.agi || 0} · 悟性 ${npc.int || 0} · 根骨 ${npc.bon || npc.base_bon || 0}`,
     `先天四维：膂力 ${npc.base_str || 0} · 敏捷 ${npc.base_agi || 0} · 悟性 ${npc.base_int || 0} · 根骨 ${npc.base_bon || 0}`,

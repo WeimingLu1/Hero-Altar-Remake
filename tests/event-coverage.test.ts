@@ -106,9 +106,12 @@ test("all 215 original Scene_Event interactables resolve to executable browser b
       for (const page of event.pages) {
         const source = page.commands
           .filter(
-            (command: any) => command.code === 355 || command.code === 655,
+            (command: { code: number }) =>
+              command.code === 355 || command.code === 655,
           )
-          .map((command: any) => String(command.parameters[0] || ""))
+          .map((command: { parameters: unknown[] }) =>
+            String(command.parameters[0] || ""),
+          )
           .join("\n");
         for (const match of source.matchAll(
           /Scene_Event\.new\(\s*(-?\d+)(?:\s*,\s*(-?\d+))?(?:\s*,\s*(-?\d+))?/g,

@@ -51,6 +51,14 @@ test("战利品结算发放原作敌人金钱和全部物品", () => {
   assert.equal(result.items.length, 2);
 });
 
+test("超过二十种物品后仍能取得新的战利品", () => {
+  const a = actor();
+  for (let id = 1; id <= 25; id++) a.inventory[`1:${id}`] = 1;
+  settleVictoryLoot(a, 1, false);
+  assert.equal(a.inventory["3:7"], 1);
+  assert.equal(a.inventory["3:9"], 1);
+});
+
 test("砍头会记录杀人列表并按原作道德公式结算", () => {
   const a = actor();
   const result = settleVictoryLoot(a, 2, true);

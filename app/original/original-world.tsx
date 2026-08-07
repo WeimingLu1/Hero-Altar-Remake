@@ -104,11 +104,21 @@ import {
   adjustCheatSkill,
   adjustCheatStat,
   applyCheatQuick,
+  cheatInventoryCatalog,
   cheatQuickOptions,
-  cheatSkillRows,
+  cheatSchools,
   cheatStats,
+  cheatStatMaximum,
+  cheatTeachers,
   maxCheatSkill,
   maxCheatStat,
+  removeCheatSkill,
+  reviveCheatNpc,
+  setCheatIdentity,
+  setCheatInventory,
+  setCheatSkill,
+  setCheatStat,
+  type CheatInventoryKind,
   type CheatQuickAction,
 } from "../game-core/cheat-system";
 import {
@@ -116,6 +126,12 @@ import {
   levelTier,
   levelTitle,
 } from "../game-core/status-system";
+import { buildNpcSystemPrompt, npcLore } from "../game-core/npc-lore";
+import {
+  LM_STUDIO_MODEL,
+  streamNpcReply,
+  type ChatMessage,
+} from "../game-core/lm-studio";
 import "./world.css";
 import "./choice.css";
 import "./battle.css";
@@ -135,6 +151,9 @@ const organizedBagEntries = (actor: SceneActorState) =>
   );
 const organizedSkills = (actor: SceneActorState) =>
   learnedSkills(actor).sort((a, b) => a.type - b.type || a.id - b.id);
+const allCheatSkills = originalTables.kungfus.flatMap((skill, id) =>
+  skill ? [{ id, name: String(skill.name || id), type: Number(skill.type || 0) }] : [],
+);
 type WorldSave = {
   format: "rmxp-hero-original-world-save";
   version: 1;
@@ -166,6 +185,23 @@ type CreatorState = {
   gender: number;
   attrs: [number, number, number, number];
 };
+type NpcChatState = {
+  id: number;
+  speech: string;
+  action: string;
+  messages: NpcDialogueMessage[];
+  loading: boolean;
+  error: string;
+};
+type NpcDialogueMessage =
+  | { role: "user"; speech: string; action: string }
+  | {
+      role: "assistant";
+      state: string;
+      action: string;
+      speech: string;
+      raw: string;
+    };
 const newActor = (): SceneActorState => ({
   name: "江湖少侠",
   inventory: {},
@@ -258,6 +294,17 @@ const seeded = (seed: number) => {
     return Math.floor((value / 4294967296) * Math.max(1, max));
   };
 };
+const parseNpcDialogue = (raw: string) => {
+  const section = (name: string, next?: string) => {
+    const end = next ? `(?=\\n(?:${next})[：:])` : "$";
+    return raw.match(new RegExp(`(?:^|\\n)${name}[：:]\\s*([\\s\\S]*?)${end}`))?.[1]?.trim() || "";
+  };
+  return {
+    state: section("状态", "动作|语言"),
+    action: section("动作", "语言"),
+    speech: section("语言") || (!/[状态动作语言][：:]/.test(raw) ? raw.trim() : ""),
+  };
+};
 
 export default function OriginalWorld() {
   const [state, setState] = useState<WorldSave>(fresh),
@@ -276,6 +323,7 @@ export default function OriginalWorld() {
   const [npcMenu, setNpcMenu] = useState<{ id: number; index: number } | null>(
       null,
     ),
+    [npcChat, setNpcChat] = useState<NpcChatState | null>(null),
     [shop, setShop] = useState<{ id: number; index: number } | null>(null),
     [study, setStudy] = useState<{
       id: number;
@@ -312,6 +360,8 @@ export default function OriginalWorld() {
   const canvas = useRef<HTMLCanvasElement>(null),
     file = useRef<HTMLInputElement>(null),
     nameInput = useRef<HTMLInputElement>(null),
+    chatEnd = useRef<HTMLDivElement>(null),
+    chatAbort = useRef<AbortController | null>(null),
     stateRef = useRef<WorldSave>(state),
     keys = useRef(new Set<string>()),
     held = useRef<Record<string, number>>({});
@@ -503,6 +553,11 @@ export default function OriginalWorld() {
         s.tasks.wantedX === nx &&
         s.tasks.wantedY === ny;
       if (!blocking && !wantedBlocking) {
+        if (npcChat) {
+          chatAbort.current?.abort();
+          chatAbort.current = null;
+          setNpcChat(null);
+        }
         s.position.x = nx;
         s.position.y = ny;
         sync(s);
@@ -518,6 +573,7 @@ export default function OriginalWorld() {
       eventText,
       menu,
       npcMenu,
+      npcChat,
       runAt,
       shop,
       study,
@@ -663,6 +719,15 @@ export default function OriginalWorld() {
           id + next.position.mapId,
         );
         setEventText(`${npcRecord(id).name}\n${r.lines.join("\n")}`);
+      } else if (option === "chat") {
+        setNpcChat({
+          id,
+          speech: "",
+          action: "",
+          messages: [],
+          loading: false,
+          error: "",
+        });
       } else if (option === "status") setEventText(npcStatus(id).join("\n"));
       else if (option === "battle")
         setBattle(
@@ -683,6 +748,79 @@ export default function OriginalWorld() {
     },
     [sync],
   );
+  const closeNpcChat = useCallback(() => {
+    chatAbort.current?.abort();
+    chatAbort.current = null;
+    setNpcChat(null);
+  }, []);
+  const sendNpcChat = useCallback(async () => {
+    if (!npcChat || npcChat.loading) return;
+    const speech = npcChat.speech.trim(), action = npcChat.action.trim(), id = npcChat.id;
+    if (!speech && !action) return;
+    const userMessage: NpcDialogueMessage = { role: "user", speech, action };
+    const dialogueHistory = [...npcChat.messages, userMessage];
+    const history: ChatMessage[] = dialogueHistory.map((message) => message.role === "user"
+      ? {
+          role: "user",
+          content: [message.action ? `行动：${message.action}` : "", message.speech ? `语言：${message.speech}` : ""].filter(Boolean).join("\n"),
+        }
+      : {
+          role: "assistant",
+          content: `状态：${message.state}\n动作：${message.action}\n语言：${message.speech}`,
+        });
+    const controller = new AbortController();
+    chatAbort.current?.abort();
+    chatAbort.current = controller;
+    setNpcChat({
+      ...npcChat,
+      speech: "",
+      action: "",
+      messages: [...dialogueHistory, { role: "assistant", state: "", action: "", speech: "", raw: "" }],
+      loading: true,
+      error: "",
+    });
+    try {
+      const current = stateRef.current;
+      const answer = await streamNpcReply({
+        system: buildNpcSystemPrompt(id, current.actor, current.tasks, getOriginalMap(current.position.mapId).name),
+        messages: history,
+        signal: controller.signal,
+        onToken: (token) => setNpcChat((chat) => {
+          if (!chat || chat.id !== id) return chat;
+          const messages = [...chat.messages], last = messages.length - 1;
+          const currentReply = messages[last];
+          if (currentReply.role !== "assistant") return chat;
+          const raw = currentReply.raw + token, parsed = parseNpcDialogue(raw);
+          messages[last] = { role: "assistant", raw, ...parsed };
+          return { ...chat, messages };
+        }),
+      });
+      const parsed = parseNpcDialogue(answer);
+      setNpcChat((chat) => {
+        if (!chat || chat.id !== id) return chat;
+        const messages = [...chat.messages];
+        messages[messages.length - 1] = { role: "assistant", raw: answer, ...parsed };
+        return { ...chat, messages, loading: false };
+      });
+    } catch (error) {
+      if (controller.signal.aborted) return;
+      const detail = error instanceof Error ? error.message : "连接失败";
+      const corsHint = detail === "Failed to fetch"
+        ? "请在 LM Studio 的 Developer → Server Settings 打开 Enable CORS，然后重启服务。"
+        : "请确认 LM Studio 已启动且模型已加载。";
+      setNpcChat((chat) => chat?.id === id ? {
+        ...chat,
+        messages: chat.messages.filter((message) => message.role === "user" || message.raw),
+        loading: false,
+        error: `${detail}。${corsHint}`,
+      } : chat);
+    } finally {
+      if (chatAbort.current === controller) chatAbort.current = null;
+    }
+  }, [npcChat]);
+  useEffect(() => {
+    chatEnd.current?.scrollIntoView({ behavior: "smooth", block: "nearest" });
+  }, [npcChat?.messages]);
   const fight = useCallback(() => {
     if (!battle || battle.finished) return;
     const next = structuredClone(stateRef.current),
@@ -1170,7 +1308,7 @@ export default function OriginalWorld() {
     },
     [sync],
   );
-  const useCheat = useCallback(
+  const applyCheatAction = useCallback(
     (action: CheatQuickAction, confirmed = false) => {
       const option = cheatQuickOptions.find((item) => item.id === action);
       if (option?.dangerous && !confirmed) {
@@ -1197,9 +1335,11 @@ export default function OriginalWorld() {
   const changeCheatSkill = useCallback(
     (index: number, direction: -1 | 1) => {
       const next = structuredClone(stateRef.current),
-        row = cheatSkillRows(next.actor)[index];
+        row = allCheatSkills[index];
       if (!row) return;
-      const text = adjustCheatSkill(next.actor, row.id, direction);
+      const text = next.actor.skills[String(row.id)]
+        ? adjustCheatSkill(next.actor, row.id, direction)
+        : setCheatSkill(next.actor, row.id, 1);
       sync(next);
       setNotice(`${text} 点击右上角“保存”可保存进度。`);
     },
@@ -1217,9 +1357,19 @@ export default function OriginalWorld() {
   const maximizeCheatSkill = useCallback(
     (index: number) => {
       const next = structuredClone(stateRef.current),
-        row = cheatSkillRows(next.actor)[index];
+        row = allCheatSkills[index];
       if (!row) return;
-      const text = maxCheatSkill(next.actor, row.id);
+      const text = next.actor.skills[String(row.id)]
+        ? maxCheatSkill(next.actor, row.id)
+        : setCheatSkill(next.actor, row.id, 255);
+      sync(next);
+      setNotice(`${text} 点击右上角“保存”可保存进度。`);
+    },
+    [sync],
+  );
+  const mutateCheatSave = useCallback(
+    (mutation: (draft: WorldSave) => string) => {
+      const next = structuredClone(stateRef.current), text = mutation(next);
       sync(next);
       setNotice(`${text} 点击右上角“保存”可保存进度。`);
     },
@@ -1299,6 +1449,10 @@ export default function OriginalWorld() {
           else if (cancel) setCreator({ ...creator, step: 1, index: 0 });
           return;
         }
+        if (npcChat) {
+          if (cancel) closeNpcChat();
+          return;
+        }
         if (cheatConfirm) {
           if (["arrowup", "arrowdown", "w", "s"].includes(k))
             setCheatConfirm({
@@ -1306,23 +1460,24 @@ export default function OriginalWorld() {
               index: (cheatConfirm.index + 1) % 2,
             });
           else if (confirm) {
-            if (cheatConfirm.index === 0) useCheat(cheatConfirm.action, true);
+            if (cheatConfirm.index === 0) applyCheatAction(cheatConfirm.action, true);
             else setCheatConfirm(null);
           } else if (cancel) setCheatConfirm(null);
           return;
         }
         if (cheatMenu) {
-          const skills = cheatSkillRows(stateRef.current.actor),
-            length =
+          const length =
               cheatMenu.tab === 0
                 ? cheatQuickOptions.length
                 : cheatMenu.tab === 1
                   ? cheatStats.length
-                  : Math.max(1, skills.length);
+                  : cheatMenu.tab === 3
+                    ? allCheatSkills.length
+                    : 1;
           if (k === "q")
-            setCheatMenu({ tab: (cheatMenu.tab + 2) % 3, index: 0 });
+            setCheatMenu({ tab: (cheatMenu.tab + 5) % 6, index: 0 });
           else if (k === "tab")
-            setCheatMenu({ tab: (cheatMenu.tab + 1) % 3, index: 0 });
+            setCheatMenu({ tab: (cheatMenu.tab + 1) % 6, index: 0 });
           else if (k === "arrowup" || k === "w")
             setCheatMenu({
               ...cheatMenu,
@@ -1337,19 +1492,19 @@ export default function OriginalWorld() {
             changeCheatStat(cheatMenu.index, -1);
           else if (["arrowright", "d"].includes(k) && cheatMenu.tab === 1)
             changeCheatStat(cheatMenu.index, 1);
-          else if (["arrowleft", "a"].includes(k) && cheatMenu.tab === 2)
+          else if (["arrowleft", "a"].includes(k) && cheatMenu.tab === 3)
             changeCheatSkill(cheatMenu.index, -1);
-          else if (["arrowright", "d"].includes(k) && cheatMenu.tab === 2)
+          else if (["arrowright", "d"].includes(k) && cheatMenu.tab === 3)
             changeCheatSkill(cheatMenu.index, 1);
           else if (confirm && cheatMenu.tab === 0)
-            useCheat(cheatQuickOptions[cheatMenu.index].id);
+            applyCheatAction(cheatQuickOptions[cheatMenu.index].id);
           else if (confirm && cheatMenu.tab === 1)
             changeCheatStat(cheatMenu.index, 1);
-          else if (confirm && cheatMenu.tab === 2)
+          else if (confirm && cheatMenu.tab === 3)
             changeCheatSkill(cheatMenu.index, 1);
           else if (k === "m" && cheatMenu.tab === 1)
             maximizeCheatStat(cheatMenu.index);
-          else if (k === "m" && cheatMenu.tab === 2)
+          else if (k === "m" && cheatMenu.tab === 3)
             maximizeCheatSkill(cheatMenu.index);
           else if (cancel || k === "k") setCheatMenu(null);
           return;
@@ -1611,9 +1766,10 @@ export default function OriginalWorld() {
             setMenu({ ...menu, index: (menu.index + length - 1) % length });
           else if (k === "arrowdown" || k === "s")
             setMenu({ ...menu, index: (menu.index + 1) % length });
-          else if (confirm && menu.tab === 0)
-            entries[menu.index] &&
+          else if (confirm && menu.tab === 0) {
+            if (entries[menu.index])
               setItemConfirm({ entry: entries[menu.index], index: 0 });
+          }
           else if (confirm && menu.tab === 2)
             activateSkill(skills[menu.index]?.id);
           else if ((k === "c" || k === "r") && menu.tab === 2)
@@ -1731,6 +1887,8 @@ export default function OriginalWorld() {
     maximizeCheatStat,
     itemConfirm,
     npcMenu,
+    npcChat,
+    closeNpcChat,
     openFlyMenu,
     save,
     shop,
@@ -1753,7 +1911,7 @@ export default function OriginalWorld() {
     screen,
     titleAction,
     titleIndex,
-    useCheat,
+    applyCheatAction,
   ]);
   const arcadeKind = arcade?.kind;
   useEffect(() => {
@@ -1987,9 +2145,9 @@ export default function OriginalWorld() {
       <main className="launch-screen help-screen">
         <section>
           <h1>操作说明</h1>
-          <p>移动：WASD / 方向键　互动与确认：E / Enter</p>
-          <p>行囊与人物：M / Tab　修炼：R　轻功：H</p>
-          <p>任务簿：T　保存：点击右上角按钮　战斗绝招：Q　战斗物品：I</p>
+          <p>移动：WASD / 方向键 · 互动与确认：E / Enter</p>
+          <p>行囊与人物：M / Tab · 修炼：R · 轻功：H</p>
+          <p>任务簿：T · 保存：点击右上角按钮 · 战斗绝招：Q · 战斗物品：I</p>
           <p>秘技菜单：K（可直接强化资源、数值和已学功夫）</p>
           <p>返回与逃跑：X / Esc；生死战也可用 G 尝试逃跑。</p>
           <button onClick={() => setScreen("title")}>返回标题</button>
@@ -2118,6 +2276,57 @@ export default function OriginalWorld() {
             }
           />
         )}{" "}
+        {npcChat && (
+          <section className="npc-chat" aria-label={`与${npcLore(npcChat.id).name}自由对话`}>
+            <header>
+              <div>
+                <b>{npcLore(npcChat.id).name}</b>
+                <small>{npcLore(npcChat.id).identity} · 当前相遇</small>
+              </div>
+              <button type="button" onClick={closeNpcChat}>结束对话</button>
+            </header>
+            <div className="npc-chat-log" aria-live="polite">
+              {npcChat.messages.length === 0 && (
+                <p className="npc-chat-hint">{npcLore(npcChat.id).name}就在你面前。你可以开口，也可以先做一个动作。</p>
+              )}
+              {npcChat.messages.map((message, index) => message.role === "user" ? (
+                <article className="dialogue-bubble user" key={`user-${index}`}>
+                  <small>{state.actor.name}</small>
+                  {message.action && <i>行动 · {message.action}</i>}
+                  {message.speech && <p>{message.speech}</p>}
+                </article>
+              ) : (
+                <article className="dialogue-bubble assistant" key={`assistant-${index}`}>
+                  <small>{npcLore(npcChat.id).name}</small>
+                  {message.state && <em>状态 · {message.state}</em>}
+                  {message.action && <i>动作 · {message.action}</i>}
+                  {message.speech && <p>{message.speech}</p>}
+                  {!message.raw && npcChat.loading && <p className="thinking">正在观察你的反应……</p>}
+                </article>
+              ))}
+              <div ref={chatEnd} />
+            </div>
+            {npcChat.error && <p className="npc-chat-error">{npcChat.error}</p>}
+            <form onSubmit={(event) => { event.preventDefault(); void sendNpcChat(); }}>
+              <label>
+                <span>行动</span>
+                <textarea maxLength={180} rows={2} placeholder="例如：抱拳行礼、递上一壶酒、拔剑后退……"
+                  value={npcChat.action} disabled={npcChat.loading}
+                  onChange={(event) => setNpcChat({ ...npcChat, action: event.target.value, error: "" })} />
+              </label>
+              <label>
+                <span>语言</span>
+                <textarea maxLength={300} rows={2} placeholder="输入你想对他说的话……"
+                  value={npcChat.speech} disabled={npcChat.loading}
+                  onChange={(event) => setNpcChat({ ...npcChat, speech: event.target.value, error: "" })} />
+              </label>
+              <button type="submit" disabled={npcChat.loading || (!npcChat.action.trim() && !npcChat.speech.trim())}>
+                {npcChat.loading ? "对方回应中" : "行动并交谈"}
+              </button>
+            </form>
+            <footer>本次相遇按上下文容量保留对话 · 接近上限时自动舍弃最早内容 · 结束或移动后清空 · {LM_STUDIO_MODEL}</footer>
+          </section>
+        )}
         {shop && (
           <Choice
             title={`${npcRecord(shop.id).name} · ${state.actor.gold}两`}
@@ -2200,13 +2409,15 @@ export default function OriginalWorld() {
         {cheatMenu && (
           <CheatMenu
             actor={state.actor}
+            tasks={state.tasks}
             menu={cheatMenu}
             setMenu={setCheatMenu}
-            useQuick={useCheat}
+            quickAction={applyCheatAction}
             changeStat={changeCheatStat}
             changeSkill={changeCheatSkill}
             maxStat={maximizeCheatStat}
             maxSkill={maximizeCheatSkill}
+            mutate={mutateCheatSave}
           />
         )}
         {cheatConfirm && (
@@ -2216,7 +2427,7 @@ export default function OriginalWorld() {
             index={cheatConfirm.index}
             choose={(index) => {
               setCheatConfirm({ ...cheatConfirm, index });
-              if (index === 0) useCheat(cheatConfirm.action, true);
+              if (index === 0) applyCheatAction(cheatConfirm.action, true);
               else setCheatConfirm(null);
             }}
           />
@@ -2943,7 +3154,7 @@ function GameMenu({
               招架 <b>{profile.combat.parry}</b>
             </span>
             <span>
-              已学功夫 <b>{Object.keys(actor.skills).length}/20</b>
+              已学功夫 <b>{Object.keys(actor.skills).length}</b>
             </span>
             <span>
               综合武境进度 <b>{profile.realmValue}/245</b>
@@ -2967,25 +3178,35 @@ function GameMenu({
 }
 function CheatMenu({
   actor,
+  tasks,
   menu,
   setMenu,
-  useQuick,
+  quickAction,
   changeStat,
   changeSkill,
   maxStat,
   maxSkill,
+  mutate,
 }: {
   actor: SceneActorState;
+  tasks: TaskState;
   menu: { tab: number; index: number };
   setMenu: (value: { tab: number; index: number } | null) => void;
-  useQuick: (action: CheatQuickAction) => void;
+  quickAction: (action: CheatQuickAction) => void;
   changeStat: (index: number, direction: -1 | 1) => void;
   changeSkill: (index: number, direction: -1 | 1) => void;
   maxStat: (index: number) => void;
   maxSkill: (index: number) => void;
+  mutate: (mutation: (draft: WorldSave) => string) => void;
 }) {
-  const tabs = ["快捷强化", "数值修改", "功夫提升"],
-    skills = cheatSkillRows(actor);
+  const tabs = ["快捷", "人物数值", "物品装备", "全部武功", "身份师承", "世界进度"],
+    [inventoryKind, setInventoryKind] = useState<CheatInventoryKind>(1),
+    [inventoryId, setInventoryId] = useState(1),
+    [inventoryAmount, setInventoryAmount] = useState(1),
+    catalog = cheatInventoryCatalog(inventoryKind),
+    killed = (actor.killList || []).filter((id) => originalTables.enemies[id]);
+  const commitNumber = (index: number, value: string) =>
+    mutate((draft) => setCheatStat(draft.actor, index, Number(value)));
   return (
     <div className="cheat-menu">
       <header>
@@ -2995,7 +3216,7 @@ function CheatMenu({
         </div>
         <button onClick={() => setMenu(null)}>关闭 ×</button>
       </header>
-      <aside>秘技会改变正常成长节奏，建议先下载 JSON 备份。</aside>
+      <aside>完整存档修改器 · 所有输入均按显示范围约束。修改前建议下载 JSON 备份。</aside>
       <nav>
         {tabs.map((tab, index) => (
           <button
@@ -3014,7 +3235,7 @@ function CheatMenu({
               key={option.id}
               className={`${menu.index === index ? "active" : ""} ${option.dangerous ? "danger" : ""}`}
               onMouseEnter={() => setMenu({ tab: 0, index })}
-              onClick={() => useQuick(option.id)}
+              onClick={() => quickAction(option.id)}
             >
               <span>
                 <b>{option.name}</b>
@@ -3033,11 +3254,21 @@ function CheatMenu({
               <span>
                 <b>{stat.name}</b>
                 <small>
-                  步进 {stat.step.toLocaleString("zh-CN")} · 理论上限{" "}
-                  {stat.max.toLocaleString("zh-CN")}
+                  {stat.group} · 步进 {stat.step.toLocaleString("zh-CN")} · 可修改范围{" "}
+                  {("min" in stat ? stat.min : 0).toLocaleString("zh-CN")}–
+                  {cheatStatMaximum(actor, index).toLocaleString("zh-CN")}
                 </small>
               </span>
-              <strong>{Number(actor[stat.key]).toLocaleString("zh-CN")}</strong>
+              <input
+                className="cheat-number"
+                type="number"
+                min={"min" in stat ? stat.min : 0}
+                max={cheatStatMaximum(actor, index)}
+                defaultValue={Number(actor[stat.key] || 0)}
+                key={`${stat.key}:${Number(actor[stat.key] || 0)}`}
+                onBlur={(event) => commitNumber(index, event.target.value)}
+                onKeyDown={(event) => { if (event.key === "Enter") event.currentTarget.blur(); }}
+              />
               <div>
                 <button onClick={() => changeStat(index, -1)}>−</button>
                 <button onClick={() => changeStat(index, 1)}>＋</button>
@@ -3047,35 +3278,144 @@ function CheatMenu({
               </div>
             </div>
           ))}
-        {menu.tab === 2 &&
-          (skills.length ? (
-            skills.map((skill, index) => (
+        {menu.tab === 2 && (
+          <div className="cheat-editor-stack">
+            <section className="cheat-add-row">
+              <label>类别
+                <select value={inventoryKind} onChange={(event) => {
+                  const kind = Number(event.target.value) as CheatInventoryKind;
+                  setInventoryKind(kind);
+                  setInventoryId(cheatInventoryCatalog(kind)[0]?.id || 1);
+                  setInventoryAmount(1);
+                }}>
+                  <option value={1}>物品</option><option value={2}>武器</option><option value={3}>防具</option>
+                </select>
+              </label>
+              <label>条目
+                <select value={inventoryId} onChange={(event) => setInventoryId(Number(event.target.value))}>
+                  {catalog.map((entry) => <option key={entry.id} value={entry.id}>{entry.id} · {entry.name}</option>)}
+                </select>
+              </label>
+              <label>数量 0–{inventoryKind === 1 ? 255 : 1}
+                <input type="number" min={0} max={inventoryKind === 1 ? 255 : 1} value={inventoryAmount}
+                  onChange={(event) => setInventoryAmount(Number(event.target.value))} />
+              </label>
+              <button onClick={() => mutate((draft) => setCheatInventory(draft.actor, inventoryKind, inventoryId, inventoryAmount))}>写入行囊</button>
+            </section>
+            <p className="cheat-capacity">当前 {Object.keys(actor.inventory).length} 种，无种类上限；数量填 0 即移除，移除已装备条目会自动卸下。</p>
+            {Object.entries(actor.inventory).filter(([, amount]) => amount > 0).map(([key, amount]) => {
+              const [kind, id] = key.split(":").map(Number), table = kind === 1 ? originalTables.items : kind === 2 ? originalTables.weapons : originalTables.armors;
+              return <div className="cheat-owned-row" key={key}>
+                <span><b>{table[id]?.name || key}</b><small>{kind === 1 ? "物品" : kind === 2 ? "武器" : "防具"} · ID {id}</small></span>
+                <strong>× {amount}</strong>
+                <button onClick={() => mutate((draft) => setCheatInventory(draft.actor, kind as CheatInventoryKind, id, 0))}>移除</button>
+              </div>;
+            })}
+          </div>
+        )}
+        {menu.tab === 3 &&
+          (allCheatSkills.length ? (
+            allCheatSkills.map((skill, index) => {
+              const learned = actor.skills[String(skill.id)];
+              return (
               <div
                 key={skill.id}
                 className={menu.index === index ? "active" : ""}
-                onMouseEnter={() => setMenu({ tab: 2, index })}
+                onMouseEnter={() => setMenu({ tab: 3, index })}
               >
                 <span>
                   <b>{skill.name}</b>
-                  <small>每次调整 5 级 · 上限 255</small>
+                  <small>{learned ? "已习得" : "未习得"} · 可修改范围 1–255 · 类型 {skill.type}</small>
                 </span>
-                <strong>{skill.level} 级</strong>
+                <input className="cheat-number" type="number" min={1} max={255}
+                  disabled={!learned} defaultValue={learned?.level || 1}
+                  key={`${skill.id}:${learned?.level || 0}`}
+                  onBlur={(event) => learned && mutate((draft) => setCheatSkill(draft.actor, skill.id, Number(event.target.value)))}
+                  onKeyDown={(event) => { if (event.key === "Enter") event.currentTarget.blur(); }} />
                 <div>
-                  <button onClick={() => changeSkill(index, -1)}>−</button>
-                  <button onClick={() => changeSkill(index, 1)}>＋</button>
-                  <button className="max" onClick={() => maxSkill(index)}>
-                    MAX
-                  </button>
+                  {learned ? <>
+                    <button onClick={() => changeSkill(index, -1)}>−</button>
+                    <button onClick={() => changeSkill(index, 1)}>＋</button>
+                    <button className="max" onClick={() => maxSkill(index)}>MAX</button>
+                    <button className="remove" onClick={() => mutate((draft) => removeCheatSkill(draft.actor, skill.id))}>移除</button>
+                  </> : <button className="add" onClick={() => mutate((draft) => setCheatSkill(draft.actor, skill.id, 1))}>习得</button>}
                 </div>
               </div>
-            ))
+              );
+            })
           ) : (
-            <p>尚未学会任何功夫。先拜师学艺，再来提升等级。</p>
+            <p>功夫数据库为空。</p>
           ))}
+        {menu.tab === 4 && (
+          <div className="cheat-editor-stack identity-editor">
+            <label>姓名（1–8 字符）
+              <input defaultValue={actor.name || "江湖少侠"} maxLength={8} onBlur={(event) => mutate((draft) => {
+                const name = event.target.value.trim().slice(0, 8);
+                if (!name) return "姓名不能为空。";
+                draft.actor.name = name; return `姓名修改为${name}。`;
+              })} />
+            </label>
+            <label>性别
+              <select value={actor.gender} onChange={(event) => mutate((draft) => { draft.actor.gender = Math.max(0, Math.min(2, Number(event.target.value))); return "性别已经修改。"; })}>
+                <option value={0}>男</option><option value={1}>女</option><option value={2}>其他</option>
+              </select>
+            </label>
+            <label>门派
+              <select value={actor.classId} onChange={(event) => mutate((draft) => setCheatIdentity(draft.actor, Number(event.target.value), draft.actor.teacherId))}>
+                {cheatSchools.map((school, id) => <option key={id} value={id}>{id} · {school}</option>)}
+              </select>
+            </label>
+            <label>师父
+              <select value={actor.teacherId} onChange={(event) => mutate((draft) => {
+                const teacherId = Number(event.target.value), teacher = cheatTeachers.find((entry) => entry.id === teacherId);
+                return setCheatIdentity(draft.actor, teacher?.schoolId || draft.actor.classId, teacherId);
+              })}>
+                <option value={0}>0 · 无师父</option>
+                {cheatTeachers.map((teacher) => <option key={teacher.id} value={teacher.id}>{teacher.id} · {teacher.name}{teacher.schoolId ? `（${cheatSchools[teacher.schoolId]}）` : ""}</option>)}
+              </select>
+            </label>
+            <p>选择有明确门派的师父时会同步切换门派；选择“无师父”可保留当前门派。</p>
+          </div>
+        )}
+        {menu.tab === 5 && (
+          <div className="cheat-editor-stack world-editor">
+            <section className="cheat-toggle-grid">
+              {([
+                ["haveNewHome", "拥有桃花源家园"], ["swordBattle", "通过铸剑挑战"], ["xue6", "特殊武学标记"],
+              ] as const).map(([key, label]) => <label key={key}>
+                <input type="checkbox" checked={Boolean(actor[key])} onChange={(event) => mutate((draft) => {
+                  (draft.actor as unknown as Record<string, unknown>)[key] = event.target.checked;
+                  return `${label}${event.target.checked ? "已开启" : "已关闭"}。`;
+                })} /> {label}
+              </label>)}
+            </section>
+            <h3>复活已杀死 NPC</h3>
+            {killed.length ? killed.map((id) => <div className="cheat-owned-row" key={id}>
+              <span><b>{originalTables.enemies[id]?.name || id}</b><small>NPC ID {id} · 复活后恢复地图人物与互动</small></span>
+              <button onClick={() => mutate((draft) => reviveCheatNpc(draft.actor, id))}>复活</button>
+            </div>) : <p>当前没有可复活的 NPC。</p>}
+            <h3>任务时钟</h3>
+            <label>世界时间（秒）· 0–4,294,967,295
+              <input type="number" min={0} max={4294967295} defaultValue={tasks.clock}
+                key={`clock:${tasks.clock}`} onBlur={(event) => mutate((draft) => {
+                  draft.tasks.clock = Math.max(0, Math.min(4294967295, Math.floor(Number(event.target.value) || 0)));
+                  return `世界时间调整为 ${draft.tasks.clock} 秒。`;
+                })} />
+            </label>
+            <section className="cheat-toggle-grid">
+              <label><input type="checkbox" checked={tasks.finishFlag} onChange={(event) => mutate((draft) => { draft.tasks.finishFlag = event.target.checked; return "主任务领奖标记已经修改。"; })} /> 主任务奖励待领取</label>
+              <label><input type="checkbox" checked={tasks.stoneStarted} onChange={(event) => mutate((draft) => { draft.tasks.stoneStarted = event.target.checked; return "石料任务状态已经修改。"; })} /> 石料任务进行中</label>
+            </section>
+            <button className="danger-action" onClick={() => mutate((draft) => {
+              const clock = draft.tasks.clock;
+              draft.tasks = { ...freshTaskState(), clock };
+              return "全部任务状态已重置，并保留当前世界时间。";
+            })}>重置全部任务状态</button>
+          </div>
+        )}
       </section>
       <footer>
-        W/S 选择 · Q/Tab 切页 · A/D 调整 · E/Enter 增加/施展 · M 当前项 MAX ·
-        K/Esc 关闭
+        Q/Tab 切页 · 数值可直接输入 · 人物/武功页支持 W/S、A/D、E、M · K/Esc 关闭
       </footer>
     </div>
   );

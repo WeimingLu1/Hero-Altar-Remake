@@ -1,6 +1,6 @@
 import type { SceneActorState } from "./scene-event";
 import { fullHp } from "./inventory-system";
-import { originalTables } from "./original-data";
+import { originalSystem, originalTables } from "./original-data";
 
 export type CheatQuickAction =
   | "recover"
@@ -50,8 +50,8 @@ export const cheatQuickOptions: Array<{
   },
 ];
 
-const cap = (value: number, maximum: number) =>
-  Math.max(0, Math.min(maximum, Math.floor(value)));
+const cap = (value: number, maximum: number, minimum = 0) =>
+  Math.max(minimum, Math.min(maximum, Math.floor(Number.isFinite(value) ? value : minimum)));
 
 export function applyCheatQuick(
   actor: SceneActorState,
@@ -104,16 +104,63 @@ export function applyCheatQuick(
 }
 
 export const cheatStats = [
-  { key: "gold", name: "金钱", step: 10000, max: 4294967295 },
-  { key: "exp", name: "经验", step: 10000, max: 4294967295 },
-  { key: "potential", name: "潜能", step: 1000, max: 4294967295 },
-  { key: "maxFp", name: "内力上限", step: 100, max: 65535 },
-  { key: "maxMp", name: "法力上限", step: 100, max: 65535 },
-  { key: "morals", name: "名声／道德", step: 10, max: 255 },
-  { key: "face", name: "容貌", step: 1, max: 255 },
-  { key: "luck", name: "福缘", step: 1, max: 255 },
-  { key: "age", name: "年龄", step: 1, max: 255 },
+  { key: "hp", name: "当前气血", group: "状态", step: 100, max: 65535 },
+  { key: "maxHp", name: "气血上限", group: "状态", step: 100, max: 65535 },
+  { key: "fp", name: "当前内力", group: "状态", step: 100, max: 65535 },
+  { key: "maxFp", name: "内力上限", group: "状态", step: 100, max: 65535 },
+  { key: "mp", name: "当前法力", group: "状态", step: 100, max: 65535 },
+  { key: "maxMp", name: "法力上限", group: "状态", step: 100, max: 65535 },
+  { key: "food", name: "饱食", group: "状态", step: 10, max: 65535 },
+  { key: "water", name: "饮水", group: "状态", step: 10, max: 65535 },
+  { key: "gold", name: "金钱", group: "资源", step: 10000, max: 4294967295 },
+  { key: "exp", name: "经验", group: "资源", step: 10000, max: 4294967295 },
+  { key: "potential", name: "潜能", group: "资源", step: 1000, max: 4294967295 },
+  { key: "morals", name: "名声／道德", group: "身份", step: 10, max: 255 },
+  { key: "face", name: "容貌", group: "身份", step: 1, max: 255 },
+  { key: "luck", name: "福缘", group: "身份", step: 1, max: 255 },
+  { key: "age", name: "年龄", group: "身份", step: 1, min: 1, max: 255 },
+  { key: "baseStr", name: "先天膂力", group: "四维", step: 1, max: 255 },
+  { key: "baseAgi", name: "先天敏捷", group: "四维", step: 1, max: 255 },
+  { key: "baseInt", name: "先天悟性", group: "四维", step: 1, max: 255 },
+  { key: "baseBon", name: "先天根骨", group: "四维", step: 1, max: 255 },
+  { key: "fpPlus", name: "加力", group: "战斗", step: 1, max: 32767 },
+  { key: "mpPlus", name: "法点", group: "战斗", step: 1, max: 32767 },
+  { key: "tanId", name: "九坛进度", group: "进度", step: 1, max: 9 },
+  { key: "badmanKill", name: "追杀计数", group: "进度", step: 1, max: 65535 },
+  { key: "taskKill", name: "杀手计数", group: "进度", step: 1, max: 65535 },
+  { key: "killNum", name: "通缉轮次", group: "进度", step: 1, max: 10 },
+  { key: "dance", name: "跳舞纪录", group: "进度", step: 10, max: 65535 },
+  { key: "ball", name: "投球纪录", group: "进度", step: 10, max: 65535 },
+  { key: "roomLevel", name: "房屋等级", group: "家园", step: 1, max: 3 },
+  { key: "forgeChallengeStep", name: "铸剑挑战轮次", group: "铸剑", step: 1, max: 4 },
+  { key: "swordTimes", name: "重铸次数", group: "铸剑", step: 1, max: 65535 },
 ] as const;
+
+export function cheatStatMaximum(actor: SceneActorState, index: number) {
+  const stat = cheatStats[index];
+  if (!stat) return 0;
+  if (stat.key === "hp") return actor.maxHp;
+  if (stat.key === "fp") return actor.maxFp;
+  if (stat.key === "mp") return actor.maxMp;
+  if (stat.key === "food") return (actor.baseStr + 5) * 15;
+  if (stat.key === "water") return (actor.baseStr + 4) * 15;
+  return stat.max;
+}
+
+export function setCheatStat(actor: SceneActorState, index: number, raw: number) {
+  const stat = cheatStats[index];
+  if (!stat) return "没有这个数值。";
+  const value = cap(raw, cheatStatMaximum(actor, index), "min" in stat ? stat.min : 0);
+  (actor as unknown as Record<string, unknown>)[stat.key] = value;
+  if (stat.key === "baseStr") actor.str = value;
+  if (stat.key === "baseAgi") actor.agi = value;
+  if (stat.key === "baseInt") actor.int = value;
+  if (stat.key === "baseBon") actor.bon = value;
+  if (stat.key === "maxHp") actor.hp = Math.min(actor.hp, value);
+  if (stat.key === "maxFp") actor.fp = Math.min(actor.fp, value);
+  if (stat.key === "maxMp") actor.mp = Math.min(actor.mp, value);
+  return `${stat.name}调整为 ${value}（允许范围 ${"min" in stat ? stat.min : 0}–${cheatStatMaximum(actor, index)}）。`;
+}
 
 export function adjustCheatStat(
   actor: SceneActorState,
@@ -123,17 +170,16 @@ export function adjustCheatStat(
   const stat = cheatStats[index];
   if (!stat) return "没有这个数值。";
   const key = stat.key as keyof SceneActorState,
-    current = Number(actor[key] || 0),
-    value = cap(current + stat.step * direction, stat.max);
-  (actor as unknown as Record<string, unknown>)[key] = value;
-  return `${stat.name}调整为 ${value}。`;
+    current = Number(actor[key] || 0);
+  return setCheatStat(actor, index, current + stat.step * direction);
 }
 
 export function maxCheatStat(actor: SceneActorState, index: number) {
   const stat = cheatStats[index];
   if (!stat) return "没有这个数值。";
-  (actor as unknown as Record<string, unknown>)[stat.key] = stat.max;
-  return `${stat.name}已经达到理论上限 ${stat.max}。`;
+  const maximum = cheatStatMaximum(actor, index);
+  setCheatStat(actor, index, maximum);
+  return `${stat.name}已经达到理论上限 ${maximum}。`;
 }
 
 export function cheatSkillRows(actor: SceneActorState) {
@@ -164,4 +210,58 @@ export function maxCheatSkill(actor: SceneActorState, id: number) {
   skill.level = 255;
   skill.points = 0;
   return `${originalTables.kungfus[id]?.name || id}已经达到返璞归真 255 级。`;
+}
+
+export function setCheatSkill(actor: SceneActorState, id: number, raw: number) {
+  if (!originalTables.kungfus[id]) return "没有这门功夫。";
+  const level = cap(raw, 255, 1);
+  actor.skills[String(id)] = { level, points: 0 };
+  return `${originalTables.kungfus[id]?.name || id}调整为 ${level} 级（允许范围 1–255）。`;
+}
+
+export function removeCheatSkill(actor: SceneActorState, id: number) {
+  if (!actor.skills[String(id)]) return "尚未学会这门功夫。";
+  delete actor.skills[String(id)];
+  actor.skillUse = actor.skillUse.map((skillId) => skillId === id ? 0 : skillId);
+  return `已经移除${originalTables.kungfus[id]?.name || id}，并解除相关运用。`;
+}
+
+export type CheatInventoryKind = 1 | 2 | 3;
+export function cheatInventoryCatalog(kind: CheatInventoryKind) {
+  const table = kind === 1 ? originalTables.items : kind === 2 ? originalTables.weapons : originalTables.armors;
+  return table.flatMap((record, id) => record ? [{ id, name: String(record.name || id) }] : []);
+}
+
+export function setCheatInventory(actor: SceneActorState, kind: CheatInventoryKind, id: number, raw: number) {
+  const table = kind === 1 ? originalTables.items : kind === 2 ? originalTables.weapons : originalTables.armors;
+  if (!table[id]) return "没有这个物品。";
+  const key = `${kind}:${id}`, amount = cap(raw, kind === 1 ? 255 : 1);
+  if (amount === 0) {
+    delete actor.inventory[key];
+    if (kind === 2 && actor.weaponId === id) actor.weaponId = 0;
+    if (kind === 3) actor.armorIds = actor.armorIds.filter((armorId) => armorId !== id);
+    return `已经移除${table[id]?.name || id}。`;
+  }
+  actor.inventory[key] = amount;
+  return `${table[id]?.name || id}数量调整为 ${amount}（允许范围 0–${kind === 1 ? 255 : 1}）。`;
+}
+
+export const cheatSchools = (originalSystem.school as string[]) || [];
+export const cheatTeachers = originalTables.enemies.flatMap((npc, id) =>
+  npc && (Number(npc.type || 0) > 0 || id === 7 || id === 31)
+    ? [{ id, name: String(npc.name || id), schoolId: Math.max(0, Number(npc.type || 0)) }]
+    : [],
+);
+
+export function setCheatIdentity(actor: SceneActorState, schoolId: number, teacherId: number) {
+  actor.classId = cap(schoolId, Math.max(0, cheatSchools.length - 1));
+  actor.teacherId = teacherId > 0 && originalTables.enemies[teacherId] ? teacherId : 0;
+  return `身份调整为${cheatSchools[actor.classId] || "江湖小虾"}，师父${actor.teacherId ? originalTables.enemies[actor.teacherId]?.name : "无"}。`;
+}
+
+export function reviveCheatNpc(actor: SceneActorState, id: number) {
+  const before = actor.killList || [];
+  if (!before.includes(id)) return "该人物不在已击杀名单中。";
+  actor.killList = before.filter((npcId) => npcId !== id);
+  return `${originalTables.enemies[id]?.name || id}已经复活，会重新出现在原地图。`;
 }

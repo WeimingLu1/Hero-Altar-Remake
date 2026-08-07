@@ -54,3 +54,14 @@ test("外部资源数值使用紧凑格式并保留完整提示", () => {
   assert.match(source, /notation: "compact"/);
   assert.match(source, /title=\{`银两：/);
 });
+
+test("自由对话仅保留当前相遇并在移动时清空", () => {
+  assert.doesNotMatch(source, /rmxp-npc-chat-v1/);
+  assert.match(source, /messages: \[\]/);
+  assert.match(source, /dialogueHistory = \[\.\.\.npcChat\.messages, userMessage\]/);
+  assert.doesNotMatch(source, /messages: messages\.slice\(-10\)/);
+  assert.match(source, /if \(npcChat\) \{[\s\S]*setNpcChat\(null\)/);
+  assert.match(source, /closeNpcChat\(\)/);
+  assert.match(source, /placeholder="例如：抱拳行礼/);
+  assert.match(source, /状态 · \{message\.state\}/);
+});

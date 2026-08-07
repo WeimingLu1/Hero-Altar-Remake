@@ -269,9 +269,6 @@ export function claimMainReward(
     : { ok: true, text: reward(actor, 0, Math.floor(amount / 2), 0) };
 }
 
-const bagIsFull = (actor: SceneActorState) =>
-  Object.values(actor.inventory).filter((amount) => amount > 0).length >= 20;
-
 export function startStoneTask(
   actor: SceneActorState,
   tasks: TaskState,
@@ -297,11 +294,6 @@ export function startStoneTask(
     return {
       ok: false,
       text: String(originalText.stone_more_exp || "这种粗活不敢再劳烦大侠。"),
-    };
-  if (bagIsFull(actor))
-    return {
-      ok: false,
-      text: String(originalText.stone_full_bag || "你身上的东西太多了。"),
     };
   tasks.stoneStarted = true;
   tasks.stoneStartedAt = tasks.clock;
@@ -343,7 +335,7 @@ export function finishStoneTask(
 
 export function startTanQuest(actor: SceneActorState) {
   const mapKey = "1:21";
-  if (actor.exp < 80000 || bagIsFull(actor)) return { ok: false, text: "" };
+  if (actor.exp < 80000) return { ok: false, text: "" };
   if (actor.tanId !== 0 && !(actor.tanId === 1 && !actor.inventory[mapKey]))
     return { ok: false, text: "" };
   actor.tanId = 1;
@@ -508,11 +500,6 @@ export function completeHiddenQuest(actor: SceneActorState, npcId: number) {
     requestKey = `${type1}:${id1}`,
     prizeKey = `${type2}:${id2}`;
   if ((actor.inventory[requestKey] || 0) < num1) return { ok: false, text: "" };
-  if (bagIsFull(actor) && !actor.inventory[prizeKey]) {
-    const releasesSlot =
-      questType === 1 && (actor.inventory[requestKey] || 0) === num1;
-    if (!releasesSlot) return { ok: false, text: "背包已满，无法收下交换物。" };
-  }
   if (questType === 1) {
     actor.inventory[requestKey] -= num1;
     if (actor.inventory[requestKey] <= 0) delete actor.inventory[requestKey];

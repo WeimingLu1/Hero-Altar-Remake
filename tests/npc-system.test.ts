@@ -51,7 +51,13 @@ const actor = (): SceneActorState => ({
 });
 test("merchant menu and stock come from enemy database", () => {
   const a = actor();
-  assert.deepEqual(npcOptions(1, a), ["talk", "status", "battle", "trade"]);
+  assert.deepEqual(npcOptions(1, a), [
+    "talk",
+    "chat",
+    "status",
+    "battle",
+    "trade",
+  ]);
   const goods = shopGoods(1);
   assert.equal(goods.length, 2);
   assert.equal(goods[0].name, "白玉豆腐");

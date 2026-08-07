@@ -360,7 +360,8 @@
   font-size: 11px;
 }
 .cheat-menu > nav {
-  display: flex;
+  display: grid;
+  grid-template-columns: repeat(6, minmax(0, 1fr));
   padding: 0 16px;
   border-bottom: 1px solid #9f6db74d;
 }
@@ -426,6 +427,101 @@
   text-align: right;
   font: 700 13px monospace;
 }
+.cheat-number {
+  width: 132px;
+  padding: 7px 9px;
+  color: #f1ccff;
+  border: 1px solid #a966c566;
+  background: #09070d;
+  text-align: right;
+  font: 700 12px monospace;
+}
+.cheat-number:focus,
+.cheat-editor-stack input:focus,
+.cheat-editor-stack select:focus {
+  outline: 1px solid #df8fff;
+  border-color: #df8fff;
+}
+.cheat-list > .cheat-editor-stack {
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  gap: 9px;
+  padding: 0;
+  border: 0;
+  background: transparent;
+}
+.cheat-add-row {
+  display: grid;
+  grid-template-columns: 90px minmax(180px, 1fr) 130px auto;
+  gap: 8px;
+  padding: 11px;
+  border: 1px solid #b76bd64d;
+  background: #ffffff06;
+}
+.cheat-editor-stack label {
+  display: grid;
+  gap: 5px;
+  color: #bcaac5;
+  font-size: 10px;
+}
+.cheat-editor-stack input,
+.cheat-editor-stack select {
+  min-width: 0;
+  padding: 8px 9px;
+  color: #edddf4;
+  border: 1px solid #9362a966;
+  background: #0b0810;
+}
+.cheat-add-row > button,
+.cheat-owned-row > button,
+.danger-action {
+  align-self: end;
+  min-width: 72px;
+  height: 34px;
+  padding: 0 10px;
+  color: #f0dcf8;
+  border: 1px solid #b76bd680;
+  background: #7e39995c;
+}
+.cheat-list .cheat-add-row > button,
+.cheat-list .cheat-owned-row > button,
+.cheat-list .danger-action { width: auto; }
+.cheat-capacity {
+  margin: 0;
+  padding: 4px 8px !important;
+  text-align: left !important;
+  font-size: 10px;
+}
+.cheat-owned-row {
+  display: grid;
+  grid-template-columns: 1fr auto auto;
+  align-items: center;
+  gap: 10px;
+  padding: 8px 10px;
+  border-bottom: 1px solid #ffffff12;
+  background: #ffffff04;
+}
+.cheat-owned-row span { display: grid; gap: 3px; }
+.cheat-list > div button.remove,
+.cheat-list > div button.add {
+  width: 48px;
+  color: #ffc1b8;
+  font: 9px monospace;
+}
+.cheat-list > div button.add { color: #bce9ad; }
+.identity-editor {
+  display: grid !important;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  align-content: start;
+}
+.identity-editor > label { padding: 12px; border: 1px solid #ffffff12; background: #ffffff04; }
+.identity-editor > p { grid-column: 1 / -1; }
+.world-editor h3 { margin: 8px 0 0; color: #e4c7ef; font-size: 12px; }
+.cheat-toggle-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 7px; }
+.cheat-toggle-grid label { display: flex; align-items: center; padding: 9px; border: 1px solid #ffffff12; background: #ffffff04; }
+.cheat-toggle-grid input { min-width: auto; }
+.danger-action { align-self: start; color: #ffc1b8; border-color: #c65b61; background: #8c2f3947; }
 .cheat-list > div > div {
   display: flex;
   gap: 5px;
@@ -484,4 +580,9 @@
   .cheat-list strong {
     min-width: 62px;
   }
+  .cheat-menu > nav { grid-template-columns: repeat(3, 1fr); }
+  .cheat-add-row,
+  .identity-editor,
+  .cheat-toggle-grid { grid-template-columns: 1fr; }
+  .cheat-number { width: 90px; }
 }

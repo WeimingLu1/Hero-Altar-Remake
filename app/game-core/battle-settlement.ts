@@ -1,9 +1,6 @@
 import { originalTables } from "./original-data";
 import type { SceneActorState } from "./scene-event";
 
-const bagCount = (actor: SceneActorState) =>
-  Object.values(actor.inventory).filter((amount) => amount > 0).length;
-
 export function settleVictoryLoot(
   actor: SceneActorState,
   enemyId: number,
@@ -30,7 +27,6 @@ export function settleVictoryLoot(
     }
     if (kind === 1 && id >= 21 && id <= 28 && actor.tanId + 20 !== id) continue;
     const key = `${kind}:${id}`;
-    if (!actor.inventory[key] && bagCount(actor) >= 20) continue;
     actor.inventory[key] = (actor.inventory[key] || 0) + 1;
     const table =
       kind === 1

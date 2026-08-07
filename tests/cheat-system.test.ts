@@ -5,8 +5,15 @@ import {
   adjustCheatSkill,
   adjustCheatStat,
   applyCheatQuick,
+  cheatStats,
   maxCheatSkill,
   maxCheatStat,
+  removeCheatSkill,
+  reviveCheatNpc,
+  setCheatIdentity,
+  setCheatInventory,
+  setCheatSkill,
+  setCheatStat,
 } from "../app/game-core/cheat-system";
 
 const actor = (): SceneActorState => ({
@@ -49,7 +56,7 @@ const actor = (): SceneActorState => ({
 
 test("每项秘技支持直接达到标注的理论上限", () => {
   const a = actor();
-  maxCheatStat(a, 6);
+  maxCheatStat(a, cheatStats.findIndex((stat) => stat.key === "face"));
   maxCheatSkill(a, 2);
   assert.equal(a.face, 255);
   assert.equal(a.skills["2"].level, 255);
@@ -85,4 +92,55 @@ test("数值和技能调整遵守原版上限", () => {
   a.skills["2"].level = 254;
   adjustCheatSkill(a, 2, 1);
   assert.equal(a.skills["2"].level, 255);
+});
+
+test("直接输入数值会钳制范围并同步基础四维", () => {
+  const a = actor();
+  const strength = 15;
+  setCheatStat(a, strength, 999);
+  assert.equal(a.baseStr, 255);
+  assert.equal(a.str, 255);
+  setCheatStat(a, 0, 99999);
+  assert.equal(a.hp, a.maxHp);
+});
+
+test("修改器可添加移除物品并自动卸下装备", () => {
+  const a = actor();
+  assert.match(setCheatInventory(a, 1, 7, 999), /255/);
+  assert.equal(a.inventory["1:7"], 255);
+  setCheatInventory(a, 2, 1, 1);
+  a.weaponId = 1;
+  setCheatInventory(a, 2, 1, 0);
+  assert.equal(a.weaponId, 0);
+  assert.equal(a.inventory["2:1"], undefined);
+});
+
+test("修改器可习得移除武功并清理运用槽", () => {
+  const a = actor();
+  setCheatSkill(a, 12, 999);
+  assert.equal(a.skills["12"].level, 255);
+  a.skillUse[0] = 12;
+  removeCheatSkill(a, 12);
+  assert.equal(a.skills["12"], undefined);
+  assert.equal(a.skillUse[0], 0);
+});
+
+test("修改器允许超过二十种物品和二十门武功", () => {
+  const a = actor();
+  for (let id = 1; id <= 25; id++) a.inventory[`1:${id}`] = 1;
+  setCheatInventory(a, 3, 1, 1);
+  assert.equal(a.inventory["3:1"], 1);
+  a.skills = {};
+  for (let id = 1; id <= 25; id++) setCheatSkill(a, id, 10);
+  assert.ok(Object.keys(a.skills).length > 20);
+});
+
+test("修改器可切换门派师父并复活已杀 NPC", () => {
+  const a = actor();
+  setCheatIdentity(a, 5, 31);
+  assert.equal(a.classId, 5);
+  assert.equal(a.teacherId, 31);
+  a.killList = [1, 3];
+  reviveCheatNpc(a, 1);
+  assert.deepEqual(a.killList, [3]);
 });
