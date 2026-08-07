@@ -38,14 +38,30 @@ export function settleVictoryLoot(
     names.push(String(table[id]?.name || id));
   }
   if (killed) {
-    actor.killList = Array.from(new Set([...(actor.killList || []), enemyId]));
-    const morals = Number(enemy.morals || 0);
-    actor.morals -=
-      actor.morals >= 128 ? morals : morals > 0 ? Math.floor(morals / 2) : 0;
+    if (enemyId === 198) actor.badmanKill = (actor.badmanKill || 0) + 1;
+    else {
+      actor.killList = Array.from(
+        new Set([...(actor.killList || []), enemyId]),
+      );
+      if (enemyId < 163 || enemyId > 170) {
+        const morals = Number(enemy.morals || 0);
+        actor.morals -=
+          actor.morals >= 128
+            ? morals
+            : morals > 0
+              ? Math.floor(morals / 2)
+              : 0;
+      }
+    }
   }
+  const execution = killed
+    ? enemyId === 198
+      ? `通缉犯伏诛，追杀数增至 ${actor.badmanKill || 0}。`
+      : `已将${String(enemy.name || "对手")}斩首，击杀记录 ${actor.killList?.length || 0} 人，名声 ${actor.morals}。`
+    : "对手被你放走了。";
   return {
     gold: Number(enemy.gold || 0),
     items: names,
-    text: `获得银两 ${Number(enemy.gold || 0)}${names.length ? `，战利品：${names.join("、")}` : ""}。`,
+    text: `${execution} 获得银两 ${Number(enemy.gold || 0)}${names.length ? `，战利品：${names.join("、")}` : ""}。`,
   };
 }

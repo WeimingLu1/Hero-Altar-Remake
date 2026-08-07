@@ -189,6 +189,10 @@ const newActor = (): SceneActorState => ({
   fpPlus: 0,
   mpPlus: 0,
   xue6: false,
+  killList: [],
+  badmanKill: 0,
+  taskKill: 0,
+  killNum: 0,
   dance: 100,
   ball: 100,
   swordBattle: false,
@@ -532,7 +536,8 @@ export default function OriginalWorld() {
       }),
       interactive = candidates.find(([x, y]) => {
         const event = map.events.find((e) => e.x === x && e.y === y);
-        return event && eventVisual(event, s).kind !== "none";
+        const kind = event ? eventVisual(event, s).kind : "none";
+        return event && kind !== "none" && kind !== "corpse";
       });
     if (npc) {
       runAt(npc[0], npc[1]);
@@ -732,10 +737,13 @@ export default function OriginalWorld() {
           altarText = "击败山大王，桃花源从此归你所有。";
         }
         if (kill && battle.enemyId === 198 && next.tasks.wantedPlace > 0) {
-          altarText = finishWantedTask(next.actor, next.tasks).text;
+          altarText += ` ${finishWantedTask(next.actor, next.tasks).text}`;
         }
-        if (kill && next.tasks.killId === battle.enemyId)
+        if (kill && next.tasks.killId === battle.enemyId) {
           next.tasks.killId = -1;
+          next.actor.taskKill = (next.actor.taskKill || 0) + 1;
+          altarText += ` 杀手任务目标已经伏诛，累计完成 ${next.actor.taskKill} 次；回任务发布人处复命。`;
+        }
         const altarId = battle.enemyId - 162;
         if (
           kill &&
@@ -752,7 +760,14 @@ export default function OriginalWorld() {
           next.actor.killList = Array.from(
             new Set([...(next.actor.killList || []), battle.enemyId]),
           );
-          altarText = giveTanReward(next.actor).text;
+          altarText += ` ${giveTanReward(next.actor).text}`;
+        }
+        if (kill) {
+          const lines = (originalText.die_text as string[]) || [],
+            lastWords = lines.length
+              ? lines[Math.abs(battle.seed + battle.turn) % lines.length]
+              : "对手倒在了你的刀下。";
+          altarText = `「${lastWords}」 ${altarText}`;
         }
       }
       if (battle.enemyId === 149 && battle.finished !== "win") {
@@ -2725,7 +2740,13 @@ function GameMenu({
               容貌 <b>{actor.face}</b>
             </span>
             <span>
-              击杀 <b>{actor.killList?.length || 0}</b>
+              击杀 NPC <b>{actor.killList?.length || 0}</b>
+            </span>
+            <span>
+              追杀恶人 <b>{actor.badmanKill || 0}</b>
+            </span>
+            <span>
+              杀手任务 <b>{actor.taskKill || 0}</b>
             </span>
             <span>
               坛位 <b>{actor.tanId}/8</b>
@@ -2975,6 +2996,14 @@ function draw(ctx: CanvasRenderingContext2D, state: WorldSave) {
         visual.label,
         near,
       );
+    else if (visual.kind === "corpse")
+      drawCorpseMarker(
+        ctx,
+        (e.x - sx) * T + 16,
+        (e.y - sy) * T + 23,
+        visual.label,
+        near,
+      );
   }
   if (
     state.tasks.wantedPlace === pos.mapId &&
@@ -3018,7 +3047,7 @@ function draw(ctx: CanvasRenderingContext2D, state: WorldSave) {
   ctx.fillText(`MAP ${map.id} · ${pos.x},${pos.y}`, W - 15, 23);
 }
 type EventVisual = {
-  kind: "npc" | "object" | "door" | "none";
+  kind: "npc" | "object" | "door" | "corpse" | "none";
   label: string;
 };
 const sceneLabels: Record<number, string> = {
@@ -3051,11 +3080,19 @@ function eventVisual(event: MapEvent, state: WorldSave): EventVisual {
     }),
     graphic = String(page.graphic?.character_name || ""),
     cleanName = friendlyEventName(event.name, result.transfer?.mapId);
-  if (scene?.type === 0 && scene.id !== undefined)
+  if (scene?.type === 0 && scene.id !== undefined) {
+    if ((state.actor.killList || []).includes(scene.id))
+      return scene.id >= 173 && scene.id <= 194
+        ? { kind: "none", label: "" }
+        : {
+            kind: "corpse",
+            label: `${String(npcRecord(scene.id).name || cleanName || "江湖人物")}遗骸`,
+          };
     return {
       kind: "npc",
       label: String(npcRecord(scene.id).name || cleanName || "江湖人物"),
     };
+  }
   if (graphic) return { kind: "npc", label: cleanName || "江湖人物" };
   if (result.transfer || (scene && [13, 15, 16].includes(scene.type)))
     return {
@@ -3189,6 +3226,25 @@ function drawObjectMarker(
   ctx.fillRect(x - 3, y - 5, 6, 6);
   ctx.fillRect(x - 1, y - 9 - (pulse ? 2 : 0), 2, 2);
   drawMarkerLabel(ctx, x, y - 18, name, accent, near);
+}
+function drawCorpseMarker(
+  ctx: CanvasRenderingContext2D,
+  x: number,
+  y: number,
+  name: string,
+  near: boolean,
+) {
+  const accent = "#9d9481";
+  ctx.fillStyle = "rgba(12,10,8,.78)";
+  ctx.fillRect(x - 10, y + 1, 20, 7);
+  ctx.fillStyle = "#d6cfba";
+  ctx.fillRect(x - 5, y - 4, 10, 8);
+  ctx.fillStyle = "#342e28";
+  ctx.fillRect(x - 3, y - 1, 2, 2);
+  ctx.fillRect(x + 2, y - 1, 2, 2);
+  ctx.strokeStyle = accent;
+  ctx.strokeRect(x - 11, y, 22, 9);
+  drawMarkerLabel(ctx, x, y - 12, name, accent, near);
 }
 function drawDoorMarker(
   ctx: CanvasRenderingContext2D,

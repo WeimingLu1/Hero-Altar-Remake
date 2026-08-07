@@ -28,3 +28,9 @@ test("战斗结束后的按钮和确认键统一进入战果处理", () => {
   assert.match(source, /if \(battle\.finished\) leaveBattle\(\)/);
   assert.match(source, /leave=\{leaveBattle\}/);
 });
+
+test("被砍头的地图人物会变成不可重复互动的遗骸", () => {
+  assert.match(source, /kind: "corpse"/);
+  assert.match(source, /kind !== "corpse"/);
+  assert.match(source, /drawCorpseMarker/);
+});

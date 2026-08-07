@@ -53,7 +53,23 @@ test("战利品结算发放原作敌人金钱和全部物品", () => {
 
 test("砍头会记录杀人列表并按原作道德公式结算", () => {
   const a = actor();
-  settleVictoryLoot(a, 2, true);
+  const result = settleVictoryLoot(a, 2, true);
   assert.deepEqual(a.killList, [2]);
   assert.equal(a.morals, 126);
+  assert.match(result.text, /斩首/);
+});
+
+test("砍通缉犯只累计追杀数，不写普通NPC击杀名单", () => {
+  const a = actor();
+  settleVictoryLoot(a, 198, true);
+  assert.equal(a.badmanKill, 1);
+  assert.deepEqual(a.killList, undefined);
+  assert.equal(a.morals, 128);
+});
+
+test("砍坛主写入击杀名单但不按普通NPC扣除道德", () => {
+  const a = actor();
+  settleVictoryLoot(a, 163, true);
+  assert.deepEqual(a.killList, [163]);
+  assert.equal(a.morals, 128);
 });

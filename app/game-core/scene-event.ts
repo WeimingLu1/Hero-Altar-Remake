@@ -46,6 +46,9 @@ export type SceneActorState = {
   xue6: boolean;
   playTime?: number;
   killList?: number[];
+  badmanKill?: number;
+  taskKill?: number;
+  killNum?: number;
   roomLevel?: number;
   dance?: number;
   ball?: number;
