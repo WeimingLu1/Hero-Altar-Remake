@@ -1,7 +1,11 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import type { SceneActorState } from "../app/game-core/scene-event";
-import { actorStatusProfile, levelTitle } from "../app/game-core/status-system";
+import {
+  actorStatusProfile,
+  levelTier,
+  levelTitle,
+} from "../app/game-core/status-system";
 
 const actor = (): SceneActorState => ({
   name: "少侠",
@@ -49,6 +53,17 @@ const actor = (): SceneActorState => ({
 test("功夫等级称号严格沿用原版每五级一档", () => {
   assert.equal(levelTitle(65), "登堂入室");
   assert.equal(levelTitle(255), "返璞归真");
+  assert.equal(levelTier(255), 50);
+});
+
+test("全套满级战斗功夫达到原版综合武境第五十阶返璞归真", () => {
+  const a = actor();
+  for (const id of [2, 9, 10, 12, 15])
+    a.skills[String(id)] = { level: 255, points: 0 };
+  a.skillUse = [12, 0, 15, 0, 12, 0];
+  const profile = actorStatusProfile(a);
+  assert.equal(profile.realm, "返璞归真");
+  assert.equal(profile.realmTier, 50);
 });
 
 test("人物状态档案包含门派、外貌和综合武艺评价", () => {

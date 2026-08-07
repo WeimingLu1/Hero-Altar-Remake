@@ -3,7 +3,9 @@
   inset: 16px;
   z-index: 7;
   display: grid;
-  grid-template-rows: auto minmax(0, 1fr) auto;
+  grid-template-columns: minmax(0, 1fr);
+  grid-template-rows: 48px minmax(0, 1fr) 38px;
+  grid-template-areas: "tabs" "content" "help";
   width: calc(100% - 32px);
   min-width: 0;
   overflow: hidden;
@@ -14,12 +16,16 @@
   color: #e9dfbd;
 }
 .game-menu > nav {
+  grid-area: tabs;
+  height: 48px;
+  min-height: 48px;
   display: flex;
   border-bottom: 1px solid #706640;
 }
 .game-menu > nav button {
   flex: 1;
   padding: 10px;
+  height: 47px;
   border: 0;
   background: transparent;
   color: #988f75;
@@ -34,12 +40,14 @@
   background: linear-gradient(180deg, #6a36802e, transparent);
 }
 .game-menu section {
+  grid-area: content;
   min-width: 0;
   overflow: auto;
   padding: 12px;
 }
 .bag-list {
   display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
   align-content: start;
   gap: 6px;
 }
@@ -124,25 +132,51 @@
     0 30%
   );
 }
-.status-grid {
+.actor-status-panel {
   display: grid;
+  grid-template-rows: auto minmax(0, 1fr);
   align-content: start;
   gap: 8px;
 }
-.status-grid > header {
+.actor-status-panel > header {
   display: grid;
   gap: 3px;
   padding: 10px 12px;
   background: #ffffff09;
 }
-.status-grid > header strong {
+.actor-status-panel > header strong {
   color: #dec477;
 }
-.status-grid > header small,
-.status-grid > header em {
+.actor-status-panel > header small,
+.actor-status-panel > header em {
   color: #9d9682;
 }
-.status-grid fieldset {
+.ladder-summary {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 8px;
+  margin-top: 6px;
+}
+.ladder-summary span {
+  display: flex;
+  justify-content: space-between;
+  padding: 7px 9px;
+  color: #a99f86;
+  border: 1px solid #ffffff13;
+  background: #0002;
+  font-size: 10px;
+}
+.ladder-summary b {
+  color: #e2c879;
+}
+.status-cards {
+  min-height: 0;
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 9px;
+  align-content: start;
+}
+.actor-status-panel fieldset {
   display: grid;
   grid-template-columns: 1fr 1fr;
   gap: 0 14px;
@@ -150,12 +184,12 @@
   padding: 5px 10px 8px;
   border: 1px solid #ffffff16;
 }
-.status-grid legend {
+.actor-status-panel legend {
   padding: 0 6px;
   color: #bd9f55;
   font-size: 11px;
 }
-.status-grid fieldset span {
+.actor-status-panel fieldset > span {
   display: flex;
   justify-content: space-between;
   gap: 8px;
@@ -164,16 +198,30 @@
   color: #aaa18b;
   font-size: 11px;
 }
-.status-grid fieldset b {
+.actor-status-panel fieldset b {
   color: #e1d7b9;
   text-align: right;
   font: 11px monospace;
 }
-.skill-list p,
-.skill-list button {
+.status-explain > span {
   display: grid;
-  grid-template-columns: 1fr auto auto;
-  gap: 20px;
+  gap: 2px;
+}
+.status-explain small {
+  color: #756f61;
+  font-size: 8px;
+}
+.kungfu-list {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  align-content: start;
+  gap: 6px;
+}
+.kungfu-list p,
+.kungfu-list button {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 7px 14px;
   width: 100%;
   padding: 9px;
   border: 1px solid transparent;
@@ -183,15 +231,20 @@
   background: transparent;
   color: #e9dfbd;
 }
-.skill-list button.active {
+.kungfu-list button.active {
   border-color: #b39b58;
   background: #82663338;
 }
-.skill-list span,
-.skill-list em {
+.kungfu-list span,
+.kungfu-list em {
   color: #aca58e;
 }
+.kungfu-list em {
+  grid-column: 1/3;
+  font-size: 10px;
+}
 .game-menu > footer {
+  grid-area: help;
   padding-top: 10px;
   text-align: center;
   color: #9d947b;
@@ -348,8 +401,13 @@
   .bag-list small {
     max-width: 230px;
   }
-  .status-grid {
-    grid-template-columns: 1fr 1fr;
+  .bag-list,
+  .status-cards,
+  .kungfu-list {
+    grid-template-columns: 1fr;
+  }
+  .ladder-summary {
+    grid-template-columns: 1fr;
   }
   .cheat-menu {
     inset: 5px;

@@ -9,19 +9,20 @@ const schools = (originalSystem.school as string[]) || [];
 
 export const levelTitle = (level: number) =>
   levels[Math.min(49, Math.max(0, Math.floor(level / 5)))] || "不堪一击";
+export const levelTier = (level: number) =>
+  Math.min(50, Math.max(1, Math.floor(level / 5) + 1));
 
 export function actorStatusProfile(actor: SceneActorState) {
   const stats = derivedStats(actor),
     combat = combatSkillProfile(actor),
-    realmIndex = Math.min(
-      49,
-      Math.floor(
-        (combat.attack + Math.floor((combat.dodge + combat.parry) / 2)) / 15,
-      ),
+    martialValue = Math.floor(
+      (combat.attack + Math.floor((combat.dodge + combat.parry) / 2)) / 3,
     ),
+    realmIndex = Math.min(49, Math.floor(martialValue / 5)),
+    attackValue = stats.str + stats.atk + Math.floor(actor.fpPlus / 2),
     attackIndex = Math.min(
       5,
-      Math.floor((stats.str + stats.atk + actor.fpPlus / 2) / 20),
+      Math.floor(attackValue / 20),
     ),
     faceIndex = Math.min(7, Math.max(0, Math.floor((actor.face - 10) / 3))),
     faces =
@@ -44,7 +45,14 @@ export function actorStatusProfile(actor: SceneActorState) {
         : "无",
     gender: actor.gender === 0 ? "男" : actor.gender === 1 ? "女" : "？",
     realm: levels[realmIndex] || "不堪一击",
+    realmIndex,
+    realmTier: realmIndex + 1,
+    realmValue: martialValue,
     attackWeight: attackLevels[attackIndex] || "极轻",
+    attackIndex,
+    attackTier: attackIndex + 1,
+    attackValue,
+    appearanceTier: faceIndex + 1,
     appearance:
       actor.age < 16
         ? String(originalSystem.young_face || "一脸稚气")

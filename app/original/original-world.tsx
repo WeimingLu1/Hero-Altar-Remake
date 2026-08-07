@@ -111,7 +111,11 @@ import {
   maxCheatStat,
   type CheatQuickAction,
 } from "../game-core/cheat-system";
-import { actorStatusProfile, levelTitle } from "../game-core/status-system";
+import {
+  actorStatusProfile,
+  levelTier,
+  levelTitle,
+} from "../game-core/status-system";
 import "./world.css";
 import "./choice.css";
 import "./battle.css";
@@ -2758,7 +2762,7 @@ function GameMenu({
           )}
         </section>
       ) : menu.tab === 1 ? (
-        <section className="status-grid">
+        <section className="actor-status-panel">
           <header>
             <b>
               {profile.school} · {actor.name || "江湖少侠"}
@@ -2770,7 +2774,19 @@ function GameMenu({
               武艺看起来「{profile.realm}」，出手似乎「{profile.attackWeight}」
             </strong>
             <em>{profile.appearance}</em>
+            <div className="ladder-summary">
+              <span>
+                综合武境 <b>{profile.realmTier}/50 阶</b>
+              </span>
+              <span>
+                出手劲道 <b>{profile.attackTier}/6 阶</b>
+              </span>
+              <span>
+                容貌评价 <b>{profile.appearanceTier}/8 阶</b>
+              </span>
+            </div>
           </header>
+          <div className="status-cards">
           <fieldset>
             <legend>精气状态</legend>
             <span>
@@ -2837,16 +2853,16 @@ function GameMenu({
               </b>
             </span>
             <span>
-              攻击 <b>{stats.atk}</b>
+              装备攻击 <b>{stats.atk}</b>
             </span>
             <span>
-              防御 <b>{stats.pdef}</b>
+              装备防御 <b>{stats.pdef}</b>
             </span>
             <span>
-              命中 <b>{stats.hit}</b>
+              装备命中 <b>{stats.hit}</b>
             </span>
             <span>
-              闪避 <b>{stats.eva}</b>
+              装备闪避 <b>{stats.eva}</b>
             </span>
           </fieldset>
           <fieldset>
@@ -2863,11 +2879,17 @@ function GameMenu({
             <span>
               名声/道德 <b>{actor.morals}</b>
             </span>
-            <span>
-              福缘 <b>{actor.luck}</b>
+            <span className="status-explain">
+              <span>
+                福缘<small>请教速度、任务奖励、铸剑词缀与随机事件</small>
+              </span>
+              <b>{actor.luck}</b>
             </span>
-            <span>
-              容貌 <b>{actor.face}</b>
+            <span className="status-explain">
+              <span>
+                容貌<small>人物评价、部分拜师条件与结局判定</small>
+              </span>
+              <b>{actor.face}</b>
             </span>
             <span>
               击杀 NPC <b>{actor.killList?.length || 0}</b>
@@ -2902,7 +2924,11 @@ function GameMenu({
             <span>
               已学功夫 <b>{Object.keys(actor.skills).length}/20</b>
             </span>
+            <span>
+              综合武境进度 <b>{profile.realmValue}/245</b>
+            </span>
           </fieldset>
+          </div>
         </section>
       ) : (
         <SkillRows
@@ -3046,7 +3072,7 @@ function SkillRows({
 }) {
   const skills = learnedSkills(actor);
   return (
-    <section className="skill-list">
+    <section className="kungfu-list">
       {skills.length ? (
         skills.map((skill, i) => (
           <button
@@ -3062,7 +3088,8 @@ function SkillRows({
             </b>
             <span>{skill.level} 级</span>
             <em>
-              {levelTitle(skill.level)} · {skill.points} 点
+              {levelTitle(skill.level)} · 第 {levelTier(skill.level)}/50 阶 ·{" "}
+              {skill.points} 点
             </em>
           </button>
         ))
