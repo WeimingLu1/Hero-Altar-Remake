@@ -16,10 +16,14 @@ const kungfus = JSON.parse(readFileSync(kungfusPath, "utf8")).data;
 const data = enemies.data;
 
 const kungfuType = (id) => Number(kungfus[id]?.type || 0);
+// 战斗等级只算「专门武功」(id>=12)：原版数据给商人/平民填了很高的基本武功
+// (基本招架254等)作为数据伪影，不应算作真实战斗等级，否则卖花妞也会被抬成宗师。
 const combatLevel = (skillList) =>
   (skillList || []).reduce((highest, [id, level]) => {
     const t = kungfuType(id);
-    return t >= 1 && t <= 10 ? Math.max(highest, Number(level || 0)) : highest;
+    return id >= 12 && t >= 1 && t <= 10
+      ? Math.max(highest, Number(level || 0))
+      : highest;
   }, 0);
 const isCaster = (skillList) =>
   (skillList || []).some(([id, level]) => kungfuType(id) === 8 && Number(level) > 0);

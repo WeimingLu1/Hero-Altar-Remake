@@ -41,9 +41,9 @@ test("任何 NPC 都不能突破数值天花板，百姓保持弱小", () => {
     );
     assert.ok(Number(e.str) <= 255 && Number(e.agi) <= 255);
     if (npcCombatLevel(e) === 0) {
-      // 无战斗武学者不被重平衡，保持原始弱小数值（如顾炎武 620）
+      // 无专门武功者不被重平衡，保持原始弱小数值（如顾炎武 620、月下老人 1000）
       assert.ok(
-        Number(e.maxhp) <= 700,
+        Number(e.maxhp) <= 1100,
         `无战斗武学的 ${e.name} 应保持原值，实际 ${e.maxhp}`,
       );
     }
