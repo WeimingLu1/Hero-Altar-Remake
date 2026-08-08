@@ -5,9 +5,9 @@ import {
   friendlyEventName,
   getOriginalMap,
   originalStart,
-  tileAt,
   triggerEvent,
   type MapEvent,
+  type OriginalMap,
   type WorldPosition,
 } from "../game-core/original-world";
 import {
@@ -128,7 +128,12 @@ import {
 } from "../game-core/status-system";
 import { buildNpcSystemPrompt, npcLore } from "../game-core/npc-lore";
 import {
-  LM_STUDIO_MODEL,
+  buildBattleNarrationFacts,
+  buildBattleNarrationPrompt,
+  type BattleNarrative,
+  type BattleNarrationEvent,
+} from "../game-core/battle-narration";
+import {
   streamNpcReply,
   type ChatMessage,
 } from "../game-core/lm-studio";
@@ -141,6 +146,139 @@ import "./menu.css";
 const W = 640,
   H = 480,
   T = 32;
+
+type WuxiaArt = {
+  environment: HTMLImageElement | null;
+  characters: Array<HTMLImageElement | null>;
+  furniture: HTMLImageElement | null;
+};
+type CharacterSprite = { sheet: number; row: number; portrait?: number };
+const wuxiaArt: WuxiaArt = {
+  environment: null,
+  characters: [null, null, null, null, null, null, null],
+  furniture: null,
+};
+
+function loadWuxiaArt() {
+  const load = (src: string, ready: (image: HTMLImageElement) => void) => {
+    const image = new Image();
+    image.decoding = "async";
+    image.onload = () => ready(image);
+    image.src = src;
+  };
+  load("/game-assets/generated/wuxia-map-modules-v2.png", (image) => {
+    wuxiaArt.environment = image;
+  });
+  [
+    "wuxia-characters-v1.png",
+    "wuxia-characters-ages-v1.png",
+    "wuxia-characters-townsfolk-v1.png",
+    "wuxia-characters-factions-v1.png",
+    "wuxia-characters-women-v1.png",
+    "wuxia-characters-faction-signatures-v1.png",
+    "wuxia-characters-flower-variants-v1.png",
+  ].forEach((name, index) =>
+    load(`/game-assets/generated/${name}`, (image) => {
+      wuxiaArt.characters[index] = image;
+    }),
+  );
+  load("/game-assets/generated/wuxia-indoor-furniture-v1.png", (image) => {
+    wuxiaArt.furniture = image;
+  });
+}
+
+function npcCharacterSprite(id: number, fallbackName = ""): CharacterSprite {
+  const npc = id > 0 ? npcRecord(id) : {},
+    name = String(npc.name || fallbackName),
+    description = ((npc.des_text as string[]) || []).join(""),
+    text = `${name}${description}`,
+    age = Number(npc.age || 30),
+    female = Number(npc.gender || 0) === 1,
+    merchant = Number(npc.type || 0) === -1 || /老板|掌柜|商人|店|贩|卖/.test(text);
+  // Age is a physical identity constraint, not a styling hint. Keep children and
+  // elders recognisable even when their descriptions also mention a faction.
+  if (age < 18) return { sheet: 1, row: female ? 1 : 0 };
+  if (age >= 55) return { sheet: 1, row: female ? 3 : 2 };
+  const specialPortraits: Record<string, number> = {
+    阿绣: 20, 李青照: 21, 柳如是: 22, 聂隐娘: 23, 入画: 24,
+    唐晚词: 25, 李师师: 26, 薛涛: 27, 王璁儿: 28, 唐思儿: 29,
+    薛千柔: 32, 白瑞德: 33,
+  };
+  if (specialPortraits[name] !== undefined) {
+    if (/王璁儿|唐思儿/.test(name)) return { sheet: 5, row: 1, portrait: specialPortraits[name] };
+    if (name === "薛千柔") return { sheet: 5, row: 3, portrait: 32 };
+    if (name === "白瑞德") return { sheet: 0, row: 2, portrait: 33 };
+    const flowerRows: Record<string, number> = { 阿绣: 0, 李青照: 1, 柳如是: 2, 聂隐娘: 3 };
+    return { sheet: 6, row: flowerRows[name] ?? hashIndex(name, 4), portrait: specialPortraits[name] };
+  }
+  if (/花间派|李青照|名妓|侍女|剑器之舞|红拂女/.test(text) && female)
+    return { sheet: 6, row: hashIndex(name, 4), portrait: 20 + hashIndex(name, 8) };
+  if (/红莲教/.test(text))
+    return female
+      ? { sheet: 5, row: 1, portrait: 28 + hashIndex(name, 2) }
+      : { sheet: 3, row: 0, portrait: 31 };
+  if (/武当/.test(text)) return { sheet: 5, row: 2, portrait: 30 };
+  if (/雪山/.test(text))
+    return female ? { sheet: 5, row: 3, portrait: 32 } : { sheet: 0, row: 2, portrait: 33 };
+  if (/冰火岛/.test(text))
+    return female ? { sheet: 4, row: 0, portrait: 34 } : { sheet: 3, row: 0, portrait: 35 };
+  if (female) {
+    if (/师太|尼姑|女尼|居士/.test(text)) return { sheet: 4, row: 2 };
+    if (/女侠|掌门|剑|杀手|教主|寨主|护法|武功/.test(text))
+      return { sheet: 4, row: 0 };
+    if (merchant) return { sheet: 4, row: 1 };
+    if (/厨|妇人|婆|工|婶|嫂/.test(text))
+      return { sheet: 4, row: 3 };
+    return { sheet: 0, row: hashIndex(name, 2) ? 1 : 3 };
+  }
+  if (/和尚|大师|方丈|禅师|罗汉|僧/.test(text)) return { sheet: 3, row: 2 };
+  if (/道长|真人|道士|天师|武当|茅山/.test(text)) return { sheet: 3, row: 3 };
+  if (/捕快|官|衙门|村长|管事|将军/.test(text)) return { sheet: 2, row: 0 };
+  if (merchant) return { sheet: 2, row: 1 };
+  if (/公子|书生|秀才|先生|教书|文士|扇/.test(text)) return { sheet: 2, row: 2 };
+  if (/厨|工|铁匠|石料|樵夫|伙计|船夫/.test(text)) return { sheet: 2, row: 3 };
+  if (/盗|匪|恶|杀手|喽啰|山贼|强人/.test(text)) return { sheet: 3, row: 1 };
+  if (/大侠|掌门|剑|刀|教主|寨主|护法|武师|武功/.test(text))
+    return { sheet: 3, row: 0 };
+  return { sheet: 0, row: hashIndex(name, 2) ? 2 : 0 };
+}
+
+function CharacterPortrait({
+  npcId,
+  name = "",
+  playerGender,
+  className = "",
+}: {
+  npcId?: number;
+  name?: string;
+  playerGender?: number;
+  className?: string;
+}) {
+  const sprite =
+      playerGender === undefined
+        ? npcCharacterSprite(npcId || 0, name)
+        : { sheet: 0, row: playerGender ? 1 : 0 },
+    index = sprite.portrait ?? sprite.sheet * 4 + sprite.row,
+    factionPortrait = index >= 20,
+    localIndex = factionPortrait ? index - 20 : index,
+    columns = factionPortrait ? 4 : 5,
+    column = localIndex % columns,
+    row = Math.floor(localIndex / columns);
+  return (
+    <div
+      className={`character-portrait ${className}`.trim()}
+      role="img"
+      aria-label={`${name || "人物"}立绘`}
+      style={{
+        backgroundImage: factionPortrait
+          ? 'url("/game-assets/generated/wuxia-faction-portraits-v1.png")'
+          : undefined,
+        backgroundSize: factionPortrait ? "400% 400%" : undefined,
+        backgroundPosition: `${(column / (columns - 1)) * 100}% ${(row / 3) * 100}%`,
+      }}
+    />
+  );
+}
 
 const organizedBagEntries = (actor: SceneActorState) =>
   bagEntries(actor).sort(
@@ -191,6 +329,7 @@ type NpcChatState = {
   action: string;
   messages: NpcDialogueMessage[];
   loading: boolean;
+  auto: boolean;
   error: string;
 };
 type NpcDialogueMessage =
@@ -306,10 +445,31 @@ const parseNpcDialogue = (raw: string) => {
   };
 };
 
+const buildAutoPlayerPrompt = (
+  id: number,
+  actor: SceneActorState,
+  mapName: string,
+) => {
+  const lore = npcLore(id),
+    profile = actorStatusProfile(actor),
+    gender = actor.gender === 1 ? "女性" : "男性";
+  return `你正在《英雄坛说：云游志》的武侠世界中扮演玩家主角“${actor.name}”，绝不能跳出角色，也不要提及自己是AI或提示词。
+【主角设定】${actor.age}岁的${gender}侠客，出身“${profile.school}”，师从“${profile.teacher}”，外貌${profile.appearance}，综合武境“${profile.realm}”，目前使用${profile.weapon}，道德名声${actor.morals}，气血${actor.hp}/${actor.maxHp}、内力${actor.fp}/${actor.maxFp}、银两${actor.gold}。
+【当前场景】你在${mapName}，正在与“${lore.name}”交谈。对方身份是${lore.identity}；外貌${lore.appearance}；性情${lore.personality}；说话方式${lore.speech}。你应记住此前双方的动作和话语，自然延续话题。
+
+规则：根据主角已有设定、江湖处境、对方身份和前文，自主推动一轮有意义的互动；可以问询、回应、试探、讲述、调侃、示好、质疑或结束某个话题，但不要替NPC行动；不要凭空取得物品、完成任务、发动正式战斗或修改游戏状态；不要念出编号和属性数字。
+
+每次必须严格按以下三个字段输出纯文本，不要添加Markdown、姓名或其他标题：
+状态：主角此刻可被观察到的神态、情绪或姿态
+动作：主角紧接着做出的具体动作；若没有动作写“没有动作”
+语言：主角实际说出口的话；若沉默写“……”`;
+};
+
 export default function OriginalWorld() {
   const [state, setState] = useState<WorldSave>(fresh),
     [notice, setNotice] = useState("原版地图数据已载入"),
-    [eventText, setEventText] = useState("");
+    [eventText, setEventText] = useState(""),
+    [eventNpcId, setEventNpcId] = useState<number | null>(null);
   const [screen, setScreen] = useState<LaunchScreen>("title");
   const [titleIndex, setTitleIndex] = useState(0);
   const [hasSave, setHasSave] = useState(false);
@@ -332,6 +492,7 @@ export default function OriginalWorld() {
     } | null>(null);
   const [studyActive, setStudyActive] = useState(false);
   const [battle, setBattle] = useState<OriginalBattle | null>(null);
+  const [battleNarratives, setBattleNarratives] = useState<BattleNarrative[]>([]);
   const [battleOutcome, setBattleOutcome] = useState<number | null>(null);
   const [battleItem, setBattleItem] = useState<number | null>(null);
   const [specialMenu, setSpecialMenu] = useState<number | null>(null);
@@ -362,6 +523,8 @@ export default function OriginalWorld() {
     nameInput = useRef<HTMLInputElement>(null),
     chatEnd = useRef<HTMLDivElement>(null),
     chatAbort = useRef<AbortController | null>(null),
+    battleNarrationAbort = useRef<AbortController | null>(null),
+    battleNarrativesRef = useRef<BattleNarrative[]>([]),
     stateRef = useRef<WorldSave>(state),
     keys = useRef(new Set<string>()),
     held = useRef<Record<string, number>>({});
@@ -369,6 +532,7 @@ export default function OriginalWorld() {
     stateRef.current = next;
     setState(structuredClone(next));
   }, []);
+  useEffect(() => loadWuxiaArt(), []);
   useEffect(() => {
     const id = window.setTimeout(() => {
       const exists = localStorage.getItem("rmxp-original-world-v1") !== null;
@@ -622,6 +786,7 @@ export default function OriginalWorld() {
   }, [runAt]);
   const chooseNpc = useCallback(
     (id: number, option: NpcOption) => {
+      setEventNpcId(["talk", "status", "join"].includes(option) ? id : null);
       const next = structuredClone(stateRef.current);
       if (option === "talk") {
         const tasks = next.tasks,
@@ -726,6 +891,7 @@ export default function OriginalWorld() {
           action: "",
           messages: [],
           loading: false,
+          auto: false,
           error: "",
         });
       } else if (option === "status") setEventText(npcStatus(id).join("\n"));
@@ -753,12 +919,7 @@ export default function OriginalWorld() {
     chatAbort.current = null;
     setNpcChat(null);
   }, []);
-  const sendNpcChat = useCallback(async () => {
-    if (!npcChat || npcChat.loading) return;
-    const speech = npcChat.speech.trim(), action = npcChat.action.trim(), id = npcChat.id;
-    if (!speech && !action) return;
-    const userMessage: NpcDialogueMessage = { role: "user", speech, action };
-    const dialogueHistory = [...npcChat.messages, userMessage];
+  const requestNpcReply = useCallback(async (id: number, dialogueHistory: NpcDialogueMessage[]) => {
     const history: ChatMessage[] = dialogueHistory.map((message) => message.role === "user"
       ? {
           role: "user",
@@ -771,14 +932,11 @@ export default function OriginalWorld() {
     const controller = new AbortController();
     chatAbort.current?.abort();
     chatAbort.current = controller;
-    setNpcChat({
-      ...npcChat,
-      speech: "",
-      action: "",
+    setNpcChat((chat) => chat?.id === id ? {
+      ...chat, speech: "", action: "",
       messages: [...dialogueHistory, { role: "assistant", state: "", action: "", speech: "", raw: "" }],
-      loading: true,
-      error: "",
-    });
+      loading: true, error: "",
+    } : chat);
     try {
       const current = stateRef.current;
       const answer = await streamNpcReply({
@@ -811,33 +969,165 @@ export default function OriginalWorld() {
       setNpcChat((chat) => chat?.id === id ? {
         ...chat,
         messages: chat.messages.filter((message) => message.role === "user" || message.raw),
-        loading: false,
+        loading: false, auto: false,
         error: `${detail}。${corsHint}`,
       } : chat);
     } finally {
       if (chatAbort.current === controller) chatAbort.current = null;
     }
-  }, [npcChat]);
+  }, []);
+  const sendNpcChat = useCallback(async () => {
+    if (!npcChat || npcChat.loading) return;
+    const speech = npcChat.speech.trim(), action = npcChat.action.trim();
+    if (!speech && !action) return;
+    await requestNpcReply(npcChat.id, [...npcChat.messages, { role: "user", speech, action }]);
+  }, [npcChat, requestNpcReply]);
+  const generateAutoPlayerTurn = useCallback(async (chat: NpcChatState) => {
+    const id = chat.id,
+      controller = new AbortController(),
+      history: ChatMessage[] = chat.messages.map((message) => message.role === "user"
+        ? { role: "user", content: `行动：${message.action}\n语言：${message.speech}` }
+        : { role: "assistant", content: `状态：${message.state}\n动作：${message.action}\n语言：${message.speech}` });
+    chatAbort.current?.abort();
+    chatAbort.current = controller;
+    setNpcChat((current) => current?.id === id ? { ...current, loading: true, error: "" } : current);
+    try {
+      const current = stateRef.current,
+        answer = await streamNpcReply({
+          system: buildAutoPlayerPrompt(id, current.actor, getOriginalMap(current.position.mapId).name),
+          messages: history.length ? history : [{ role: "assistant", content: `${npcLore(id).name}正在等待你的回应。` }],
+          signal: controller.signal,
+          nextSpeaker: "主角",
+          onToken: () => {},
+        }),
+        parsed = parseNpcDialogue(answer);
+      setNpcChat((active) => active?.id === id ? {
+        ...active,
+        messages: [...active.messages, { role: "user", action: parsed.action, speech: parsed.speech }],
+        loading: false,
+      } : active);
+    } catch (error) {
+      if (controller.signal.aborted) return;
+      const detail = error instanceof Error ? error.message : "连接失败";
+      setNpcChat((active) => active?.id === id ? { ...active, loading: false, auto: false, error: `${detail}。自动对话已停止。` } : active);
+    } finally {
+      if (chatAbort.current === controller) chatAbort.current = null;
+    }
+  }, []);
+  useEffect(() => {
+    if (!npcChat?.auto || npcChat.loading || npcChat.error) return;
+    const last = npcChat.messages[npcChat.messages.length - 1],
+      timer = window.setTimeout(() => {
+        if (last?.role === "user") void requestNpcReply(npcChat.id, npcChat.messages);
+        else void generateAutoPlayerTurn(npcChat);
+      }, 650);
+    return () => window.clearTimeout(timer);
+  }, [generateAutoPlayerTurn, npcChat, requestNpcReply]);
   useEffect(() => {
     chatEnd.current?.scrollIntoView({ behavior: "smooth", block: "nearest" });
   }, [npcChat?.messages]);
+  useEffect(() => {
+    if (battle && battle.turn > 0) return;
+    battleNarrationAbort.current?.abort();
+    battleNarrationAbort.current = null;
+    battleNarrativesRef.current = [];
+    const id = window.setTimeout(() => setBattleNarratives([]), 0);
+    return () => window.clearTimeout(id);
+  }, [battle]);
+  const narrateBattleRound = useCallback(async (event: BattleNarrationEvent) => {
+    if (!event.facts.length) return;
+    const controller = new AbortController();
+    battleNarrationAbort.current?.abort();
+    battleNarrationAbort.current = controller;
+    const entry: BattleNarrative = {
+      turn: event.battle.turn,
+      facts: event.facts,
+      text: "",
+      loading: true,
+      error: "",
+    };
+    const previous = battleNarrativesRef.current;
+    battleNarrativesRef.current = [...previous, entry];
+    setBattleNarratives(battleNarrativesRef.current);
+    const history: ChatMessage[] = [
+      ...previous.filter((item) => item.text).slice(-6).map((item) => ({
+        role: "assistant" as const,
+        content: item.text,
+      })),
+      { role: "user", content: buildBattleNarrationFacts(event) } as const,
+    ];
+    const updateEntry = (change: (item: BattleNarrative) => BattleNarrative) => {
+      const next = battleNarrativesRef.current.map((item) =>
+        item === entry || (item.turn === entry.turn && item.loading) ? change(item) : item,
+      );
+      battleNarrativesRef.current = next;
+      setBattleNarratives(next);
+    };
+    try {
+      const answer = await streamNpcReply({
+        system: buildBattleNarrationPrompt(event),
+        messages: history,
+        signal: controller.signal,
+        onToken: (token) => updateEntry((item) => ({ ...item, text: item.text + token })),
+      });
+      updateEntry((item) => ({ ...item, text: answer, loading: false }));
+    } catch (error) {
+      if (controller.signal.aborted) return;
+      const detail = error instanceof Error ? error.message : "战报生成失败";
+      updateEntry((item) => ({
+        ...item,
+        text: item.text || item.facts.join("\n"),
+        loading: false,
+        error: detail,
+      }));
+    } finally {
+      if (battleNarrationAbort.current === controller)
+        battleNarrationAbort.current = null;
+    }
+  }, []);
   const fight = useCallback(() => {
-    if (!battle || battle.finished) return;
-    const next = structuredClone(stateRef.current),
+    if (!battle || battle.finished || battleNarrativesRef.current.some((item) => item.loading)) return;
+    const playerHpBefore = stateRef.current.actor.hp,
+      enemyHpBefore = battle.enemyHp,
+      logLength = battle.log.length,
+      next = structuredClone(stateRef.current),
       round = battleRound(battle, next.actor);
     sync(next);
     setBattle(round);
-  }, [battle, sync]);
+    void narrateBattleRound({
+      battle: round,
+      actor: next.actor,
+      mapName: getOriginalMap(next.position.mapId).name,
+      facts: round.log.slice(logLength),
+      playerHpBefore,
+      enemyHpBefore,
+    });
+  }, [battle, narrateBattleRound, sync]);
   const fightSpecial = useCallback(
     (id?: number) => {
-      if (!battle || !id) return;
-      const next = structuredClone(stateRef.current),
+      if (!battle || !id || battleNarrativesRef.current.some((item) => item.loading)) return;
+      const playerHpBefore = stateRef.current.actor.hp,
+        enemyHpBefore = battle.enemyHp,
+        logLength = battle.log.length,
+        next = structuredClone(stateRef.current),
+        playerTechnique = battleSpecials(next.actor, battle.cooldowns).find(
+          (special) => special.id === id,
+        )?.name,
         round = specialRound(battle, next.actor, id);
       sync(next);
       setBattle(round);
       setSpecialMenu(null);
+      void narrateBattleRound({
+        battle: round,
+        actor: next.actor,
+        mapName: getOriginalMap(next.position.mapId).name,
+        facts: round.log.slice(logLength),
+        playerHpBefore,
+        enemyHpBefore,
+        playerTechnique,
+      });
     },
-    [battle, sync],
+    [battle, narrateBattleRound, sync],
   );
   const settleBattle = useCallback(
     (kill: boolean) => {
@@ -1635,6 +1925,7 @@ export default function OriginalWorld() {
           return;
         }
         if (battle) {
+          if (battleNarrativesRef.current.some((item) => item.loading)) return;
           const specials = battleSpecials(
             stateRef.current.actor,
             battle.cooldowns,
@@ -1779,6 +2070,7 @@ export default function OriginalWorld() {
         }
         if (eventText && (confirm || cancel)) {
           setEventText("");
+          setEventNpcId(null);
           return;
         }
         if (npcMenu) {
@@ -2255,10 +2547,25 @@ export default function OriginalWorld() {
       <section className="world-frame">
         <canvas ref={canvas} width={W} height={H} />
         {eventText && (
-          <button className="world-dialog" onClick={() => setEventText("")}>
-            {eventText.split("\n").map((line, i) => (
-              <span key={i}>{line || " "}</span>
-            ))}
+          <button
+            className={`world-dialog${eventNpcId ? " with-portrait" : ""}`}
+            onClick={() => {
+              setEventText("");
+              setEventNpcId(null);
+            }}
+          >
+            {eventNpcId && (
+              <CharacterPortrait
+                npcId={eventNpcId}
+                name={String(npcRecord(eventNpcId).name || "江湖人物")}
+                className="dialog-portrait"
+              />
+            )}
+            <span className="world-dialog-copy">
+              {eventText.split("\n").map((line, i) => (
+                <span key={i}>{line || " "}</span>
+              ))}
+            </span>
             <i>▼</i>
           </button>
         )}
@@ -2283,9 +2590,26 @@ export default function OriginalWorld() {
                 <b>{npcLore(npcChat.id).name}</b>
                 <small>{npcLore(npcChat.id).identity} · 当前相遇</small>
               </div>
-              <button type="button" onClick={closeNpcChat}>结束对话</button>
+              <div className="npc-chat-controls">
+                <button type="button" className={npcChat.auto ? "active" : ""}
+                  disabled={npcChat.auto || npcChat.loading}
+                  onClick={() => setNpcChat({ ...npcChat, auto: true, error: "" })}>
+                  {npcChat.auto ? "自动对话中" : "自动对话"}
+                </button>
+                <button type="button" onClick={closeNpcChat}>结束对话</button>
+              </div>
             </header>
-            <div className="npc-chat-log" aria-live="polite">
+            <div className="npc-chat-body">
+              <aside>
+                <CharacterPortrait
+                  npcId={npcChat.id}
+                  name={npcLore(npcChat.id).name}
+                  className="chat-portrait"
+                />
+                <b>{npcLore(npcChat.id).name}</b>
+                <small>{npcLore(npcChat.id).identity}</small>
+              </aside>
+              <div className="npc-chat-log" aria-live="polite">
               {npcChat.messages.length === 0 && (
                 <p className="npc-chat-hint">{npcLore(npcChat.id).name}就在你面前。你可以开口，也可以先做一个动作。</p>
               )}
@@ -2305,26 +2629,26 @@ export default function OriginalWorld() {
                 </article>
               ))}
               <div ref={chatEnd} />
+              </div>
             </div>
             {npcChat.error && <p className="npc-chat-error">{npcChat.error}</p>}
             <form onSubmit={(event) => { event.preventDefault(); void sendNpcChat(); }}>
               <label>
                 <span>行动</span>
                 <textarea maxLength={180} rows={2} placeholder="例如：抱拳行礼、递上一壶酒、拔剑后退……"
-                  value={npcChat.action} disabled={npcChat.loading}
+                  value={npcChat.action} disabled={npcChat.loading || npcChat.auto}
                   onChange={(event) => setNpcChat({ ...npcChat, action: event.target.value, error: "" })} />
               </label>
               <label>
                 <span>语言</span>
                 <textarea maxLength={300} rows={2} placeholder="输入你想对他说的话……"
-                  value={npcChat.speech} disabled={npcChat.loading}
+                  value={npcChat.speech} disabled={npcChat.loading || npcChat.auto}
                   onChange={(event) => setNpcChat({ ...npcChat, speech: event.target.value, error: "" })} />
               </label>
-              <button type="submit" disabled={npcChat.loading || (!npcChat.action.trim() && !npcChat.speech.trim())}>
-                {npcChat.loading ? "对方回应中" : "行动并交谈"}
+              <button type="submit" disabled={npcChat.auto || npcChat.loading || (!npcChat.action.trim() && !npcChat.speech.trim())}>
+                {npcChat.auto ? "自动推进中" : npcChat.loading ? "对方回应中" : "行动并交谈"}
               </button>
             </form>
-            <footer>本次相遇按上下文容量保留对话 · 接近上限时自动舍弃最早内容 · 结束或移动后清空 · {LM_STUDIO_MODEL}</footer>
           </section>
         )}
         {shop && (
@@ -2354,6 +2678,8 @@ export default function OriginalWorld() {
         {battle && (
           <BattleView
             battle={battle}
+            narratives={battleNarratives}
+            actor={state.actor}
             hp={state.actor.hp}
             maxHp={state.actor.maxHp}
             fight={fight}
@@ -2807,6 +3133,8 @@ function Choice({
 }
 function BattleView({
   battle,
+  narratives,
+  actor,
   hp,
   maxHp,
   fight,
@@ -2816,6 +3144,8 @@ function BattleView({
   flee,
 }: {
   battle: OriginalBattle;
+  narratives: BattleNarrative[];
+  actor: SceneActorState;
   hp: number;
   maxHp: number;
   fight: () => void;
@@ -2824,19 +3154,39 @@ function BattleView({
   openItem: () => void;
   flee: () => void;
 }) {
+  const logRef = useRef<HTMLDivElement>(null);
+  const latestNarrative = narratives.at(-1);
+  useEffect(() => {
+    const log = logRef.current;
+    if (!log) return;
+    log.scrollTo({
+      top: log.scrollHeight,
+      behavior: latestNarrative?.loading ? "auto" : "smooth",
+    });
+  }, [battle.log.length, latestNarrative?.loading, latestNarrative?.text.length]);
+  const generating = Boolean(latestNarrative?.loading);
+
   return (
     <div className="battle">
       <div className="battle-stage">
         <div className="fighter hero">
-          <i />
-          <span>少侠</span>
+          <CharacterPortrait
+            playerGender={actor.gender}
+            name={actor.name || "少侠"}
+            className="battle-portrait"
+          />
+          <span>{actor.name || "少侠"}</span>
         </div>
         <b>
           {battle.mode === "spar" ? "切磋" : "生死战"} · 第 {battle.turn + 1}{" "}
           回合
         </b>
         <div className="fighter enemy">
-          <i />
+          <CharacterPortrait
+            npcId={battle.enemyId}
+            name={battle.enemyName}
+            className="battle-portrait"
+          />
           <span>{battle.enemyName}</span>
         </div>
       </div>
@@ -2855,24 +3205,37 @@ function BattleView({
           </em>
         </label>
       </div>
-      <div className="battle-log">
-        {battle.log.map((line, i) => (
-          <p key={`${i}-${line}`}>{line}</p>
+      <div
+        className="battle-log"
+        ref={logRef}
+        role="log"
+        aria-live="polite"
+        aria-relevant="additions"
+      >
+        <header><span>战况实录</span><i>LIVE</i></header>
+        {!narratives.length && <p className="battle-opening"><span>{battle.log[0]}</span></p>}
+        {narratives.map((item, index) => (
+          <article className={index === narratives.length - 1 ? "latest" : ""} key={`${item.turn}-${index}`}>
+            <header><time>第 {item.turn} 回合</time><small>{item.facts.join(" · ")}</small></header>
+            <div>{item.text || "风声骤紧，正在演绎这一回合……"}</div>
+            {item.error && <em>小说战报生成中断，已保留真实结算：{item.error}</em>}
+          </article>
         ))}
+        <div className="battle-log-anchor" aria-hidden="true" />
       </div>
       <nav>
-        <button onClick={battle.finished ? leave : fight}>
-          {battle.finished ? "处理战果" : "普通攻击"} <kbd>E</kbd>
+        <button onClick={battle.finished ? leave : fight} disabled={generating}>
+          {generating ? "战报演绎中…" : battle.finished ? "处理战果" : "普通攻击"} <kbd>E</kbd>
         </button>
-        <button onClick={openSpecial} disabled={Boolean(battle.finished)}>
+        <button onClick={openSpecial} disabled={Boolean(battle.finished) || generating}>
           绝招 <kbd>Q</kbd>
         </button>
-        <button onClick={openItem} disabled={Boolean(battle.finished)}>
+        <button onClick={openItem} disabled={Boolean(battle.finished) || generating}>
           物品 <kbd>I</kbd>
         </button>
         <button
           onClick={battle.mode === "spar" ? leave : flee}
-          disabled={Boolean(battle.finished)}
+          disabled={Boolean(battle.finished) || generating}
         >
           {battle.mode === "spar" ? "退出" : "逃跑"}{" "}
           <kbd>{battle.mode === "spar" ? "X" : "G"}</kbd>
@@ -2996,16 +3359,17 @@ function GameMenu({
       ) : menu.tab === 1 ? (
         <section className="actor-status-panel">
           <header>
-            <b>
-              {profile.school} · {actor.name || "江湖少侠"}
-            </b>
-            <small>
-              {actor.age} 岁 · {profile.gender} · 师承 {profile.teacher}
-            </small>
-            <strong>
-              武艺看起来「{profile.realm}」，出手似乎「{profile.attackWeight}」
-            </strong>
-            <em>{profile.appearance}</em>
+            <CharacterPortrait
+              playerGender={actor.gender}
+              name={actor.name || "江湖少侠"}
+              className="status-portrait"
+            />
+            <div className="status-identity">
+              <b>{profile.school} · {actor.name || "江湖少侠"}</b>
+              <small>{actor.age} 岁 · {profile.gender} · 师承 {profile.teacher}</small>
+              <strong>武艺看起来「{profile.realm}」，出手似乎「{profile.attackWeight}」</strong>
+              <em>{profile.appearance}</em>
+            </div>
             <div className="ladder-summary">
               <span>
                 综合武境 <b>{profile.realmTier}/50 阶</b>
@@ -3488,10 +3852,11 @@ function draw(ctx: CanvasRenderingContext2D, state: WorldSave) {
       const mx = sx + x,
         my = sy + y;
       if (mx >= map.width || my >= map.height) continue;
-      drawTile(ctx, x * T, y * T, tileAt(map, mx, my, 0), 0);
-      drawTile(ctx, x * T, y * T, tileAt(map, mx, my, 1), 1);
-      drawTile(ctx, x * T, y * T, tileAt(map, mx, my, 2), 2);
+      drawAuthoredTerrain(ctx, map, mx, my, x * T, y * T);
     }
+  drawFactionLandmarks(ctx, map, sx, sy);
+  drawPinganTownPlan(ctx, map, sx, sy);
+  drawMapStructures(ctx, map, state, sx, sy);
   for (const e of map.events) {
     if (e.x < sx || e.y < sy || e.x >= sx + 20 || e.y >= sy + 15) continue;
     const visual = eventVisual(e, state),
@@ -3503,6 +3868,7 @@ function draw(ctx: CanvasRenderingContext2D, state: WorldSave) {
         (e.y - sy) * T + 23,
         hash(visual.label),
         false,
+        npcCharacterSprite(visual.npcId || 0, visual.label),
       );
       drawNpcMarker(
         ctx,
@@ -3555,10 +3921,19 @@ function draw(ctx: CanvasRenderingContext2D, state: WorldSave) {
       wy,
       state.tasks.wantedGender ? "#e45d6d" : "#c44f45",
       false,
+      state.tasks.wantedGender ? { sheet: 4, row: 0 } : { sheet: 3, row: 1 },
     );
     drawNpcMarker(ctx, wx, wy, "通缉犯", near, true);
   }
-  drawActor(ctx, (pos.x - sx) * T + 16, (pos.y - sy) * T + 23, "#dce8ec", true);
+  drawActor(
+    ctx,
+    (pos.x - sx) * T + 16,
+    (pos.y - sy) * T + 23,
+    "#dce8ec",
+    true,
+    { sheet: 0, row: state.actor.gender ? 1 : 0 },
+    pos.direction,
+  );
   const shade = ctx.createRadialGradient(W / 2, H / 2, 120, W / 2, H / 2, 430);
   shade.addColorStop(0, "rgba(0,0,0,0)");
   shade.addColorStop(1, "rgba(2,7,4,.34)");
@@ -3580,6 +3955,7 @@ function draw(ctx: CanvasRenderingContext2D, state: WorldSave) {
 type EventVisual = {
   kind: "npc" | "object" | "door" | "corpse" | "none";
   label: string;
+  npcId?: number;
 };
 const sceneLabels: Record<number, string> = {
   1: "菜花宝典",
@@ -3622,6 +3998,7 @@ function eventVisual(event: MapEvent, state: WorldSave): EventVisual {
     return {
       kind: "npc",
       label: String(npcRecord(scene.id).name || cleanName || "江湖人物"),
+      npcId: scene.id,
     };
   }
   if (graphic) return { kind: "npc", label: cleanName || "江湖人物" };
@@ -3637,58 +4014,319 @@ function eventVisual(event: MapEvent, state: WorldSave): EventVisual {
     };
   return { kind: "none", label: "" };
 }
-function drawTile(
+type MapTheme = "town" | "indoor" | "mountain" | "snow" | "water" | "altar" | "mystic";
+const roadCache = new Map<number, Set<string>>();
+const eventCellCache = new Map<number, Set<string>>();
+const furnitureCache = new Map<number, Map<string, number>>();
+
+function mapTheme(map: OriginalMap): MapTheme {
+  if (/家中|店|武馆|衙门|大厅|二楼|客房|西厢$|东厢$|房屋|室内|客栈|兵器行/.test(map.name)) return "indoor";
+  if (/大雪山|长白山|冰火岛/.test(map.name)) return "snow";
+  if (/东海|南海|渡口|岛$/.test(map.name)) return "water";
+  if (/坛$/.test(map.name)) return "altar";
+  if (/时空|失落|桃花源|铸剑谷/.test(map.name)) return "mystic";
+  if (/山|峰|郊|盆地|谷/.test(map.name)) return "mountain";
+  return "town";
+}
+
+function authoredRoads(map: OriginalMap) {
+  const cached = roadCache.get(map.id);
+  if (cached) return cached;
+  const anchors = map.events
+    .filter((event) => executeMapCommands(activePage(event).commands).transfer)
+    .map((event) => ({ x: event.x, y: event.y }));
+  const cells = new Set<string>(),
+    hub = anchors.length
+      ? {
+          x: Math.round(anchors.reduce((sum, point) => sum + point.x, 0) / anchors.length),
+          y: Math.round(anchors.reduce((sum, point) => sum + point.y, 0) / anchors.length),
+        }
+      : { x: Math.floor(map.width / 2), y: Math.floor(map.height / 2) };
+  const add = (x: number, y: number) => {
+    if (x >= 0 && y >= 0 && x < map.width && y < map.height) cells.add(`${x},${y}`);
+  };
+  for (const anchor of anchors.length ? anchors : [hub]) {
+    for (let y = Math.min(anchor.y, hub.y); y <= Math.max(anchor.y, hub.y); y++) add(anchor.x, y);
+    for (let x = Math.min(anchor.x, hub.x); x <= Math.max(anchor.x, hub.x); x++) add(x, hub.y);
+  }
+  roadCache.set(map.id, cells);
+  return cells;
+}
+
+function eventCells(map: OriginalMap) {
+  const cached = eventCellCache.get(map.id);
+  if (cached) return cached;
+  const cells = new Set(map.events.map((event) => `${event.x},${event.y}`));
+  eventCellCache.set(map.id, cells);
+  return cells;
+}
+
+const factionMapIds = new Set([23, 25, 27, 36, 42, 52, 54, 59, 60, 61, 62, 63, 64, 65, 66]);
+const pinganUrbanMapIds = new Set([2, 3, 5, 15]);
+
+function drawAuthoredTerrain(
   ctx: CanvasRenderingContext2D,
+  map: OriginalMap,
+  mx: number,
+  my: number,
   x: number,
   y: number,
-  id: number,
-  layer: number,
 ) {
-  if (!id) return;
-  if (layer === 0) {
-    const family = id % 6,
-      palettes = [
-        [103, 25, 27],
-        [88, 24, 31],
-        [43, 24, 34],
-        [188, 27, 28],
-        [25, 22, 31],
-        [122, 18, 25],
-      ],
-      [h, s, l] = palettes[family];
-    ctx.fillStyle = `hsl(${h + (id % 11) - 5} ${s}% ${l + (id % 4)}%)`;
+  const theme = mapTheme(map),
+    roads = authoredRoads(map),
+    road = roads.has(`${mx},${my}`),
+    faction = factionMapIds.has(map.id),
+    pingan = pinganUrbanMapIds.has(map.id),
+    base = theme === "indoor" ? (map.id % 2 ? 46 : 47) : faction || map.id === 2 || map.id === 15 ? 15 : pingan ? 7 : theme === "altar" ? 15 : theme === "water" ? 24 : theme === "mystic" ? 7 : 0,
+    roadCell = faction || pingan ? 8 : theme === "mountain" || theme === "snow" || theme === "mystic" ? 16 : 8;
+  if (!wuxiaArt.environment?.complete) {
+    ctx.fillStyle = road ? "#777363" : theme === "water" ? "#315f65" : theme === "indoor" ? "#5d4936" : "#60784a";
     ctx.fillRect(x, y, T, T);
-    ctx.fillStyle = "rgba(255,244,195,.055)";
-    ctx.fillRect(x + 3 + ((id * 7) % 22), y + 4 + ((id * 11) % 20), 2, 2);
-    ctx.fillStyle = "rgba(3,12,7,.12)";
-    ctx.fillRect(x, y + T - 2, T, 2);
-    ctx.fillRect(x + T - 2, y, 2, T);
-    if (family === 0 || family === 1) {
-      ctx.fillStyle = "rgba(157,190,111,.15)";
-      const px = x + 5 + ((id * 3) % 20),
-        py = y + 9 + ((id * 5) % 15);
-      ctx.fillRect(px, py, 2, 6);
-      ctx.fillRect(px - 2, py + 2, 2, 2);
-      ctx.fillRect(px + 2, py + 1, 2, 3);
-    } else if (family === 3) {
-      ctx.strokeStyle = "rgba(157,215,220,.12)";
-      ctx.lineWidth = 1;
-      ctx.beginPath();
-      ctx.moveTo(x + 3, y + 10 + (id % 8));
-      ctx.lineTo(x + 29, y + 10 + (id % 8));
-      ctx.stroke();
-    } else {
-      ctx.fillStyle = "rgba(235,216,168,.1)";
-      ctx.fillRect(x + 5 + (id % 14), y + 7 + (id % 12), 4, 2);
-    }
-  } else {
-    // Higher RMXP layers are flattened into low-profile ground detail. This
-    // preserves map identity without letting walls or roofs hide interaction.
-    ctx.strokeStyle = `hsla(${(id * 47) % 360} 35% 68% / ${layer === 1 ? ".16" : ".1"})`;
+    return;
+  }
+  drawEnvironmentCell(ctx, road ? roadCell : base, x, y);
+  if (road && theme !== "indoor") {
+    ctx.strokeStyle = theme === "mountain" ? "rgba(83,59,35,.42)" : "rgba(38,49,39,.35)";
     ctx.lineWidth = 1;
-    ctx.strokeRect(x + 4 + (id % 3), y + 5 + (id % 4), 22, 18);
-    ctx.fillStyle = "rgba(235,220,178,.07)";
-    ctx.fillRect(x + 9, y + 13, 14, 3);
+    if (!roads.has(`${mx - 1},${my}`)) { ctx.beginPath(); ctx.moveTo(x, y); ctx.lineTo(x, y + T); ctx.stroke(); }
+    if (!roads.has(`${mx + 1},${my}`)) { ctx.beginPath(); ctx.moveTo(x + T, y); ctx.lineTo(x + T, y + T); ctx.stroke(); }
+    if (!roads.has(`${mx},${my - 1}`)) { ctx.beginPath(); ctx.moveTo(x, y); ctx.lineTo(x + T, y); ctx.stroke(); }
+    if (!roads.has(`${mx},${my + 1}`)) { ctx.beginPath(); ctx.moveTo(x, y + T); ctx.lineTo(x + T, y + T); ctx.stroke(); }
+  }
+  if (theme === "snow") {
+    ctx.fillStyle = "rgba(221,235,235,.22)";
+    ctx.fillRect(x, y, T, T);
+  }
+  if (theme === "indoor") {
+    if (mx === 0 || my === 0 || mx === map.width - 1 || my === map.height - 1)
+      drawEnvironmentCell(ctx, mx === 0 ? 40 : mx === map.width - 1 ? 42 : 41, x, y);
+    const furniture = indoorFurniture(map).get(`${mx},${my}`);
+    if (furniture !== undefined) drawFurnitureCell(ctx, furniture, x, y);
+    return;
+  }
+  if (road || eventCells(map).has(`${mx},${my}`)) return;
+  const seed = (Math.imul(map.id + 17, 73856093) ^ Math.imul(mx + 11, 19349663) ^ Math.imul(my + 7, 83492791)) >>> 0;
+  const landscapedEdge = faction && (mx < 3 || my < 3 || mx >= map.width - 3 || my >= map.height - 3);
+  if (landscapedEdge && seed % 4 === 0) {
+    const factionDecoration = map.id === 23 ? 53 : map.id === 25 ? 50 : map.id === 36 || map.id === 42 || map.id === 54 ? 51 : [48, 49, 54, 55][seed % 4];
+    drawEnvironmentCell(ctx, factionDecoration, x, y);
+    return;
+  }
+  if (seed % (faction ? 37 : 23) !== 0) return;
+  const decoration =
+    theme === "water" ? 54 :
+    theme === "altar" ? 55 :
+    theme === "mountain" || theme === "snow" ? [48, 49, 50, 51, 53][seed % 5] :
+    [48, 49, 53, 54, 55][seed % 5];
+  drawEnvironmentCell(ctx, decoration, x, y);
+}
+
+function indoorFurniture(map: OriginalMap) {
+  const cached = furnitureCache.get(map.id);
+  if (cached) return cached;
+  const cells = new Map<string, number>(),
+    occupied = eventCells(map),
+    add = (x: number, y: number, source: number) => {
+      if (x > 0 && y > 0 && x < map.width - 1 && y < map.height - 1 && !occupied.has(`${x},${y}`))
+        cells.set(`${x},${y}`, source);
+    },
+    cx = Math.floor(map.width / 2),
+    cy = Math.floor(map.height / 2);
+  if (/客房|家中|老婆婆家|房屋|西厢|东厢/.test(map.name)) {
+    add(3, 3, map.id % 2 ? 0 : 1); add(4, 3, 7); add(map.width - 4, 3, 15);
+    add(cx, cy, 9); add(cx - 1, cy + 1, 11); add(cx + 1, cy + 1, 12);
+    add(map.width - 4, map.height - 4, 25); add(3, map.height - 3, 55);
+  } else if (/药店/.test(map.name)) {
+    for (let x = 3; x < map.width - 3; x += 3) add(x, 3, x % 2 ? 18 : 19);
+    add(cx, cy, 20); add(cx - 2, cy, 44); add(map.width - 4, map.height - 3, 46);
+  } else if (/裁缝店/.test(map.name)) {
+    add(3, 3, 21); add(6, 3, 21); add(cx, cy, 20); add(map.width - 4, 3, 25); add(3, map.height - 3, 49);
+  } else if (/杂货店|豆腐店/.test(map.name)) {
+    for (let x = 3; x < map.width - 3; x += 3) { add(x, 3, x % 2 ? 17 : 18); add(x, 5, x % 2 ? 39 : 46); }
+    for (let x = cx - 4; x <= cx + 4; x += 2) add(x, cy, 20);
+    add(cx - 3, cy + 2, 34); add(cx + 3, cy + 2, 36); add(3, map.height - 3, 46); add(map.width - 4, map.height - 3, 35);
+  } else if (/兵器行|武馆/.test(map.name)) {
+    add(3, 3, 22); add(6, 3, 23); add(map.width - 4, 3, 24); add(cx, cy, 8); add(cx - 2, cy + 2, 11);
+  } else if (/客栈/.test(map.name)) {
+    for (const dx of [-4, 0, 4]) { add(cx + dx, cy, 9); add(cx + dx - 1, cy + 1, 11); add(cx + dx + 1, cy + 1, 12); }
+    add(3, 3, 35); add(map.width - 4, 3, 39);
+  } else if (/衙门|大厅|二楼/.test(map.name)) {
+    add(cx, 3, 45); add(cx - 2, 4, 12); add(cx + 2, 4, 13); add(3, 3, 26); add(map.width - 4, 3, 24);
+    add(cx, cy + 2, 32); add(cx - 3, cy + 2, 27); add(cx + 3, cy + 2, 30);
+  } else {
+    add(3, 3, 15); add(map.width - 4, 3, 17); add(cx, cy, 8); add(cx - 1, cy + 1, 11); add(cx + 1, cy + 1, 12);
+    add(3, map.height - 3, 55); add(map.width - 4, map.height - 3, 50);
+  }
+  furnitureCache.set(map.id, cells);
+  return cells;
+}
+
+function drawFurnitureCell(
+  ctx: CanvasRenderingContext2D,
+  source: number,
+  x: number,
+  y: number,
+) {
+  const atlas = wuxiaArt.furniture;
+  if (!atlas?.complete || !atlas.naturalWidth) return;
+  const cellWidth = atlas.naturalWidth / 8,
+    cellHeight = atlas.naturalHeight / 8;
+  ctx.drawImage(
+    atlas,
+    (source % 8) * cellWidth,
+    Math.floor(source / 8) * cellHeight,
+    cellWidth,
+    cellHeight,
+    x - 2,
+    y - 5,
+    T + 4,
+    T + 5,
+  );
+}
+
+function drawEnvironmentCell(
+  ctx: CanvasRenderingContext2D,
+  source: number,
+  x: number,
+  y: number,
+  width = T,
+  height = T,
+) {
+  const atlas = wuxiaArt.environment;
+  if (!atlas?.complete || !atlas.naturalWidth) return;
+  const cell = atlas.naturalWidth / 8;
+  ctx.drawImage(
+    atlas,
+    (source % 8) * cell + 2,
+    Math.floor(source / 8) * cell + 2,
+    cell - 4,
+    cell - 4,
+    x,
+    y,
+    width,
+    height,
+  );
+}
+
+function drawMapStructures(
+  ctx: CanvasRenderingContext2D,
+  map: OriginalMap,
+  state: WorldSave,
+  sx: number,
+  sy: number,
+) {
+  // Interior maps use furniture and interior walls only. A transfer back to a
+  // street is an exit, not permission to place that street's facade indoors.
+  if (mapTheme(map) === "indoor") return;
+  const outdoorWords = /山|郊|峰|海|岛|谷|林|坛|渡口|桃花源|时空|世界/;
+  const occupied: Array<{ x: number; y: number }> = [];
+  for (const event of map.events) {
+    const visual = eventVisual(event, state);
+    if (visual.kind !== "door") continue;
+    if (outdoorWords.test(visual.label)) {
+      const px = (event.x - sx) * T,
+        py = (event.y - sy - 1) * T,
+        landmark = /洞|谷|山|峰/.test(visual.label) ? 52 : /海|岛|渡口/.test(visual.label) ? 30 : 39;
+      drawEnvironmentCell(ctx, landmark, px, py, T, T * 2);
+      continue;
+    }
+    if (event.x < sx - 3 || event.x >= sx + 23 || event.y < sy || event.y >= sy + 16)
+      continue;
+    if (occupied.some((point) => Math.abs(point.x - event.x) < 4 && Math.abs(point.y - event.y) < 3))
+      continue;
+    occupied.push({ x: event.x, y: event.y });
+    const widthTiles = hashIndex(visual.label, 2) ? 5 : 4,
+      leftTile = event.x - Math.floor(widthTiles / 2),
+      topTile = event.y - 3,
+      doorColumn = event.x - leftTile;
+    for (let row = 0; row < 3; row++) {
+      for (let column = 0; column < widthTiles; column++) {
+        const px = (leftTile + column - sx) * T,
+          py = (topTile + row - sy) * T;
+        if (px <= -T || py <= -T || px >= W || py >= H) continue;
+        let source = row === 0 ? (column === 0 ? 32 : column === widthTiles - 1 ? 34 : 33) : 36;
+        if (row === 1 && column === Math.max(0, doorColumn - 1)) source = 37;
+        if (row === 2 && column === doorColumn) source = 38;
+        drawEnvironmentCell(ctx, source, px, py);
+      }
+    }
+    // Deep eaves and a stone threshold bind the separate tiles into one facade.
+    const left = (leftTile - sx) * T,
+      top = (topTile - sy) * T;
+    ctx.fillStyle = "rgba(15,18,15,.48)";
+    ctx.fillRect(left, top + T - 4, widthTiles * T, 6);
+    ctx.fillStyle = "rgba(80,62,41,.55)";
+    ctx.fillRect((event.x - sx) * T + 4, (event.y - sy + 1) * T - 5, T - 8, 5);
+  }
+}
+
+function drawFactionLandmarks(
+  ctx: CanvasRenderingContext2D,
+  map: OriginalMap,
+  sx: number,
+  sy: number,
+) {
+  if (!factionMapIds.has(map.id)) return;
+  const width = map.id >= 59 ? 9 : Math.min(13, map.width - 2),
+    left = Math.max(1, Math.floor(map.width / 2 - width / 2)),
+    top = Math.max(1, Math.min(4, Math.floor(map.height * 0.16))),
+    accent = map.id === 23 ? "rgba(225,118,164,.5)" : map.id === 25 ? "rgba(180,38,31,.55)" : map.id === 27 || map.id === 52 ? "rgba(65,112,166,.5)" : map.id === 36 || map.id === 42 || map.id === 54 ? "rgba(180,218,232,.48)" : "rgba(176,137,55,.45)";
+  for (let row = 0; row < 5; row++) {
+    for (let column = 0; column < width; column++) {
+      const mx = left + column,
+        my = top + row,
+        x = (mx - sx) * T,
+        y = (my - sy) * T;
+      if (x <= -T || y <= -T || x >= W || y >= H) continue;
+      let source = 15;
+      if (row === 0) source = column === 0 ? 32 : column === width - 1 ? 34 : 33;
+      else if (row === 1) source = column % 3 === 1 ? 37 : 36;
+      else if (row === 2) source = column === Math.floor(width / 2) ? 39 : 41;
+      else if (row === 3) source = column === 0 ? 40 : column === width - 1 ? 42 : 15;
+      else source = column === Math.floor(width / 2) ? 45 : 15;
+      drawEnvironmentCell(ctx, source, x, y);
+      if ((row === 1 || row === 2) && (column === 0 || column === width - 1)) {
+        ctx.fillStyle = accent;
+        ctx.fillRect(x + 5, y + 3, T - 10, T - 6);
+      }
+    }
+  }
+  const ornaments = map.id === 23 ? [53, 53] : map.id === 36 ? [50, 51] : map.id >= 59 ? [61, 61] : [48, 49];
+  drawEnvironmentCell(ctx, ornaments[0], (left - 1 - sx) * T, (top + 2 - sy) * T);
+  drawEnvironmentCell(ctx, ornaments[1], (left + width - sx) * T, (top + 2 - sy) * T);
+}
+
+function drawPinganTownPlan(
+  ctx: CanvasRenderingContext2D,
+  map: OriginalMap,
+  sx: number,
+  sy: number,
+) {
+  if (!pinganUrbanMapIds.has(map.id) || mapTheme(map) === "indoor") return;
+  const occupied = eventCells(map),
+    draw = (mx: number, my: number, source: number) => {
+      if (occupied.has(`${mx},${my}`)) return;
+      const x = (mx - sx) * T, y = (my - sy) * T;
+      if (x <= -T || y <= -T || x >= W || y >= H) return;
+      drawEnvironmentCell(ctx, source, x, y);
+    };
+  // A continuous town edge gives the formerly empty canvas an intentional
+  // street plan, while corner planting and markets distinguish each district.
+  for (let x = 1; x < map.width - 1; x++) {
+    if (x % 2 === 0) { draw(x, 1, 55); draw(x, map.height - 2, 55); }
+  }
+  for (let y = 3; y < map.height - 3; y += 3) {
+    draw(1, y, 54); draw(map.width - 2, y, 54);
+  }
+  const inset = 3;
+  draw(inset, inset, 53); draw(map.width - 1 - inset, inset, 53);
+  draw(inset, map.height - 1 - inset, 48); draw(map.width - 1 - inset, map.height - 1 - inset, 49);
+  if (map.id === 2) draw(Math.floor(map.width / 2), Math.floor(map.height / 2), 56);
+  if (map.id === 15) {
+    for (let x = 4; x < map.width - 4; x += 5) {
+      draw(x, 4, 63); draw(x + 2, 4, 57);
+      draw(x, map.height - 5, 63); draw(x + 2, map.height - 5, 57);
+    }
   }
 }
 function drawActor(
@@ -3697,7 +4335,35 @@ function drawActor(
   y: number,
   color: string,
   hero: boolean,
+  sprite: CharacterSprite = { sheet: 0, row: 0 },
+  direction = 2,
 ) {
+  const atlas = wuxiaArt.characters[sprite.sheet];
+  if (atlas?.complete && atlas.naturalWidth) {
+    const cellWidth = atlas.naturalWidth / 4,
+      cellHeight = atlas.naturalHeight / 4,
+      // Generated profiles are named by their visible screen-facing direction.
+      // RMXP direction 4 means travel left, so it uses the left-facing profile.
+      column = direction === 4 ? 2 : direction === 6 ? 1 : direction === 8 ? 3 : 0,
+      width = 44,
+      height = 44;
+    ctx.fillStyle = "rgba(0,0,0,.35)";
+    ctx.beginPath();
+    ctx.ellipse(x, y + 9, 10, 4, 0, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.drawImage(
+      atlas,
+      column * cellWidth,
+      (sprite.row % 4) * cellHeight,
+      cellWidth,
+      cellHeight,
+      x - width / 2,
+      y - 34,
+      width,
+      height,
+    );
+    return;
+  }
   ctx.fillStyle = "rgba(0,0,0,.5)";
   ctx.fillRect(x - 10, y + 5, 20, 5);
   ctx.fillStyle = hero ? "#d8f3ff" : "#fff0b0";
@@ -3727,17 +4393,17 @@ function drawNpcMarker(
   ctx.lineWidth = near ? 3 : 2;
   ctx.strokeRect(x - 11, y + 8, 22, near ? 5 : 3);
   ctx.fillStyle = accent;
-  ctx.fillRect(x - 2, y - 27 - (pulse ? 1 : 0), 5, 7);
-  ctx.fillRect(x - 2, y - 18 - (pulse ? 1 : 0), 5, 3);
+  ctx.fillRect(x - 2, y - 47 - (pulse ? 2 : 0), 5, 7);
+  ctx.fillRect(x - 2, y - 38 - (pulse ? 2 : 0), 5, 3);
   if (!near) return;
   const label = name.length > 7 ? `${name.slice(0, 7)}…` : name;
   ctx.font = "bold 10px sans-serif";
   ctx.textAlign = "center";
   const width = Math.ceil(ctx.measureText(label).width) + 8;
   ctx.fillStyle = "rgba(7,12,9,.92)";
-  ctx.fillRect(x - width / 2, y - 43, width, 13);
+  ctx.fillRect(x - width / 2, y - 62, width, 13);
   ctx.fillStyle = accent;
-  ctx.fillText(label, x, y - 33);
+  ctx.fillText(label, x, y - 52);
 }
 function drawObjectMarker(
   ctx: CanvasRenderingContext2D,
@@ -3825,4 +4491,9 @@ function hash(text: string) {
   let n = 0;
   for (const c of text) n = (n * 31 + c.charCodeAt(0)) % 360;
   return `hsl(${n} 45% 58%)`;
+}
+function hashIndex(text: string, max: number) {
+  let n = 0;
+  for (const c of text) n = (n * 31 + c.charCodeAt(0)) >>> 0;
+  return n % max;
 }

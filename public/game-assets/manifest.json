@@ -1,0 +1,42 @@
+{
+  "version": 1,
+  "logicalTileSize": 32,
+  "assets": {
+    "environment": {
+      "src": "/game-assets/generated/wuxia-map-modules-v2.png",
+      "columns": 8,
+      "rows": 8,
+      "purpose": "seamless terrain, modular multi-tile architecture, boundaries, and props"
+    },
+    "characters": {
+      "src": [
+        "/game-assets/generated/wuxia-characters-v1.png",
+        "/game-assets/generated/wuxia-characters-ages-v1.png",
+        "/game-assets/generated/wuxia-characters-townsfolk-v1.png",
+        "/game-assets/generated/wuxia-characters-factions-v1.png",
+        "/game-assets/generated/wuxia-characters-women-v1.png",
+        "/game-assets/generated/wuxia-characters-faction-signatures-v1.png",
+        "/game-assets/generated/wuxia-characters-flower-variants-v1.png"
+      ],
+      "columns": 4,
+      "rows": 4,
+      "directions": ["front", "left", "right", "back"],
+      "purpose": "player and NPC world sprites selected by gender, age, and role"
+    },
+    "portraits": {
+      "src": [
+        "/game-assets/generated/wuxia-portrait-atlas-v1.png",
+        "/game-assets/generated/wuxia-faction-portraits-v1.png"
+      ],
+      "columns": 5,
+      "rows": 4,
+      "purpose": "dialogue, free-chat, status, and battle portraits including named and faction-specific characters"
+    },
+    "furniture": {
+      "src": "/game-assets/generated/wuxia-indoor-furniture-v1.png",
+      "columns": 8,
+      "rows": 8,
+      "purpose": "room-specific beds, tables, seating, storage, counters, screens, lighting, weapons, kitchen, and decorative props"
+    }
+  }
+}

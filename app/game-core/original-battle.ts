@@ -535,7 +535,6 @@ export function battleRound(source: OriginalBattle, actor: SceneActorState) {
     battle.turn++;
     battle.log.push("你受制于招式，本回合无法出手。");
     enemyTurn(battle, actor, record, random, blank);
-    battle.log = battle.log.slice(-8);
     return battle;
   }
   battle.turn++;
@@ -550,7 +549,6 @@ export function battleRound(source: OriginalBattle, actor: SceneActorState) {
     return battle;
   }
   enemyTurn(battle, actor, record, random, blank);
-  battle.log = battle.log.slice(-8);
   return battle;
 }
 export function endSpar(actor: SceneActorState, battle: OriginalBattle) {
@@ -1004,6 +1002,5 @@ export function specialRound(
     return battle;
   }
   enemyTurn(battle, actor, record, random, blank);
-  battle.log = battle.log.slice(-8);
   return battle;
 }

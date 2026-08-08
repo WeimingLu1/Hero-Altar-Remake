@@ -1,14 +1,21 @@
-# vinext-starter
+# 英雄坛说：云游志 Web 版
+
+当前游戏内容、视觉设计、地图规划、人物系统与版本状态，见
+[`docs/CURRENT_GAME_DESIGN.md`](docs/CURRENT_GAME_DESIGN.md)。
+
+工程与原作移植维护规范见 [`AGENTS.md`](AGENTS.md)。
+
+## 工程运行
 
 A clean full-stack starter running on
 [vinext](https://github.com/cloudflare/vinext), with optional Cloudflare D1 and
 Drizzle support.
 
-## Prerequisites
+### Prerequisites
 
 - Node.js `>=22.13.0`
 
-## Quick Start
+### Quick Start
 
 ```bash
 npm install
@@ -18,7 +25,7 @@ npm run build
 
 This starter does not use `wrangler.jsonc`.
 
-## Included Shape
+### Included Shape
 
 - edit site code under `app/`
 - `.openai/hosting.json` declares optional Sites D1 and R2 bindings
@@ -27,7 +34,7 @@ This starter does not use `wrangler.jsonc`.
 - `examples/d1/` contains an optional D1 example surface
 - `drizzle.config.ts` supports local migration generation when needed
 
-## Workspace Auth Headers
+### Workspace Auth Headers
 
 Signed-in visitors receive both `oai-authenticated-user-id` and `oai-authenticated-user-email`. Private Sites require every visitor to sign in; public Sites may also have anonymous visitors, for whom neither header is present.
 
@@ -60,7 +67,7 @@ export default async function Home() {
 }
 ```
 
-## Optional Dispatch-Owned ChatGPT Sign-In
+### Optional Dispatch-Owned ChatGPT Sign-In
 
 Import the ready-to-use helpers from `app/chatgpt-auth.ts` when the site needs
 optional or required ChatGPT sign-in:
@@ -87,14 +94,14 @@ or enforce explicit server-side membership or allowlist checks.
 Use SIWC for account pages, user-specific dashboards, saved records, and write
 actions tied to the current ChatGPT user. Leave public content anonymous.
 
-## Useful Commands
+### Useful Commands
 
 - `npm run dev`: start local development
 - `npm run build`: verify the vinext build output
 - `npm test`: build the starter and verify its rendered loading skeleton
 - `npm run db:generate`: generate Drizzle migrations after schema changes
 
-## Learn More
+### Learn More
 
 - [vinext Documentation](https://github.com/cloudflare/vinext)
 - [Drizzle D1 Guide](https://orm.drizzle.team/docs/get-started/d1-new)

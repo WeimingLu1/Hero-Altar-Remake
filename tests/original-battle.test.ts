@@ -61,6 +61,14 @@ test("original sparring round is deterministic and changes combat state", () => 
   assert.ok(one.log.length >= 3);
 });
 
+test("battle keeps the full factual history for novelized narration", () => {
+  const a = actor(), battle = beginOriginalBattle(1, 42);
+  battle.log = Array.from({ length: 12 }, (_, index) => `旧战报${index}`);
+  const round = battleRound(battle, a);
+  assert.equal(round.log[0], "旧战报0");
+  assert.ok(round.log.length > 12);
+});
+
 test("weapon attack text uses the equipped weapon name", () => {
   const a = actor();
   a.weaponId = 1;

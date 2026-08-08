@@ -35,6 +35,7 @@ export async function streamNpcReply(options: {
   endpoint?: string;
   transportUrl?: string;
   model?: string;
+  nextSpeaker?: string;
 }) {
   const endpoint = (options.endpoint || LM_STUDIO_ENDPOINT).replace(/\/$/, "");
   const transcript = messagesWithinContext(options.messages).map((message) =>
@@ -43,16 +44,18 @@ export async function streamNpcReply(options: {
   const transportUrl = options.transportUrl ||
     (options.endpoint ? `${endpoint}/api/v1/chat` : lmStudioTransportUrl());
   const proxy = transportUrl.startsWith("/");
+  const nextSpeaker = options.nextSpeaker?.trim() || "NPC";
   const response = await fetch(transportUrl, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify(proxy ? {
       system: options.system,
       transcript,
+      nextSpeaker,
     } : {
         model: options.model || LM_STUDIO_MODEL,
         system_prompt: options.system,
-        input: `${transcript}\nNPC：`,
+        input: `${transcript}\n${nextSpeaker}：`,
         stream: true,
         reasoning: "off",
         store: false,

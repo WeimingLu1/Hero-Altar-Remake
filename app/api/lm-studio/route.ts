@@ -9,6 +9,7 @@ const LM_STUDIO_URL = "http://127.0.0.1:1234/api/v1/chat";
 type ProxyPayload = {
   system?: string;
   transcript?: string;
+  nextSpeaker?: string;
 };
 
 export async function POST(request: Request) {
@@ -16,6 +17,7 @@ export async function POST(request: Request) {
     const payload = (await request.json()) as ProxyPayload;
     const system = payload.system?.trim() || "";
     const transcript = payload.transcript?.trim() || "";
+    const nextSpeaker = payload.nextSpeaker?.trim().slice(0, 12) || "NPC";
     if (!system || !transcript || system.length > 16_000 || transcript.length > NPC_TRANSCRIPT_CHAR_BUDGET)
       return Response.json({ error: "对话上下文无效" }, { status: 400 });
 
@@ -25,7 +27,7 @@ export async function POST(request: Request) {
       body: JSON.stringify({
         model: LM_STUDIO_MODEL,
         system_prompt: system,
-        input: `${transcript}\nNPC：`,
+        input: `${transcript}\n${nextSpeaker}：`,
         stream: true,
         reasoning: "off",
         store: false,

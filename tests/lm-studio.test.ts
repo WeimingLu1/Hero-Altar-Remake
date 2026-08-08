@@ -7,6 +7,7 @@ import {
   NPC_TRANSCRIPT_CHAR_BUDGET,
   messagesWithinContext,
   lmStudioTransportUrl,
+  streamNpcReply,
 } from "../app/game-core/lm-studio";
 
 test("LM Studio defaults target the requested local model", () => {
@@ -35,4 +36,8 @@ test("local game pages use the same-origin LM Studio proxy", () => {
     lmStudioTransportUrl("rmxp.example.com"),
     "http://127.0.0.1:1234/api/v1/chat",
   );
+});
+
+test("dialogue transport can request the next named speaker", () => {
+  assert.match(streamNpcReply.toString(), /nextSpeaker/);
 });

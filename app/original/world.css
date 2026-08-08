@@ -196,6 +196,26 @@
   flex-direction: column;
   gap: 3px;
 }
+.character-portrait {
+  background-image: url("/game-assets/generated/wuxia-portrait-atlas-v1.png");
+  background-repeat: no-repeat;
+  background-size: 500% 400%;
+  background-color: #111711;
+  border: 1px solid #9f874f;
+  box-shadow: inset 0 0 24px #0008, 0 8px 24px #0008;
+  aspect-ratio: 1;
+  flex: 0 0 auto;
+  align-self: center;
+}
+.world-dialog.with-portrait {
+  min-height: 145px;
+  display: grid;
+  grid-template-columns: 126px 1fr;
+  align-items: stretch;
+  padding: 12px 40px 12px 12px;
+}
+.dialog-portrait { width: 126px; height: 126px; }
+.world-dialog-copy { display: flex; flex-direction: column; gap: 4px; padding: 8px 4px; }
 .world-dialog i {
   position: absolute;
   right: 14px;
@@ -206,10 +226,11 @@
   left: 14px;
   right: 14px;
   bottom: 14px;
-  max-height: calc(100% - 60px);
+  top: 18px;
+  max-height: none;
   z-index: 42;
   display: grid;
-  grid-template-rows: auto 1fr auto auto auto;
+  grid-template-rows: auto minmax(0, 1fr) auto auto;
   min-height: 0;
   color: #eadcb7;
   background: linear-gradient(145deg, rgba(13, 24, 17, 0.96), rgba(5, 10, 7, 0.97));
@@ -217,6 +238,11 @@
   box-shadow: 0 12px 38px #000c, inset 0 0 24px #8dad7a0b;
   backdrop-filter: blur(3px);
 }
+.npc-chat-body { min-height: 0; display: grid; grid-template-columns: 164px minmax(0, 1fr); overflow: hidden; }
+.npc-chat-body > aside { display: grid; grid-template-rows: 142px auto auto; align-content: start; gap: 4px; padding: 10px; border-right: 1px solid #77653b66; text-align: center; }
+.npc-chat-body > aside b { color: #e6c66f; font-size: 12px; }
+.npc-chat-body > aside small { color: #839087; font-size: 9px; }
+.chat-portrait { width: 142px; height: 142px; }
 .npc-chat > header {
   display: flex;
   align-items: center;
@@ -225,6 +251,8 @@
   border-bottom: 1px solid #77653b88;
 }
 .npc-chat > header div { display: grid; gap: 3px; }
+.npc-chat > header .npc-chat-controls { display: flex; grid-auto-flow: column; gap: 8px; }
+.npc-chat-controls .active { border-color: #c7aa5f; color: #f1d986; box-shadow: inset 0 0 14px #c7aa5f22; }
 .npc-chat > header b { color: #e6c66f; font-size: 15px; }
 .npc-chat > header small, .npc-chat > footer { color: #839087; font-size: 9px; }
 .npc-chat button {
@@ -234,7 +262,8 @@
   padding: 8px 12px;
 }
 .npc-chat-log {
-  min-height: 90px;
+  min-height: 0;
+  height: 100%;
   overflow-y: auto;
   padding: 10px 16px;
   display: flex;
@@ -271,16 +300,17 @@
 .dialogue-bubble .thinking { color: #87958a; font-style: italic; }
 .npc-chat-log .npc-chat-hint { max-width: none; color: #a6b1a7; text-align: center; margin: 18px auto; }
 .npc-chat-error { margin: 0 14px 8px; padding: 7px 9px; color: #e1a79a; background: #6d262633; font-size: 10px; }
-.npc-chat form { display: grid; grid-template-columns: 1fr 1.35fr auto; align-items: end; gap: 7px; padding: 9px 14px; border-top: 1px solid #ffffff12; }
+.npc-chat form { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1.65fr) 132px; align-items: stretch; gap: 9px; padding: 11px 14px 13px; border-top: 1px solid #b3955766; background:#050a07f7; box-shadow: 0 -8px 20px #0006; }
 .npc-chat form label { display: grid; gap: 4px; color: #a3afa5; font-size: 9px; }
-.npc-chat textarea { min-width: 0; resize: none; padding: 7px 9px; border: 1px solid #566456; background: #071009; color: #f0e3bd; outline: none; font: inherit; line-height: 1.35; }
+.npc-chat textarea { width:100%; min-width: 0; height:68px; resize: none; padding: 9px 11px; border: 1px solid #566456; background: #071009; color: #f0e3bd; outline: none; font: inherit; line-height: 1.45; box-sizing:border-box; }
 .npc-chat textarea:focus { border-color: #c5a95e; box-shadow: 0 0 0 2px #c5a95e22; }
 .npc-chat > footer { padding: 0 14px 9px; text-align: right; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 @media (max-width: 700px) {
-  .npc-chat { left: 6px; right: 6px; bottom: 6px; max-height: calc(100% - 12px); }
+  .npc-chat { left: 6px; right: 6px; top:6px; bottom: 6px; max-height: none; }
   .npc-chat form { grid-template-columns: 1fr 1fr; }
   .npc-chat form > button { grid-column: 1 / -1; }
   .dialogue-bubble { max-width: 92%; }
+  .npc-chat-body { grid-template-columns: 94px minmax(0, 1fr); }
 }
 .world-shell footer {
   grid-column: 1/3;
