@@ -227,14 +227,20 @@ export function tickAmbientWorld(options: {
           previousSpeakerIsMember = members.some((item) => item.name === previousSpeakerName);
         // If the player spoke after the nominal last NPC turn, answer once before closing.
         if (nextTurn >= members.length && previousSpeakerIsMember) { clearGroup(leader, now + 450); continue; }
+        // 上一位是玩家则继续回应玩家(让玩家留在讨论里)；NPC 之间不强制回上一位，
+        // 随机挑群里另一个人搭话，让讨论更自然
         const speaker = nextTurn >= members.length ? leader : members[nextTurn],
-          target = members.find((item) => item.name === previousSpeakerName);
+          others = members.filter((item) => item.eventId !== speaker.eventId),
+          target = previousSpeakerIsMember
+            ? others[Math.floor(Math.random() * others.length)] || members[0]
+            : undefined,
+          targetName = previousSpeakerIsMember ? target?.name || previousSpeakerName : previousSpeakerName;
         if (target && !ambientCanHear(speaker, target)) {
           stepToward(speaker, target);
           leader.groupNextAt = now + 500;
           continue;
         }
-        speaker.bubble = ""; speaker.speechTargetName = previousSpeakerName; speaker.generationPending = true; speaker.queuedAt = now;
+        speaker.bubble = ""; speaker.speechTargetName = targetName; speaker.generationPending = true; speaker.queuedAt = now;
         speaker.bubbleKind = "speech"; speaker.bubbleUntil = now + 12000; speaker.llmRequested = false;
         if (target) { faceToward(speaker, target); faceToward(target, speaker); }
         leader.groupTurn = nextTurn; leader.groupNextAt = speaker.bubbleUntil;

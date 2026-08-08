@@ -144,7 +144,8 @@ test("group conversation addresses participants and advances one speaker at a ti
   world.npcs[0].groupNextAt = 2000;
   tickAmbientWorld({ world, now: 2001, playerX: 10, playerY: 10, indoor: false, canEnter: () => true });
   assert.equal(world.npcs[1].bubble, "");
-  assert.equal(world.npcs[1].speechTargetName, "甲");
+  // 群聊不再强制回上一位：乙随机指向群里另一个人(甲或丙)，但不能指向自己
+  assert.ok(["甲", "丙"].includes(world.npcs[1].speechTargetName), `乙应指向甲或丙，实际 ${world.npcs[1].speechTargetName}`);
   assert.equal(world.npcs[1].generationPending, true);
   assert.equal(world.npcs.filter((npc) => npc.bubble).length, 0);
 });
@@ -221,7 +222,8 @@ test("group dialogue forms a directed reply chain without broadcasts", () => {
   world.npcs[0].conversationContext = [world.npcs[0].bubble];
   tickAmbientWorld({ world, now: 1000, playerX: 10, playerY: 10, indoor: false, canEnter: () => true });
   assert.equal(world.npcs[1].bubble, "");
-  assert.equal(world.npcs[1].speechTargetName, "甲");
+  // 仍是有向接话(指向群里另一个成员)，但不再强制是上一位发言者
+  assert.ok(["甲", "丙"].includes(world.npcs[1].speechTargetName), `乙应指向甲或丙，实际 ${world.npcs[1].speechTargetName}`);
   assert.equal(world.npcs[1].generationPending, true);
 });
 

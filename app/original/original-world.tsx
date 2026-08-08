@@ -2502,7 +2502,11 @@ export default function OriginalWorld() {
     ambientControllers.current.set(controller, { player: true });
     const current = stateRef.current,
       participants = player.npcIds.map((eventId) => ambientWorld.current.npcs.find((npc) => npc.eventId === eventId)).filter((npc): npc is AmbientNpc => Boolean(npc)),
-      target = participants.find((npc) => npc.eventId === player.replyToNpcId) || participants[0];
+      // 玩家不必回复上一位发言者：在已开口的人群里随机挑一个人直接搭话
+      readyTargets = participants.filter((npc) => !npc.generationPending && npc.bubble),
+      targetPool = readyTargets.length ? readyTargets : participants,
+      target = targetPool[Math.floor(Math.random() * targetPool.length)] || participants[0];
+    if (target) player.replyToNpcId = target.eventId;
     if (!target) {
       if (ambientPlayerEpoch.current === playerEpoch) {
         ambientPlayer.current = { npcIds: [], replyToNpcId: 0, bubble: "", bubbleUntil: 0, bubbleShownAt: 0, replyAt: 0, llmRequested: true };
