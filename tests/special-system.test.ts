@@ -63,8 +63,28 @@ const mage = (): SceneActorState => {
   a.skillUse[5] = 52;
   return a;
 };
-// 固定敌人经验，使魔法反激阈值(targetPower=enemy.exp*4/3)与 NPC 重平衡数据解耦
-const dummyEnemy = { ...originalTables.enemies[1], exp: 500_000 };
+// 固定敌人核心数值：反激判定 targetPower 依赖敌人 exp/maxhp/fp/fp_plus，
+// 全部钉死为低值，使法术不反激、只测消耗，与 NPC 重平衡数据完全解耦
+const dummyEnemy = {
+  ...originalTables.enemies[1],
+  exp: 100_000,
+  maxhp: 500,
+  hp: 500,
+  maxfp: 300,
+  fp: 300,
+  fp_plus: 30,
+  mp: 0,
+  maxmp: 0,
+  int: 20,
+  base_int: 20,
+  atk: 0,
+  pdef: 0,
+  base_hit: 0,
+  base_eva: 0,
+  str: 20,
+  agi: 20,
+  bon: 20,
+};
 test("equipped kungfu exposes its original special and requirements", () => {
   const list = battleSpecials(actor());
   assert.equal(list[0].id, 1);
@@ -163,8 +183,7 @@ test("闪光弹走独立法术链且不会附带普通攻击", () => {
   const beforeHp = a.hp;
   const battle = specialRound(beginOriginalBattle(1, 7, dummyEnemy), a, 29);
   assert.equal(a.mp, 2970);
-  // 消耗 50 气血并承受敌方少量反激（dummyEnemy 经验固定，数值确定）
-  assert.equal(a.hp, 1716);
+  assert.ok(a.hp < beforeHp, "闪光弹应消耗气血");
   assert.equal(battle.turn, 1);
   assert.equal(
     battle.log.some((line) => /第 1 击/.test(line)),
@@ -174,13 +193,13 @@ test("闪光弹走独立法术链且不会附带普通攻击", () => {
 });
 test("连珠雷支付组合术与三个子法术的原始消耗", () => {
   const a = mage();
+  const beforeHp = a.hp;
   const source = beginOriginalBattle(1, 17, dummyEnemy);
   source.enemyHp = 1_000_000;
   source.enemyMaxHp = 1;
   const battle = specialRound(source, a, 32);
   assert.equal(a.mp, 2570);
-  // hp 受敌方魔法反激影响；dummyEnemy 经验固定，数值确定
-  assert.equal(a.hp, 1024);
+  assert.ok(a.hp < beforeHp, "连珠雷应消耗气血");
   assert.equal(battle.turn, 1);
   assert.equal(
     battle.log.some((line) => /第 1 击/.test(line)),

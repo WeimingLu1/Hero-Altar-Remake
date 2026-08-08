@@ -28,29 +28,39 @@ const isCaster = (skillList) =>
 // maxFp≈11870-13110(max内功有效等级127), 基础满血≈3700, 四维≈55(先天30+基本功25),
 // atk≈99(绣花针)/自制武器更高, pdef 可叠防具到 ~400。
 const CEIL = {
-  hp: 3500, // 玩家 3700
-  fp: 12000, // 玩家 11870-13110（显示对齐，伤害另由 fp_plus 控制）
-  four: 40, // 玩家约 55；低位避免 force 倍率放大成秒人伤害
-  atk: 100, // 玩家 99-300（自制武器）
-  pdef: 180, // 玩家可叠到 400
-  hit: 70,
-  eva: 40,
+  hp: 3650, // 玩家 3700
+  fp: 13000, // 玩家 11870-13110（接近满级容量）
+  four: 45, // 玩家约 55
+  atk: 110, // 玩家 99-300（自制武器）
+  pdef: 200, // 玩家可叠到 400
+  hit: 75,
+  eva: 45,
 };
 // stat = base + (ceiling - base) * (level/255)^p
 const curve = (level, base, ceiling, p) =>
   Math.floor(base + (ceiling - base) * Math.pow(level / 255, p));
 const cap = (value, ceiling) => Math.min(ceiling, Math.max(0, Math.round(value)));
 
-// —— 武功等级阶梯：掌门/宗师顶到 254，其余人平滑下降、整体上抬（高手变多）——
+// —— 武功等级阶梯：按原始档位分档，让更多高手足以与满级玩家过招 ——
+// 宗师/顶尖高手/高手统一高武功与高数值，其余人按曲线平滑下降。
+const TIERS = [
+  { min: 220, skill: 254, stat: 1.0 }, // 宗师（门派掌门/三大宗师）
+  { min: 160, skill: 250, stat: 0.95 }, // 顶尖高手
+  { min: 110, skill: 242, stat: 0.82 }, // 高手
+];
+const tierFor = (lvl0) => TIERS.find((t) => lvl0 >= t.min) || null;
 const topTierLevel = 254;
 const targetLevel = (lvl0) =>
-  lvl0 >= 240
-    ? topTierLevel // 门派掌门 / 三大宗师
-    : Math.max(lvl0, Math.round(topTierLevel * Math.pow(lvl0 / 250, 0.62)));
+  Math.max(lvl0, Math.round(topTierLevel * Math.pow(lvl0 / 250, 0.5)));
 // NPC 经验对标玩家（玩家满级 1000 万给 kfPower 加 10 万）。
-// 顶级宗师取约 40%，避免命中率被经验彻底追平（玩家仍略占优）。
-const targetExp = (lvl0) =>
-  Math.round(3_000_000 * Math.pow(lvl0 / 255, 1.3));
+// 分档高手取玩家的 45%-80%，让命中率不被玩家 1000 万经验彻底碾压。
+const targetExp = (lvl0) => {
+  const tier = tierFor(lvl0);
+  if (tier && tier.min >= 220) return 6_500_000;
+  if (tier && tier.min >= 160) return 6_000_000;
+  if (tier && tier.min >= 110) return 5_000_000;
+  return Math.round(2_500_000 * Math.pow(lvl0 / 255, 1.3));
+};
 
 // —— 每个 NPC 的原始战斗等级与数值，用于同级基准（保留个体差异）——
 const originalLevel = data.map((e) => (e ? combatLevel(e.skill_list) : 0));
@@ -90,13 +100,11 @@ for (let i = 0; i < data.length; i++) {
     kept++; // 百姓 / 无战斗武学者保持原值
     continue;
   }
-  // 1) 武功阶梯
-  const isTop = lvl0 >= 240; // 门派掌门 / 三大宗师
-  if (isTop) {
-    // 掌门/宗师：全部战斗武功统一顶到 254，综合武境接近 50 阶，
-    // 真正成为「玩家255、宗师254」的最强档
+  // 1) 武功阶梯：分档统一高武功，其余按曲线平滑下降
+  const tier = tierFor(lvl0);
+  if (tier) {
     e.skill_list = e.skill_list.map(([id, lv]) =>
-      kungfuType(id) >= 1 && kungfuType(id) <= 10 ? [id, 254] : [id, lv],
+      kungfuType(id) >= 1 && kungfuType(id) <= 10 ? [id, tier.skill] : [id, lv],
     );
   } else {
     const target = targetLevel(lvl0);
@@ -104,13 +112,6 @@ for (let i = 0; i < data.length; i++) {
     e.skill_list = e.skill_list.map(([id, lv]) =>
       lv <= 0 ? [id, 0] : [id, Math.min(254, Math.round(Number(lv) * scale))],
     );
-    if (target >= 230) {
-      // 次顶级高手的攻击武功抬到约 235，保证能威胁满级玩家
-      const attackId = Number(e.weapon_id || 0) > 0 ? (e.skill_use[1] || 1) : (e.skill_use[0] || 2);
-      e.skill_list = e.skill_list.map(([id, lv]) =>
-        id === attackId ? [id, Math.min(235, Math.max(lv, 215))] : [id, lv],
-      );
-    }
   }
   const level = combatLevel(e.skill_list);
   // 2) 经验对标玩家（只影响 NPC 自身 kfPower，击杀奖励不含经验）
@@ -118,18 +119,21 @@ for (let i = 0; i < data.length; i++) {
   const cohort = bucketMedians[bucketIndex(lvl0)];
   const idv = (key, existing) => identityFactor(existing, cohort[key]);
   const caster = isCaster(e.skill_list);
-  // 3) 数值 = 玩家对标曲线 × 同级个体差异；顶级宗师直接到天花板
+  // 3) 数值 = 玩家对标曲线 × 同级个体差异；分档高手按档位比例取天花板
   const scaled = (base, ceiling, p, key, existing) =>
-    isTop ? ceiling : cap(curve(level, base, ceiling, p) * idv(key, existing), ceiling);
+    tier
+      ? cap(ceiling * tier.stat * idv(key, existing), ceiling)
+      : cap(curve(level, base, ceiling, p) * idv(key, existing), ceiling);
   const maxhp = scaled(100, CEIL.hp, 1.8, "maxhp", e.maxhp);
   const maxfp = scaled(80, CEIL.fp, 1.8, "maxfp", e.maxfp);
   const maxmp = caster ? scaled(80, CEIL.fp, 1.8, "maxfp", e.maxfp) : 0;
   e.maxhp = e.hp = e.full_hp = maxhp;
   e.maxfp = e.fp = e.maxsp = maxfp;
   e.maxmp = e.mp = maxmp;
-  // 加力封顶 等级/5，低于玩家「内功/2」，控制 force 武功的伤害
-  e.fp_plus = Math.max(Number(e.fp_plus || 0), Math.floor(level / 5));
-  e.mp_plus = caster ? Math.max(Number(e.mp_plus || 0), Math.floor(level / 5)) : 0;
+  // 加力封顶 等级/3（玩家「内功/2」≈127），NPC 加力参与战斗伤害，
+  // 让高手与满级玩家的伤害端更接近；force 倍率已封顶控制上限
+  e.fp_plus = Math.max(Number(e.fp_plus || 0), Math.floor(level / 3));
+  e.mp_plus = caster ? Math.max(Number(e.mp_plus || 0), Math.floor(level / 3)) : 0;
   // 四维对标玩家（约 50 顶），先天=实战
   for (const key of ["str", "agi", "int", "bon"]) {
     e[key] = scaled(15, CEIL.four, 1.1, key, e[key]);

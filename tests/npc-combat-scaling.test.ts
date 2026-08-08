@@ -4,7 +4,7 @@ import { originalTables } from "../app/game-core/original-data";
 import { npcCombatLevel } from "../app/game-core/npc-combat-scaling";
 import { beginOriginalBattle } from "../app/game-core/original-battle";
 
-const NPC_CEILING = 3500;
+const NPC_CEILING = 3650;
 
 test("无战斗武学的百姓保持原始弱小数值", () => {
   const child = originalTables.enemies[2] || {};
