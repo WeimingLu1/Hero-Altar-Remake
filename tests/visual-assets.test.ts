@@ -94,10 +94,9 @@ test("player ambient bubble is always on the highest layer", () => {
   assert.ok(source.indexOf("ambientBubbles.push") < source.indexOf("ambientBubbles.sort"));
 });
 
-test("ambient conversations thread a topic and demand depth", () => {
-  assert.match(ambientSource, /conversationTopic/);
-  assert.match(ambientSource, /ambientTopics/);
-  assert.match(source, /本次交谈议题：/);
+test("ambient conversations open on a self-raised matter and demand depth", () => {
+  assert.match(source, /isOpening = sessionContext\.length === 0/);
+  assert.match(source, /自然地提起一件具体的/);
   assert.match(source, /空泛附和/);
 });
 

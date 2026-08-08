@@ -2572,19 +2572,22 @@ export default function OriginalWorld() {
       groupNpcs = npc.groupId ? npc.groupMembers.map((id) => ambientWorld.current.npcs.find((item) => item.eventId === id)).filter((item): item is AmbientNpc => Boolean(item)) : [],
       groupLeader = npc.groupId ? ambientWorld.current.npcs.find((item) => item.eventId === npc.groupId) : undefined,
       sessionContext = (groupLeader?.conversationContext || npc.conversationContext).slice(-8),
-      topic = npc.conversationTopic || "就近的见闻与感慨",
+      // 开场没有前文时，让 NPC 自己现场发散、自然地提起一件具体的事当话题；
+      // 之后各轮则承接已聊到的事，把讨论往深里带。
+      isOpening = sessionContext.length === 0,
+      openingRule = `此刻你在${map.name}，按照你的身份和眼下所见，自然地提起一件具体的、正困扰或正关心的、或刚好撞见的闲事来开场——可以是一个疑虑、一个不满、一个见闻或一个盘算——不要只是寒暄问候。`,
       depthRule =
         "台词必须有具体内容：一个疑问、见闻、立场、经历或反驳，真正推进讨论；" +
         "严禁“是啊”“不错”“确实”“原来如此”“言之有理”这类空泛附和，严禁重复前文或复述对方原话。",
       mode = npc.groupId
-        ? `你正参与围绕议题「${topic}」的临时讨论，成员有${groupNames}。当前轮只允许${npc.name}发言，回应上一位说话者的同时把讨论往前推：提出新事实、立场、经历或反驳。${depthRule}系统会在正文外标识关系；正文绝对不得输出或讨论 to、谁对谁、发言者、接收者、对话对象、气泡、格式、路由或标记，不得再次出现任何成员姓名。只输出嘴里实际说出的台词，严禁描写天气、风景、地点、环境、声音、衣物、身体、神态或动作，禁止旁白、括号说明或舞台提示。`
+        ? `你正参与一场临时讨论，成员有${groupNames}。当前轮只允许${npc.name}发言，${isOpening ? openingRule : "承接大家刚才聊到的事，回应上一位说话者的同时把讨论往前推：提出新事实、立场、经历或反驳。"}${depthRule}系统会在正文外标识关系；正文绝对不得输出或讨论 to、谁对谁、发言者、接收者、对话对象、气泡、格式、路由或标记，不得再次出现任何成员姓名。只输出嘴里实际说出的台词，严禁描写天气、风景、地点、环境、声音、衣物、身体、神态或动作，禁止旁白、括号说明或舞台提示。`
         : partner
-        ? `让${lore.name}与${partnerLore?.name || partner.name}围绕议题「${topic}」展开一场有来有回的交谈。发言顺序严格固定：先由${lore.name}说甲句(就议题给出具体的疑问、见闻或立场)，再由${partnerLore?.name || partner.name}针对甲句说乙句(承接并推进：补充细节、提出异议或说出自己的经历)。${depthRule}系统会在正文外标识关系；正文绝对不得输出或讨论 to、谁对谁、发言者、接收者、对话对象、气泡、格式、路由或标记，也不得出现双方姓名。只写两人嘴里实际说出的台词，严禁描写天气、风景、地点、环境、声音、衣物、身体、动作或神态，禁止旁白、括号说明或舞台提示。严格只输出两行：\n甲：第一人的一句台词\n乙：第二人针对甲内容的一句台词`
+        ? `让${lore.name}与${partnerLore?.name || partner.name}展开一场有来有回的交谈。发言顺序严格固定：先由${lore.name}说甲句(${isOpening ? openingRule : "承接前面已经聊起的那件事，给出具体的疑问、见闻或立场"})，再由${partnerLore?.name || partner.name}针对甲句说乙句(承接并推进：补充细节、提出异议或说出自己的经历)。${depthRule}系统会在正文外标识关系；正文绝对不得输出或讨论 to、谁对谁、发言者、接收者、对话对象、气泡、格式、路由或标记，也不得出现双方姓名。只写两人嘴里实际说出的台词，严禁描写天气、风景、地点、环境、声音、衣物、身体、动作或神态，禁止旁白、括号说明或舞台提示。严格只输出两行：\n甲：第一人的一句台词\n乙：第二人针对甲内容的一句台词`
         : npc.speechTargetName
-          ? `让${lore.name}围绕议题「${topic}」对${npc.speechTargetName}说一句具体的话：可以提问、表态、分享见闻或反驳。${depthRule}只输出嘴里实际说出的台词正文。严禁描写天气、风景、地点、环境、声音、衣物、身体、动作或神态，不输出姓名、关系标记、旁白或格式说明。`
+          ? `让${lore.name}${isOpening ? openingRule : `承接前面聊到的那件事，对${npc.speechTargetName}说一句具体的话：提问、表态、分享见闻或反驳。`}${depthRule}只输出嘴里实际说出的台词正文。严禁描写天气、风景、地点、环境、声音、衣物、身体、动作或神态，不输出姓名、关系标记、旁白或格式说明。`
         : npc.bubbleKind === "action"
           ? `由你随机构思${lore.name}此刻做出的一个简短、具体且符合身份与地点的日常动作。必须由模型现场生成，只输出动作本身，不加姓名、引号、解释、台词或默认占位内容。`
-          : `写${lore.name}此刻围绕议题「${topic}」或当下心绪的一句简短自言自语，要有具体的内心活动、判断或感慨，不要泛泛。只输出嘴里实际说出的台词，严禁描写天气、风景、地点、环境、声音、衣物、身体、动作或神态，不加姓名、旁白或解释。`;
+          : `写${lore.name}此刻${isOpening ? "在心里琢磨的一件具体的事——一个疑虑、一个盘算、一个发现或一段牵挂，把它说出来" : "接着心里正琢磨的那件事往下想"}的一句简短自言自语，要有具体的内心活动、判断或感慨，不要泛泛。只输出嘴里实际说出的台词，严禁描写天气、风景、地点、环境、声音、衣物、身体、动作或神态，不加姓名、旁白或解释。`;
     try {
       const namedTarget = npc.speechTargetName
         ? ambientWorld.current.npcs.find((item) => item.name === npc.speechTargetName)
@@ -2601,7 +2604,6 @@ export default function OriginalWorld() {
       ].filter((fact, index, facts) => facts.indexOf(fact) === index).join("\n");
       const answer = await streamNpcReply({
         system: `地点是${map.name}。
-本次交谈议题：${topic}。你们的讨论应围绕这个议题展开，给出具体立场、经历或见闻，避免泛泛而谈和空泛附和。
 【参与者不可改写事实】
 ${participantFacts}
 ${lore.name}的性情是${lore.personality}，说话方式是${lore.speech}。${partnerLore ? `${partnerLore.name}的性情是${partnerLore.personality}。` : ""}
