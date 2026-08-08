@@ -241,3 +241,39 @@ test("the discussion answers a player who joins after the last NPC turn", () => 
   assert.equal(world.npcs[0].generationPending, true);
   assert.equal(world.npcs[0].groupId, 1);
 });
+
+test("mutually heard NPCs form a group with no member cap", () => {
+  // 三个人彼此都在 3×3 听觉圈内：eventId 1 发起、2 为伙伴、3 在旁边
+  const world = createAmbientWorld(2, 0, [
+    { eventId: 1, npcId: 3, name: "甲", identity: "路", x: 5, y: 5 },
+    { eventId: 2, npcId: 4, name: "乙", identity: "路", x: 5, y: 6 },
+    { eventId: 3, npcId: 5, name: "丙", identity: "路", x: 6, y: 6 },
+    { eventId: 4, npcId: 6, name: "丁", identity: "路", x: 6, y: 5 },
+  ]);
+  const [a, b, c, d] = world.npcs;
+  a.partnerId = 2; b.partnerId = 1;
+  a.conversationTurn = 0; b.conversationTurn = 0;
+  a.nextBehaviorAt = b.nextBehaviorAt = c.nextBehaviorAt = d.nextBehaviorAt = 1e9;
+  tickAmbientWorld({ world, now: 1000, playerX: 8, playerY: 8, indoor: false, canEnter: () => true });
+  // 四人都彼此近身(互相听觉圈成立)，应全部加入同一群聊，无 4 人上限
+  const members = world.npcs.filter((n) => n.groupId > 0);
+  assert.equal(members.length, 4, `应 4 人全部入组，实际 ${members.length}`);
+  assert.ok(members.every((n) => n.groupMembers.length === 4), "组员应包含全部 4 人");
+});
+
+test("NPCs merely inside the initiator circle but not mutually heard stay a pair", () => {
+  const world = createAmbientWorld(2, 0, [
+    { eventId: 1, npcId: 3, name: "甲", identity: "路", x: 5, y: 5 },
+    { eventId: 2, npcId: 4, name: "乙", identity: "路", x: 5, y: 6 },
+    { eventId: 3, npcId: 5, name: "丙", identity: "路", x: 6, y: 4 }, // 在甲圈内但与乙相距 2
+  ]);
+  const [a, b, c] = world.npcs;
+  a.partnerId = 2; b.partnerId = 1;
+  a.conversationTurn = 0; b.conversationTurn = 0;
+  a.nextBehaviorAt = b.nextBehaviorAt = c.nextBehaviorAt = 1e9;
+  tickAmbientWorld({ world, now: 1000, playerX: 8, playerY: 8, indoor: false, canEnter: () => true });
+  // 丙虽在甲听觉圈内，但与乙不互相近身 → 不组群，回到双人
+  assert.equal(a.groupId, 0);
+  assert.equal(b.groupId, 0);
+  assert.equal(c.groupId, 0);
+});

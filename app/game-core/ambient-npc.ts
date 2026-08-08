@@ -257,9 +257,14 @@ export function tickAmbientWorld(options: {
       faceToward(npc, partner);
       faceToward(partner, npc);
       if (npc.eventId < partner.eventId) {
-        const listeners = world.npcs.filter((item) => isActive(item) && !item.groupId && (!item.partnerId || item.eventId === npc.eventId || item.eventId === partner.eventId) && ambientCanHear(npc, item));
-        if (listeners.length >= 3) {
-          const members = listeners.slice(0, 4), ids = members.map((item) => item.eventId), groupId = Math.min(...ids);
+        // 候选 = 发起者听觉圈内的活跃 NPC(含当前双人)。
+        // 只有所有候选彼此都在对方 3×3 听觉圈内才组成群聊；人数不设上限。
+        const candidates = world.npcs.filter((item) => isActive(item) && !item.groupId && (!item.partnerId || item.eventId === npc.eventId || item.eventId === partner.eventId) && ambientCanHear(npc, item));
+        const mutuallyHeard =
+          candidates.length >= 3 &&
+          candidates.every((a) => candidates.every((b) => ambientCanHear(a, b)));
+        if (mutuallyHeard) {
+          const members = candidates, ids = members.map((item) => item.eventId), groupId = Math.min(...ids);
           for (const member of members) {
             member.groupId = groupId; member.groupMembers = ids; member.groupTurn = -1; member.groupNextAt = 0;
             member.partnerId = 0; member.conversationTurn = 0; member.bubble = ""; member.nextBehaviorAt = now + 300;
