@@ -91,8 +91,8 @@ test("一键宗师强化资源、属性及已学功夫", () => {
   a.mpPlus = 32767;
   applyCheatQuick(a, "master");
   assert.equal(a.baseStr, 30);
-  // 上限对齐真实规则：未学内功时内力容量 = 经验/1000（1000）
-  assert.equal(a.maxFp, 1000);
+  // 一键宗师把内力/法力上限提到可达极限 65535
+  assert.equal(a.maxFp, 65535);
   assert.equal(a.skills["2"].level, 255);
   assert.equal(a.fpPlus, 0);
   assert.equal(a.mpPlus, 0);
@@ -100,9 +100,9 @@ test("一键宗师强化资源、属性及已学功夫", () => {
 
 test("数值和技能调整遵守原版上限", () => {
   const a = actor();
-  // 未学内功时内力上限受规则容量限制，不能随意拉到 200
+  // 内力上限可通过物品堆到 65535，修改器允许直接调到
   adjustCheatStat(a, 3, 1);
-  assert.equal(a.maxFp, 100);
+  assert.equal(a.maxFp, 200);
   adjustCheatSkill(a, 2, 1);
   assert.equal(a.skills["2"].level, 15);
   a.skills["2"].level = 254;
@@ -161,23 +161,18 @@ test("修改器可切换门派师父并复活已杀 NPC", () => {
   assert.deepEqual(a.killList, [3]);
 });
 
-test("修改器上限对齐玩家真实容量（内功255时 maxFp=fullFp）", () => {
+test("修改器上限对齐规则可达值（内力65535、气血~16783）", () => {
   const a = actor();
   a.exp = 10_000_000;
   a.age = 29;
-  a.baseBon = 40;
   a.skills["1"] = { level: 255, points: 0 };
   a.skillUse[3] = 1;
-  // 内功255的有效等级=127，容量≈11870（年龄29/根骨40），远低于旧上限65535
-  const maximum = cheatStatMaximum(a, cheatStats.findIndex((s) => s.key === "maxFp"));
-  assert.ok(
-    maximum > 11000 && maximum < 20000,
-    `maxFp 上限应为真实容量(~11870)，实际 ${maximum}`,
-  );
-  // 一键宗师把内力上限提到真实容量（四维归一化后仍在此区间）
+  // 玩家可通过物品堆内力到 65535，气血随之到 ~16783
+  const fpMax = cheatStatMaximum(a, cheatStats.findIndex((s) => s.key === "maxFp"));
+  assert.equal(fpMax, 65535);
+  const hpMax = cheatStatMaximum(a, cheatStats.findIndex((s) => s.key === "maxHp"));
+  assert.equal(hpMax, 100 + Math.floor(65535 / 4) + (29 - 14) * 20);
+  // 一键宗师把内力/法力上限提到可达极限
   applyCheatQuick(a, "master");
-  assert.ok(
-    a.maxFp > 11000 && a.maxFp < 20000,
-    `master 后 maxFp 应为真实容量，实际 ${a.maxFp}`,
-  );
+  assert.equal(a.maxFp, 65535);
 });

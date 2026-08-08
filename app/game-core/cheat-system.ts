@@ -1,9 +1,23 @@
 import type { SceneActorState } from "./scene-event";
 import { fullHp } from "./inventory-system";
-import { fullFp, fullMp } from "./cultivation-system";
 import { originalSystem, originalTables } from "./original-data";
 import { effectiveLevel } from "./skill-system";
 import { MAX_PLAYER_EXP } from "./progression-limits";
+
+// 玩家可通过物品(如王蛇胆 add_mfp)无上限堆内力上限到 65535、气血随之到 ~16783；
+// 修改器上限与规则一致，允许玩家设置到可达极限。
+const MAX_INNER = 65535;
+const maxAchievableHp = (actor: SceneActorState) => {
+  let value =
+    100 + Math.floor(MAX_INNER / 4) + (Math.min(actor.age, 29) - 14) * 20;
+  if (
+    actor.classId === 3 &&
+    (actor.skills["27"]?.level || 0) >= 80 &&
+    actor.age >= 20
+  )
+    value += Math.floor(((actor.skills["27"]?.level || 0) * actor.baseBon) / 10);
+  return value;
+};
 
 export type CheatQuickAction =
   | "recover"
@@ -42,7 +56,7 @@ export const cheatQuickOptions: Array<{
   {
     id: "master",
     name: "一键宗师",
-    detail: "百万资源、五千内法、四维 30、已学功夫 255",
+    detail: "百万资源、满内力/法力上限、四维 30、已学功夫 255",
     dangerous: true,
   },
   {
@@ -88,11 +102,19 @@ export function applyCheatQuick(
           : Math.min(255, skill.level + 5);
   if (action === "master") {
     actor.gold = Math.max(actor.gold, 1000000);
-    actor.exp = Math.max(actor.exp, 1000000);
+    actor.exp = MAX_PLAYER_EXP; // 满级经验，命中率不被宗师 NPC 的经验压制
     actor.potential = Math.max(actor.potential, 1000000);
-    actor.maxFp = Math.max(actor.maxFp, fullFp(actor));
-    actor.maxMp = Math.max(actor.maxMp, fullMp(actor));
-    clampModifierPower(actor);
+    actor.maxFp = Math.max(actor.maxFp, MAX_INNER);
+    actor.maxMp = Math.max(actor.maxMp, MAX_INNER);
+    // 把加力/法点直接提到内功/法术有效等级的一半（否则初始 0 会被 clamp 保持为 0）
+    actor.fpPlus = cheatStatMaximum(
+      actor,
+      cheatStats.findIndex((stat) => stat.key === "fpPlus"),
+    );
+    actor.mpPlus = cheatStatMaximum(
+      actor,
+      cheatStats.findIndex((stat) => stat.key === "mpPlus"),
+    );
     applyCheatQuick(actor, "recover");
     return "宗师秘技生效：资源、属性和已学功夫已经强化。";
   }
@@ -147,10 +169,10 @@ export function cheatStatMaximum(actor: SceneActorState, index: number) {
   if (stat.key === "hp") return actor.maxHp;
   if (stat.key === "fp") return actor.maxFp;
   if (stat.key === "mp") return actor.maxMp;
-  // 上限对齐真实规则：内力/法力不能超过装备内功/法术允许的容量（保留基础 100）
-  if (stat.key === "maxHp") return fullHp(actor);
-  if (stat.key === "maxFp") return Math.max(100, fullFp(actor));
-  if (stat.key === "maxMp") return Math.max(100, fullMp(actor));
+  // 上限对齐规则可达值：内力/法力可通过物品堆到 65535，气血随之到 ~16783
+  if (stat.key === "maxHp") return maxAchievableHp(actor);
+  if (stat.key === "maxFp") return MAX_INNER;
+  if (stat.key === "maxMp") return MAX_INNER;
   if (stat.key === "food") return (actor.baseStr + 5) * 15;
   if (stat.key === "water") return (actor.baseStr + 4) * 15;
   if (stat.key === "fpPlus")
