@@ -2529,7 +2529,7 @@ export default function OriginalWorld() {
     }
     try {
       const answer = await streamNpcReply({
-        system: `${buildAutoPlayerPrompt(target.npcId, current.actor, getOriginalMap(current.position.mapId).name)}\n你是被附近NPC主动搭话，或刚刚驻足加入了他们的谈话。请依据主角设定和本轮前文自然接话，不要生硬自我介绍，不要另起无关话题。${participants.length > 1 ? `在场NPC有${participants.map((npc) => npc.name).join("、")}，你的话应能融入多人交流。` : ""}\n本次是地图头顶即时会话，覆盖上面的三字段格式：只输出主角实际说出口的一句台词。系统会在正文之外标识说话关系；正文绝对不得输出或讨论 to、谁对谁、发言者、接收者、对话对象、气泡、格式、路由或标记，不得再次出现任何参与者姓名，不得写“某某说/问/答”或“对某某说”。禁止输出状态、动作、神态、表情、姿态、旁白、姓名、字段标题、括号说明或舞台提示。`,
+        system: `${buildAutoPlayerPrompt(target.npcId, current.actor, getOriginalMap(current.position.mapId).name)}\n你是被附近NPC主动搭话，或刚刚驻足加入了他们的谈话。请依据主角设定和本轮前文自然接话，不要生硬自我介绍，不要另起无关话题。${participants.length > 1 ? `在场NPC有${participants.map((npc) => npc.name).join("、")}，你这句话是对${target.name}说的。` : ""}\n本次是地图头顶即时会话，覆盖上面的三字段格式：只输出主角实际说出口的一句台词。系统会在正文之外标识说话关系；正文绝对不得输出或讨论 to、谁对谁、发言者、接收者、对话对象、气泡、格式、路由或标记，不得再次出现任何参与者姓名，不得写“某某说/问/答”或“对某某说”。禁止输出状态、动作、神态、表情、姿态、旁白、姓名、字段标题、括号说明或舞台提示。`,
         messages: [{ role: "assistant", content: [...new Set(participants.flatMap((npc) => npc.conversationContext)), ...participants.map((npc) => npc.bubble).filter(Boolean)].slice(-6).join("\n") || (playerOpening ? "你刚刚走近了附近人物，决定自然地开口。" : "附近人物正在看着你。") }],
         nextSpeaker: "主角", maxOutputTokens: 120, signal: controller.signal, onToken: () => {},
       });
@@ -2595,7 +2595,7 @@ export default function OriginalWorld() {
         "台词必须有具体内容：一个疑问、见闻、立场、经历或反驳，真正推进讨论；" +
         "严禁“是啊”“不错”“确实”“原来如此”“言之有理”这类空泛附和，严禁重复前文或复述对方原话。",
       mode = npc.groupId
-        ? `你正参与一场临时讨论，成员有${groupNames}。当前轮只允许${npc.name}发言，${isOpening ? openingRule : "承接大家刚才聊到的事，回应上一位说话者的同时把讨论往前推：提出新事实、立场、经历或反驳。"}${depthRule}系统会在正文外标识关系；正文绝对不得输出或讨论 to、谁对谁、发言者、接收者、对话对象、气泡、格式、路由或标记，不得再次出现任何成员姓名。只输出嘴里实际说出的台词，严禁描写天气、风景、地点、环境、声音、衣物、身体、神态或动作，禁止旁白、括号说明或舞台提示。`
+        ? `你正参与一场临时讨论，成员有${groupNames}。当前轮只允许${npc.name}发言，${isOpening ? openingRule : `你的话是对${npc.speechTargetName}说的，承接刚才聊到的事并把讨论往前推：提出新事实、立场、经历或反驳。`}${depthRule}系统会在正文外标识关系；正文绝对不得输出或讨论 to、谁对谁、发言者、接收者、对话对象、气泡、格式、路由或标记，不得再次出现任何成员姓名。只输出嘴里实际说出的台词，严禁描写天气、风景、地点、环境、声音、衣物、身体、神态或动作，禁止旁白、括号说明或舞台提示。`
         : partner
         ? `让${lore.name}与${partnerLore?.name || partner.name}展开一场有来有回的交谈。发言顺序严格固定：先由${lore.name}说甲句(${isOpening ? openingRule : "承接前面已经聊起的那件事，给出具体的疑问、见闻或立场"})，再由${partnerLore?.name || partner.name}针对甲句说乙句(承接并推进：补充细节、提出异议或说出自己的经历)。${depthRule}系统会在正文外标识关系；正文绝对不得输出或讨论 to、谁对谁、发言者、接收者、对话对象、气泡、格式、路由或标记，也不得出现双方姓名。只写两人嘴里实际说出的台词，严禁描写天气、风景、地点、环境、声音、衣物、身体、动作或神态，禁止旁白、括号说明或舞台提示。严格只输出两行：\n甲：第一人的一句台词\n乙：第二人针对甲内容的一句台词`
         : npc.speechTargetName
