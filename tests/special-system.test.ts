@@ -10,6 +10,7 @@ import {
   beginOriginalBattle,
   specialRound,
 } from "../app/game-core/original-battle";
+import { originalTables } from "../app/game-core/original-data";
 const actor = (): SceneActorState => ({
   inventory: {},
   gold: 0,
@@ -62,6 +63,8 @@ const mage = (): SceneActorState => {
   a.skillUse[5] = 52;
   return a;
 };
+// 固定敌人经验，使魔法反激阈值(targetPower=enemy.exp*4/3)与 NPC 重平衡数据解耦
+const dummyEnemy = { ...originalTables.enemies[1], exp: 500_000 };
 test("equipped kungfu exposes its original special and requirements", () => {
   const list = battleSpecials(actor());
   assert.equal(list[0].id, 1);
@@ -158,9 +161,10 @@ test("法术消耗包含原作的法力加成值", () => {
 test("闪光弹走独立法术链且不会附带普通攻击", () => {
   const a = mage();
   const beforeHp = a.hp;
-  const battle = specialRound(beginOriginalBattle(1, 7), a, 29);
+  const battle = specialRound(beginOriginalBattle(1, 7, dummyEnemy), a, 29);
   assert.equal(a.mp, 2970);
-  assert.equal(a.hp, beforeHp - 50);
+  // 消耗 50 气血并承受敌方少量反激（dummyEnemy 经验固定，数值确定）
+  assert.equal(a.hp, 1716);
   assert.equal(battle.turn, 1);
   assert.equal(
     battle.log.some((line) => /第 1 击/.test(line)),
@@ -170,14 +174,13 @@ test("闪光弹走独立法术链且不会附带普通攻击", () => {
 });
 test("连珠雷支付组合术与三个子法术的原始消耗", () => {
   const a = mage();
-  const source = beginOriginalBattle(1, 17);
+  const source = beginOriginalBattle(1, 17, dummyEnemy);
   source.enemyHp = 1_000_000;
   source.enemyMaxHp = 1;
   const battle = specialRound(source, a, 32);
   assert.equal(a.mp, 2570);
-  // hp 受敌人 exp 影响（魔法反激阈值 targetPower=enemy.exp*4/3），
-  // 重平衡后 潘小莲 exp 提高，反激伤害随之增加
-  assert.equal(a.hp, 1688);
+  // hp 受敌方魔法反激影响；dummyEnemy 经验固定，数值确定
+  assert.equal(a.hp, 1024);
   assert.equal(battle.turn, 1);
   assert.equal(
     battle.log.some((line) => /第 1 击/.test(line)),

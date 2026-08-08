@@ -90,19 +90,27 @@ for (let i = 0; i < data.length; i++) {
     kept++; // 百姓 / 无战斗武学者保持原值
     continue;
   }
-  // 1) 武功阶梯：目标等级 + 等比缩放，掌门/宗师把主攻武功顶到档位
-  const target = targetLevel(lvl0);
-  const scale = target / lvl0;
-  e.skill_list = e.skill_list.map(([id, lv]) =>
-    lv <= 0 ? [id, 0] : [id, Math.min(254, Math.round(Number(lv) * scale))],
-  );
-  if (target >= 230) {
-    // 顶级高手的攻击武功抬到约 235（略低于玩家 255），
-    // 保证能威胁满级玩家但命中不过分
-    const attackId = Number(e.weapon_id || 0) > 0 ? (e.skill_use[1] || 1) : (e.skill_use[0] || 2);
+  // 1) 武功阶梯
+  const isTop = lvl0 >= 240; // 门派掌门 / 三大宗师
+  if (isTop) {
+    // 掌门/宗师：全部战斗武功统一顶到 254，综合武境接近 50 阶，
+    // 真正成为「玩家255、宗师254」的最强档
     e.skill_list = e.skill_list.map(([id, lv]) =>
-      id === attackId ? [id, Math.min(235, Math.max(lv, 215))] : [id, lv],
+      kungfuType(id) >= 1 && kungfuType(id) <= 10 ? [id, 254] : [id, lv],
     );
+  } else {
+    const target = targetLevel(lvl0);
+    const scale = target / lvl0;
+    e.skill_list = e.skill_list.map(([id, lv]) =>
+      lv <= 0 ? [id, 0] : [id, Math.min(254, Math.round(Number(lv) * scale))],
+    );
+    if (target >= 230) {
+      // 次顶级高手的攻击武功抬到约 235，保证能威胁满级玩家
+      const attackId = Number(e.weapon_id || 0) > 0 ? (e.skill_use[1] || 1) : (e.skill_use[0] || 2);
+      e.skill_list = e.skill_list.map(([id, lv]) =>
+        id === attackId ? [id, Math.min(235, Math.max(lv, 215))] : [id, lv],
+      );
+    }
   }
   const level = combatLevel(e.skill_list);
   // 2) 经验对标玩家（只影响 NPC 自身 kfPower，击杀奖励不含经验）
@@ -110,10 +118,12 @@ for (let i = 0; i < data.length; i++) {
   const cohort = bucketMedians[bucketIndex(lvl0)];
   const idv = (key, existing) => identityFactor(existing, cohort[key]);
   const caster = isCaster(e.skill_list);
-  // 3) 数值 = 玩家对标曲线 × 同级个体差异
-  const maxhp = cap(curve(level, 100, CEIL.hp, 1.8) * idv("maxhp", e.maxhp), CEIL.hp);
-  const maxfp = cap(curve(level, 80, CEIL.fp, 1.8) * idv("maxfp", e.maxfp), CEIL.fp);
-  const maxmp = caster ? cap(curve(level, 80, CEIL.fp, 1.8) * idv("maxfp", e.maxfp), CEIL.fp) : 0;
+  // 3) 数值 = 玩家对标曲线 × 同级个体差异；顶级宗师直接到天花板
+  const scaled = (base, ceiling, p, key, existing) =>
+    isTop ? ceiling : cap(curve(level, base, ceiling, p) * idv(key, existing), ceiling);
+  const maxhp = scaled(100, CEIL.hp, 1.8, "maxhp", e.maxhp);
+  const maxfp = scaled(80, CEIL.fp, 1.8, "maxfp", e.maxfp);
+  const maxmp = caster ? scaled(80, CEIL.fp, 1.8, "maxfp", e.maxfp) : 0;
   e.maxhp = e.hp = e.full_hp = maxhp;
   e.maxfp = e.fp = e.maxsp = maxfp;
   e.maxmp = e.mp = maxmp;
@@ -122,13 +132,13 @@ for (let i = 0; i < data.length; i++) {
   e.mp_plus = caster ? Math.max(Number(e.mp_plus || 0), Math.floor(level / 5)) : 0;
   // 四维对标玩家（约 50 顶），先天=实战
   for (const key of ["str", "agi", "int", "bon"]) {
-    e[key] = cap(curve(level, 15, CEIL.four, 1.1) * idv(key, e[key]), CEIL.four);
+    e[key] = scaled(15, CEIL.four, 1.1, key, e[key]);
   }
   e.base_str = e.str; e.base_agi = e.agi; e.base_int = e.int; e.base_bon = e.bon;
-  e.atk = cap(curve(level, 8, CEIL.atk, 1.3) * idv("atk", e.atk), CEIL.atk);
-  e.pdef = cap(curve(level, 8, CEIL.pdef, 1.3) * idv("pdef", e.pdef), CEIL.pdef);
-  e.base_hit = cap(curve(level, 5, CEIL.hit, 1.2) * idv("base_hit", e.base_hit), CEIL.hit);
-  e.base_eva = cap(curve(level, 3, CEIL.eva, 1.2) * idv("base_eva", e.base_eva), CEIL.eva);
+  e.atk = scaled(8, CEIL.atk, 1.3, "atk", e.atk);
+  e.pdef = scaled(8, CEIL.pdef, 1.3, "pdef", e.pdef);
+  e.base_hit = scaled(5, CEIL.hit, 1.2, "base_hit", e.base_hit);
+  e.base_eva = scaled(3, CEIL.eva, 1.2, "base_eva", e.base_eva);
   changed++;
 }
 
