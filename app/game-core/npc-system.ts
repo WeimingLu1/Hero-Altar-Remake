@@ -7,7 +7,6 @@ import {
 import { derivedStats } from "./inventory-system";
 import type { SceneActorState } from "./scene-event";
 import { npcLoreStatus } from "./npc-lore";
-import { scaledNpcCombatRecord } from "./npc-combat-scaling";
 
 export type NpcOption =
   "talk" | "chat" | "status" | "battle" | "trade" | "join" | "study";
@@ -47,7 +46,7 @@ export const npcOptionLabel: Record<NpcOption, string> = {
 };
 
 export function npcStatus(id: number) {
-  const npc = scaledNpcCombatRecord(enemy(id)),
+  const npc = enemy(id),
     description = ((npc.des_text as string[]) || []).filter(Boolean).join(""),
     equipment = [
       Number(npc.weapon_id || 0) > 0

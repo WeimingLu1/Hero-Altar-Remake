@@ -15,10 +15,7 @@ import {
   specialFpCost,
   specialMpCost,
 } from "./special-system";
-import {
-  npcCombatLevel,
-  scaledNpcCombatRecord,
-} from "./npc-combat-scaling";
+import { npcCombatLevel } from "./npc-combat-scaling";
 import { MAX_PLAYER_EXP } from "./progression-limits";
 
 export type OriginalBattle = {
@@ -74,10 +71,7 @@ const lcg =
     return Math.floor((battle.seed / 4294967296) * Math.max(1, max));
   };
 const battleEnemyRecord = (battle: OriginalBattle) =>
-  scaledNpcCombatRecord(
-    battle.enemyOverride || originalTables.enemies[battle.enemyId] || {},
-    Boolean(battle.enemyOverride),
-  );
+  battle.enemyOverride || originalTables.enemies[battle.enemyId] || {};
 
 function moveFor(
   record: OriginalRecord,
@@ -542,10 +536,7 @@ export function beginOriginalBattle(
   enemyOverride?: OriginalRecord,
   mode: "spar" | "lethal" | "story" = "spar",
 ): OriginalBattle {
-  const e = scaledNpcCombatRecord(
-    enemyOverride || originalTables.enemies[enemyId] || {},
-    Boolean(enemyOverride),
-  );
+  const e = enemyOverride || originalTables.enemies[enemyId] || {};
   return {
     enemyId,
     enemyName: String(e.name || "江湖中人"),
