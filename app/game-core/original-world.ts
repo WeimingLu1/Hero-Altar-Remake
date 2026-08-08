@@ -1,5 +1,4 @@
 import mapsJson from "../../game-data/maps.json";
-import tilesetsJson from "../../game-data/tilesets.json";
 import { executeMapCommands, type RmxpCommand } from "./rmxp-events";
 
 export type MapPage = {
@@ -33,16 +32,6 @@ export type WorldPosition = {
 
 const maps = (mapsJson as { maps: OriginalMap[] }).maps;
 const mapIndex = new Map(maps.map((map) => [map.id, map]));
-const tilesets = (
-  tilesetsJson as {
-    data: Array<{
-      id: number;
-      passages: { data: number[] };
-      priorities: { data: number[] };
-    }>;
-  }
-).data;
-
 export const originalMaps = maps;
 export const originalStart: WorldPosition = {
   mapId: 4,
@@ -71,19 +60,22 @@ export function passable(
   y: number,
   direction: 2 | 4 | 6 | 8,
 ) {
-  if (x < 0 || y < 0 || x >= map.width || y >= map.height) return false;
-  const tileset =
-    tilesets.find((item) => item.id === map.tileset_id) || tilesets[0];
-  const passages = tileset.passages.data,
-    priorities = tileset.priorities.data;
-  const bit = (1 << (direction / 2 - 1)) & 0x0f;
-  for (const layer of [2, 1, 0]) {
-    const tile = tileAt(map, x, y, layer);
-    const passage = passages[tile] || 0;
-    if ((passage & bit) !== 0 || (passage & 0x0f) === 0x0f) return false;
-    if ((priorities[tile] || 0) === 0) return true;
-  }
-  return true;
+  // This remake intentionally treats the tilemap as a visual canvas. RMXP
+  // passage flags (walls, roofs, furniture and terrain) never block movement;
+  // only the rectangular map boundary remains.
+  void direction;
+  return x >= 0 && y >= 0 && x < map.width && y < map.height;
+}
+
+export function canMoveBetween(
+  map: OriginalMap,
+  x: number,
+  y: number,
+  direction: 2 | 4 | 6 | 8,
+) {
+  const nx = x + (direction === 6 ? 1 : direction === 4 ? -1 : 0),
+    ny = y + (direction === 2 ? 1 : direction === 8 ? -1 : 0);
+  return nx >= 0 && ny >= 0 && nx < map.width && ny < map.height;
 }
 
 export function activePage(event: MapEvent) {

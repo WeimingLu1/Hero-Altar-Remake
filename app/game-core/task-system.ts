@@ -176,9 +176,10 @@ export function acceptMainTask(
       (type === 2 || !(actor.killList || []).includes(row[1])),
   );
   if (!available.length) return { ok: false, text: "暂时没有合适的任务。" };
-  // The original indexes the sorted source by the eligible-list random index.
   const index = random(available.length),
-    row = source[index],
+    // Game_Task#make_task_list removes dead NPCs before indexing. Selecting
+    // from source here could resurrect a killed target after filtering.
+    row = available[index],
     [kind, id, targetExp] = row,
     baseCount = source.length,
     deadline = tasks.clock + Math.floor((80 * index) / baseCount) + 35;
@@ -379,6 +380,7 @@ export function acceptWantedTask(
   tasks: TaskState,
   random: (max: number) => number,
   fast = false,
+  player?: { mapId: number; x: number; y: number },
 ) {
   if (actor.morals < 128)
     return {
@@ -429,7 +431,11 @@ export function acceptWantedTask(
       100,
   );
   const area = areas[index] || [[1, 1]],
-    point = area[random(area.length)] || [1, 1];
+    candidates = tasks.wantedPlace === 10 && player?.mapId === 10
+      ? area.filter(([x, y]) => x !== player.x || y !== player.y)
+      : area,
+    pointPool = candidates.length ? candidates : area,
+    point = pointPool[random(pointPool.length)] || [1, 1];
   tasks.wantedX = point[0];
   tasks.wantedY = point[1];
   const place = getOriginalMap(tasks.wantedPlace).name;
@@ -458,12 +464,24 @@ export function wantedEnemyRecord(
   return {
     ...base,
     name: tasks.wantedName,
+    gender: tasks.wantedGender,
+    age: Number(base.age || 30),
     exp: Math.floor((actor.exp * percent) / 100),
     hp: maxhp,
     maxhp,
     fp: maxfp,
     maxfp,
     fp_plus: Math.floor(maxfp / 40),
+    maxmp: tasks.wantedClass === 8 ? maxfp : 0,
+    mp: tasks.wantedClass === 8 ? maxfp : 0,
+    mp_plus: tasks.wantedClass === 8 ? Math.floor(maxfp / 40) : 0,
+    base_str: actor.baseStr,
+    base_agi: actor.baseAgi,
+    base_int: actor.baseInt,
+    base_bon: actor.baseBon,
+    base_fac: actor.face,
+    base_luc: actor.luck,
+    morals: 0,
     base_hit: stats.hit,
     base_eva: stats.eva,
     agi: stats.agi,

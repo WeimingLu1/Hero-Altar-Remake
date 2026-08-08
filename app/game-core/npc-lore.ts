@@ -4,6 +4,7 @@ import { originalSystem, originalTables, type OriginalRecord } from "./original-
 import type { SceneActorState } from "./scene-event";
 import type { TaskState } from "./task-system";
 import { actorStatusProfile, levelTier, levelTitle } from "./status-system";
+import { scaledNpcCombatRecord } from "./npc-combat-scaling";
 
 export const WORLD_LORE = `这里是《英雄坛说》的架空武侠世界。平安镇是江湖旅人的起点，镇外连接各大门派、险地、村落与隐秘洞府。武林中正邪并立，少林、武当、峨眉、丐帮、雪山、红莲等势力各有规矩；官府、商旅、百姓也有自己的生计与恩怨。武功、师承、道德、名声、饥渴、伤势、银两与任务都会真实影响一个江湖人的处境。世界处于古典武侠时代，不存在互联网、电脑、语言模型等现代事物。`;
 
@@ -169,7 +170,7 @@ export function npcLoreStatus(id: number) {
 }
 
 export function buildNpcSystemPrompt(id: number, actor: SceneActorState, tasks: TaskState, mapName: string) {
-  const npc = originalTables.enemies[id] || {}, lore = npcLore(id),
+  const npc = scaledNpcCombatRecord(originalTables.enemies[id] || {}), lore = npcLore(id),
     npcMartial = npcMartialProfile(id), player = actorStatusProfile(actor);
   const actorSkills = Object.entries(actor.skills || {})
     .filter(([, value]) => value.level > 0)

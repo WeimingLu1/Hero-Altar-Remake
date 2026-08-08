@@ -44,6 +44,7 @@ export type SceneActorState = {
   fpPlus: number;
   mpPlus: number;
   xue6: boolean;
+  donateTimes?: number;
   playTime?: number;
   killList?: number[];
   badmanKill?: number;

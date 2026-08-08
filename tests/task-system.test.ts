@@ -124,6 +124,36 @@ test("寻物任务使用原作排序、期限与三倍奖励系数", () => {
   assert.equal(tasks.findDeadline, 35);
 });
 
+test("三大任务不会在过滤后重新派发已经死亡的NPC", () => {
+  const a = actor(), tasks = freshTaskState();
+  a.killList = [12];
+  const result = acceptMainTask(a, tasks, 1, () => 0);
+  assert.equal(result.ok, true);
+  assert.equal(tasks.visitId, 125);
+  assert.notEqual(tasks.visitName, "小裁缝");
+});
+
+test("通缉犯不会生成在当前玩家格且保留法术门派动态属性", () => {
+  const a = actor(), tasks = freshTaskState(), sequence = [7, 0, 0, 0, 7, 0];
+  a.maxFp = 800;
+  const result = acceptWantedTask(
+    a,
+    tasks,
+    () => sequence.shift() ?? 0,
+    false,
+    { mapId: 10, x: 5, y: 5 },
+  );
+  assert.equal(result.ok, true);
+  assert.equal(tasks.wantedPlace, 10);
+  assert.notDeepEqual([tasks.wantedX, tasks.wantedY], [5, 5]);
+  assert.equal(tasks.wantedClass, 8);
+  const enemy = wantedEnemyRecord(a, tasks);
+  assert.equal(enemy.gender, tasks.wantedGender);
+  assert.equal(enemy.maxmp, 640);
+  assert.equal(enemy.mp, 640);
+  assert.equal(enemy.mp_plus, 16);
+});
+
 test("逾期二十分钟完成任务会清空顾炎武奖励", () => {
   const a = actor(),
     tasks = freshTaskState();

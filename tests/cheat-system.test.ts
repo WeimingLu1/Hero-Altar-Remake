@@ -56,13 +56,22 @@ const actor = (): SceneActorState => ({
 
 test("每项秘技支持直接达到标注的理论上限", () => {
   const a = actor();
+  a.age = 27;
+  a.skills["1"] = { level: 100, points: 0 };
+  a.skills["8"] = { level: 80, points: 0 };
+  a.skillUse[3] = 1;
+  a.skillUse[5] = 8;
   maxCheatStat(a, cheatStats.findIndex((stat) => stat.key === "face"));
   maxCheatSkill(a, 2);
   assert.equal(a.face, 255);
   assert.equal(a.skills["2"].level, 255);
   applyCheatQuick(a, "maxAll");
   assert.equal(a.gold, 4294967295);
-  assert.equal(a.baseStr, 255);
+  assert.equal(a.exp, 10000000);
+  assert.equal(a.baseStr, 30);
+  assert.equal(a.fpPlus, 63);
+  assert.equal(a.mpPlus, 63);
+  assert.equal(a.age, 27);
 });
 
 test("快捷秘技补满状态并增加资源", () => {
@@ -77,10 +86,14 @@ test("快捷秘技补满状态并增加资源", () => {
 
 test("一键宗师强化资源、属性及已学功夫", () => {
   const a = actor();
+  a.fpPlus = 32767;
+  a.mpPlus = 32767;
   applyCheatQuick(a, "master");
   assert.equal(a.baseStr, 30);
   assert.equal(a.maxFp, 5000);
   assert.equal(a.skills["2"].level, 255);
+  assert.equal(a.fpPlus, 0);
+  assert.equal(a.mpPlus, 0);
 });
 
 test("数值和技能调整遵守原版上限", () => {
@@ -98,8 +111,8 @@ test("直接输入数值会钳制范围并同步基础四维", () => {
   const a = actor();
   const strength = 15;
   setCheatStat(a, strength, 999);
-  assert.equal(a.baseStr, 255);
-  assert.equal(a.str, 255);
+  assert.equal(a.baseStr, 30);
+  assert.equal(a.str, 30);
   setCheatStat(a, 0, 99999);
   assert.equal(a.hp, a.maxHp);
 });

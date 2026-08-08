@@ -2,6 +2,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import {
   activePage,
+  canMoveBetween,
   friendlyEventName,
   getOriginalMap,
   originalStart,
@@ -39,10 +40,12 @@ import {
   bookStudyOptions,
   buyGood,
   canReadBook,
+  canStudyWithNpc,
   npcOptionLabel,
   npcOptions,
   npcRecord,
   npcStatus,
+  resolveSpecialNpcTalk,
   shopGoods,
   studyOnce,
   studyOptions,
@@ -150,6 +153,7 @@ import {
   streamNpcReply,
   type ChatMessage,
 } from "../game-core/lm-studio";
+import { MAX_PLAYER_EXP } from "../game-core/progression-limits";
 import "./world.css";
 import "./choice.css";
 import "./battle.css";
@@ -400,6 +404,7 @@ const newActor = (): SceneActorState => ({
   fpPlus: 0,
   mpPlus: 0,
   xue6: false,
+  donateTimes: 0,
   killList: [],
   badmanKill: 0,
   taskKill: 0,
@@ -435,6 +440,7 @@ const normalize = (value: WorldSave): WorldSave => ({
     ...(value.actor || {}),
     skills: value.actor?.skills || {},
     inventory: value.actor?.inventory || {},
+    exp: Math.min(Number(value.actor?.exp || 0), MAX_PLAYER_EXP),
   },
   flags: value.flags || {},
   variables: value.variables || {},
@@ -604,6 +610,7 @@ export default function OriginalWorld() {
     keys = useRef(new Set<string>()),
     held = useRef<Record<string, number>>({});
   const sync = useCallback((next: WorldSave) => {
+    next.actor.exp = Math.min(next.actor.exp, MAX_PLAYER_EXP);
     stateRef.current = next;
     setState(structuredClone(next));
   }, []);
@@ -799,7 +806,11 @@ export default function OriginalWorld() {
         s.tasks.wantedPlace === s.position.mapId &&
         s.tasks.wantedX === nx &&
         s.tasks.wantedY === ny;
-      if (!ambientBlocking && !wantedBlocking) {
+      if (
+        !ambientBlocking &&
+        !wantedBlocking &&
+        canMoveBetween(map, s.position.x, s.position.y, direction)
+      ) {
         if (npcChat) {
           chatAbort.current?.abort();
           chatAbort.current = null;
@@ -898,7 +909,13 @@ export default function OriginalWorld() {
           return;
         }
         if (id === 3) {
-          const result = acceptWantedTask(next.actor, tasks, random);
+          const result = acceptWantedTask(
+            next.actor,
+            tasks,
+            random,
+            false,
+            next.position,
+          );
           sync(next);
           setEventText(`${npcRecord(id).name}\n${result.text}`);
           setNpcMenu(null);
@@ -946,6 +963,13 @@ export default function OriginalWorld() {
           setNpcMenu(null);
           return;
         }
+        const specialTalk = resolveSpecialNpcTalk(id, next.actor);
+        if (specialTalk.handled) {
+          sync(next);
+          setEventText(`${npcRecord(id).name}\n${specialTalk.text}`);
+          setNpcMenu(null);
+          return;
+        }
         const hidden = completeHiddenQuest(next.actor, id);
         if (hidden.ok || hidden.text) {
           sync(next);
@@ -989,7 +1013,11 @@ export default function OriginalWorld() {
         const r = attemptJoin(id, next.actor);
         sync(next);
         setEventText(`${npcRecord(id).name}\n${r.text}`);
-      } else setStudy({ id, index: 0 });
+      } else {
+        const allowed = canStudyWithNpc(id, next.actor);
+        if (allowed.ok) setStudy({ id, index: 0 });
+        else setEventText(`${npcRecord(id).name}\n${allowed.text}`);
+      }
       setNpcMenu(null);
     },
     [sync],
@@ -1147,6 +1175,7 @@ export default function OriginalWorld() {
       const answer = await streamNpcReply({
         system: buildBattleNarrationPrompt(event),
         messages: history,
+        maxOutputTokens: 260,
         signal: controller.signal,
         onToken: (token) => updateEntry((item) => ({ ...item, text: item.text + token })),
       });
@@ -2411,10 +2440,6 @@ export default function OriginalWorld() {
         canEnter: (moving, x, y) => {
           const direction = x < moving.x ? 4 : x > moving.x ? 6 : y < moving.y ? 8 : 2;
           if (!passable(map, x, y, direction)) return false;
-          if (map.events.some((event) => {
-            const visual = eventVisual(event, current);
-            return event.id !== moving.eventId && event.x === x && event.y === y && visual.kind !== "none" && visual.kind !== "npc";
-          })) return false;
           return !world.npcs.some((npc) => npc.eventId !== moving.eventId && npc.x === x && npc.y === y);
         },
       });
@@ -4128,14 +4153,13 @@ function CheatMenu({
             </label>
             <label>师父
               <select value={actor.teacherId} onChange={(event) => mutate((draft) => {
-                const teacherId = Number(event.target.value), teacher = cheatTeachers.find((entry) => entry.id === teacherId);
-                return setCheatIdentity(draft.actor, teacher?.schoolId || draft.actor.classId, teacherId);
+                return setCheatIdentity(draft.actor, draft.actor.classId, Number(event.target.value));
               })}>
                 <option value={0}>0 · 无师父</option>
                 {cheatTeachers.map((teacher) => <option key={teacher.id} value={teacher.id}>{teacher.id} · {teacher.name}{teacher.schoolId ? `（${cheatSchools[teacher.schoolId]}）` : ""}</option>)}
               </select>
             </label>
-            <p>选择有明确门派的师父时会同步切换门派；选择“无师父”可保留当前门派。</p>
+            <p>修改器中的门派与师父可以独立任意组合；正常拜师仍遵守门派限制。</p>
           </div>
         )}
         {menu.tab === 5 && (

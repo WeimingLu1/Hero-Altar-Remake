@@ -1,7 +1,12 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import maps from "../game-data/maps.json";
-import { friendlyEventName } from "../app/game-core/original-world";
+import {
+  canMoveBetween,
+  friendlyEventName,
+  getOriginalMap,
+  passable,
+} from "../app/game-core/original-world";
 import {
   resolveSceneEvent,
   type SceneActorState,
@@ -97,6 +102,19 @@ test("internal transfer event names resolve to their destination map", () => {
   assert.equal(friendlyEventName("EV010", 24), "五指山");
   assert.equal(friendlyEventName("出口", 24), "出口");
   assert.equal(friendlyEventName("125"), "");
+});
+
+test("player movement ignores every RMXP wall and terrain passage flag", () => {
+  for (const raw of maps.maps) {
+    const map = getOriginalMap(raw.id);
+    for (let y = 0; y < map.height; y++)
+      for (let x = 0; x < map.width; x++)
+        assert.equal(passable(map, x, y, 2), true);
+  }
+  const map = getOriginalMap(maps.maps[0].id);
+  assert.equal(canMoveBetween(map, 0, 0, 6), true);
+  assert.equal(canMoveBetween(map, 0, 0, 4), false);
+  assert.equal(canMoveBetween(map, map.width - 1, map.height - 1, 2), false);
 });
 
 test("all 215 original Scene_Event interactables resolve to executable browser behavior", () => {

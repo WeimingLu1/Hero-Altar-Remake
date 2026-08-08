@@ -4,6 +4,8 @@ import {
   attemptEscape,
   battleRound,
   beginOriginalBattle,
+  burningDamage,
+  diminishingBattleResource,
   endSpar,
 } from "../app/game-core/original-battle";
 import type { SceneActorState } from "../app/game-core/scene-event";
@@ -49,6 +51,30 @@ test("story battles preserve the original no-escape rule", () => {
     result = attemptEscape(beginOriginalBattle(1, 42, undefined, "story"), a);
   assert.equal(result.escaped, false);
   assert.match(result.battle.log.at(-1) || "", /无法逃走/);
+});
+test("high spell resources use diminishing formula inputs instead of a damage cap", () => {
+  assert.equal(diminishingBattleResource(5000), 5000);
+  assert.equal(diminishingBattleResource(65000), 22320);
+  assert.ok(diminishingBattleResource(65000) > diminishingBattleResource(10000));
+  assert.ok(diminishingBattleResource(65000) < 65000);
+});
+test("burning damage applies only a level-scaled fraction of the force gap", () => {
+  const low = burningDamage(65000, 0, 0, () => 0),
+    master = burningDamage(65000, 0, 300, () => 0);
+  assert.equal(low, 1116);
+  assert.equal(master, 1785);
+  assert.ok(master < diminishingBattleResource(65000) / 10);
+  assert.equal(burningDamage(1000, 5000, 300, (max) => max - 1), 0);
+});
+test("high-level NPCs regularly spend force to perform their own offensive specials", () => {
+  let specialTurns = 0;
+  for (let seed = 1; seed <= 100; seed++) {
+    const a = actor();
+    a.hp = a.maxHp = 100000;
+    const round = battleRound(beginOriginalBattle(102, seed), a);
+    if (round.log.some((line) => line.includes("施展绝招"))) specialTurns++;
+  }
+  assert.ok(specialTurns >= 25 && specialTurns <= 55, String(specialTurns));
 });
 test("original sparring round is deterministic and changes combat state", () => {
   const a = actor(),

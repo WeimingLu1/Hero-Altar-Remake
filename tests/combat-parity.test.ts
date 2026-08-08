@@ -57,3 +57,12 @@ test("successful attack consumes force and returns wound separately", () => {
   assert.equal(attacker.fp, 50);
   assert.ok(result.hurt > 0);
 });
+
+test("a landed unarmed hit still deals hp damage when it causes no lasting wound", () => {
+  const attacker = battler({ weaponId: 0, fpPlus: 0 });
+  const target = battler({ eva: 0, dodgeKfLv: 0, parryKfLv: 0, pdef: 0, fenshen: -1 });
+  const result = attackEffect(attacker, target, (max) => Math.max(0, max - 1));
+  assert.equal(typeof result.damage, "number");
+  assert.ok(Number(result.damage) > 0);
+  assert.equal(result.hurt, 0);
+});

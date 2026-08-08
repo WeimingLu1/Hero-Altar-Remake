@@ -40,10 +40,12 @@ test("battle narration prompt grounds wuxia prose in both fighters and exact res
   assert.match(prompt, /测试少侠/);
   assert.match(prompt, /潘小莲/);
   assert.match(prompt, /豆腐店/);
-  assert.match(prompt, /4至8个自然段/);
+  assert.match(prompt, /1至2个短段/);
+  assert.match(prompt, /80至160个汉字/);
+  assert.match(prompt, /绝不超过220个汉字/);
   assert.match(prompt, /命中、闪避、招架、伤害、当前气血、胜负/);
-  assert.match(prompt, /动作的起承转合/);
-  assert.match(prompt, /短促喝声、挑衅、闷哼或对话/);
+  assert.match(prompt, /一两个关键动作/);
+  assert.match(prompt, /非必要不加入对话/);
   assert.match(prompt, /本回合所用武学/);
   assert.match(prompt, /原始出招句中的招式、动作方向、攻击部位/);
   assert.match(prompt, /不得把特色招式淡化/);

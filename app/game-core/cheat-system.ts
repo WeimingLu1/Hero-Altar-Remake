@@ -1,6 +1,8 @@
 import type { SceneActorState } from "./scene-event";
 import { fullHp } from "./inventory-system";
 import { originalSystem, originalTables } from "./original-data";
+import { effectiveLevel } from "./skill-system";
+import { MAX_PLAYER_EXP } from "./progression-limits";
 
 export type CheatQuickAction =
   | "recover"
@@ -44,8 +46,8 @@ export const cheatQuickOptions: Array<{
   },
   {
     id: "maxAll",
-    name: "全参数理论 MAX",
-    detail: "全部资源、属性、容貌、福缘、年龄与已学功夫达到数据上限",
+    name: "全参数 MAX",
+    detail: "资源、属性、容貌、福缘与已学功夫达到规则上限，保留当前年龄",
     dangerous: true,
   },
 ];
@@ -67,11 +69,11 @@ export function applyCheatQuick(
     return "全部状态已经补满。";
   }
   if (action === "gold") actor.gold = cap(actor.gold + 100000, 4294967295);
-  if (action === "experience") actor.exp = cap(actor.exp + 100000, 4294967295);
+  if (action === "experience") actor.exp = cap(actor.exp + 100000, MAX_PLAYER_EXP);
   if (action === "potential")
     actor.potential = cap(actor.potential + 10000, 4294967295);
   if (action === "attributes" || action === "master" || action === "maxAll") {
-    const value = action === "maxAll" ? 255 : 30;
+    const value = 30;
     actor.baseStr = actor.str = value;
     actor.baseAgi = actor.agi = value;
     actor.baseInt = actor.int = value;
@@ -89,14 +91,16 @@ export function applyCheatQuick(
     actor.potential = Math.max(actor.potential, 1000000);
     actor.maxFp = Math.max(actor.maxFp, 5000);
     actor.maxMp = Math.max(actor.maxMp, 5000);
+    clampModifierPower(actor);
     applyCheatQuick(actor, "recover");
     return "宗师秘技生效：资源、属性和已学功夫已经强化。";
   }
   if (action === "maxAll") {
     for (let index = 0; index < cheatStats.length; index++)
-      maxCheatStat(actor, index);
+      if (cheatStats[index].key !== "age") maxCheatStat(actor, index);
+    clampModifierPower(actor);
     applyCheatQuick(actor, "recover");
-    return "全参数已经达到理论上限。";
+    return "全参数已经达到规则上限，年龄保持不变。";
   }
   return (
     cheatQuickOptions.find((item) => item.id === action)?.name || "秘技生效。"
@@ -113,16 +117,16 @@ export const cheatStats = [
   { key: "food", name: "饱食", group: "状态", step: 10, max: 65535 },
   { key: "water", name: "饮水", group: "状态", step: 10, max: 65535 },
   { key: "gold", name: "金钱", group: "资源", step: 10000, max: 4294967295 },
-  { key: "exp", name: "经验", group: "资源", step: 10000, max: 4294967295 },
+  { key: "exp", name: "经验", group: "资源", step: 10000, max: MAX_PLAYER_EXP },
   { key: "potential", name: "潜能", group: "资源", step: 1000, max: 4294967295 },
   { key: "morals", name: "名声／道德", group: "身份", step: 10, max: 255 },
   { key: "face", name: "容貌", group: "身份", step: 1, max: 255 },
   { key: "luck", name: "福缘", group: "身份", step: 1, max: 255 },
   { key: "age", name: "年龄", group: "身份", step: 1, min: 1, max: 255 },
-  { key: "baseStr", name: "先天膂力", group: "四维", step: 1, max: 255 },
-  { key: "baseAgi", name: "先天敏捷", group: "四维", step: 1, max: 255 },
-  { key: "baseInt", name: "先天悟性", group: "四维", step: 1, max: 255 },
-  { key: "baseBon", name: "先天根骨", group: "四维", step: 1, max: 255 },
+  { key: "baseStr", name: "先天膂力", group: "四维", step: 1, max: 30 },
+  { key: "baseAgi", name: "先天敏捷", group: "四维", step: 1, max: 30 },
+  { key: "baseInt", name: "先天悟性", group: "四维", step: 1, max: 30 },
+  { key: "baseBon", name: "先天根骨", group: "四维", step: 1, max: 30 },
   { key: "fpPlus", name: "加力", group: "战斗", step: 1, max: 32767 },
   { key: "mpPlus", name: "法点", group: "战斗", step: 1, max: 32767 },
   { key: "tanId", name: "九坛进度", group: "进度", step: 1, max: 9 },
@@ -144,7 +148,18 @@ export function cheatStatMaximum(actor: SceneActorState, index: number) {
   if (stat.key === "mp") return actor.maxMp;
   if (stat.key === "food") return (actor.baseStr + 5) * 15;
   if (stat.key === "water") return (actor.baseStr + 4) * 15;
+  if (stat.key === "fpPlus")
+    return Math.floor(effectiveLevel(actor, actor.skillUse[3] || 1) / 2);
+  if (stat.key === "mpPlus")
+    return Math.floor(effectiveLevel(actor, actor.skillUse[5] || 8) / 2);
   return stat.max;
+}
+
+function clampModifierPower(actor: SceneActorState) {
+  for (const key of ["fpPlus", "mpPlus"] as const) {
+    const index = cheatStats.findIndex((stat) => stat.key === key);
+    setCheatStat(actor, index, actor[key]);
+  }
 }
 
 export function setCheatStat(actor: SceneActorState, index: number, raw: number) {

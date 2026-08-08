@@ -5,11 +5,13 @@ import {
   bookStudyOptions,
   buyGood,
   canReadBook,
+  canStudyWithNpc,
   npcOptions,
   npcOptionLabel,
   shopGoods,
   studyOnce,
   npcStatus,
+  resolveSpecialNpcTalk,
 } from "../app/game-core/npc-system";
 import type { SceneActorState } from "../app/game-core/scene-event";
 const actor = (): SceneActorState => ({
@@ -100,6 +102,51 @@ test("白瑞德拜师按实时实战根骨计算基本内功加成", () => {
   assert.equal(join.ok, true);
   assert.equal(a.teacherId, 111);
   assert.equal(a.classId, 6);
+});
+
+test("已有门派或自立门户时不能绕过原作规则改投别派", () => {
+  const sameSchool = actor();
+  sameSchool.classId = 1;
+  assert.equal(attemptJoin(39, sameSchool).ok, true);
+
+  const otherSchool = actor();
+  otherSchool.classId = 6;
+  assert.equal(attemptJoin(39, otherSchool).ok, false);
+  assert.equal(otherSchool.classId, 6);
+  assert.equal(otherSchool.teacherId, 0);
+
+  const selfFounded = actor();
+  selfFounded.classId = 9;
+  assert.equal(attemptJoin(39, selfFounded).ok, false);
+  assert.equal(selfFounded.classId, 9);
+});
+
+test("独行大侠请教保留原版二十万经验门槛", () => {
+  const a = actor();
+  a.exp = 199999;
+  assert.equal(canStudyWithNpc(7, a).ok, false);
+  a.exp = 200000;
+  assert.equal(canStudyWithNpc(7, a).ok, true);
+  assert.equal(canStudyWithNpc(31, actor()).ok, true);
+});
+
+test("白瑞德第六剑与华岳捐赠保留原版特殊交谈效果", () => {
+  const disciple = actor();
+  disciple.teacherId = 111;
+  disciple.skills["39"] = { level: 150, points: 0 };
+  disciple.inventory["1:30"] = 1;
+  assert.equal(resolveSpecialNpcTalk(111, disciple).handled, true);
+  assert.equal(disciple.xue6, true);
+  assert.equal(disciple.inventory["1:30"], undefined);
+  assert.equal(resolveSpecialNpcTalk(111, disciple).handled, false);
+
+  const donor = actor();
+  donor.gold = 500000;
+  const oldLuck = donor.luck;
+  assert.equal(resolveSpecialNpcTalk(139, donor).handled, true);
+  assert.equal(donor.gold, 0);
+  assert.equal(donor.donateTimes, 1);
+  assert.equal(donor.luck, oldLuck + 1);
 });
 
 test("秘籍沿用原作技能表并要求读书识字与自创门派", () => {

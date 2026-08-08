@@ -7,6 +7,7 @@ import {
 import { derivedStats } from "./inventory-system";
 import type { SceneActorState } from "./scene-event";
 import { npcLoreStatus } from "./npc-lore";
+import { scaledNpcCombatRecord } from "./npc-combat-scaling";
 
 export type NpcOption =
   "talk" | "chat" | "status" | "battle" | "trade" | "join" | "study";
@@ -46,7 +47,7 @@ export const npcOptionLabel: Record<NpcOption, string> = {
 };
 
 export function npcStatus(id: number) {
-  const npc = enemy(id),
+  const npc = scaledNpcCombatRecord(enemy(id)),
     description = ((npc.des_text as string[]) || []).filter(Boolean).join(""),
     equipment = [
       Number(npc.weapon_id || 0) > 0
@@ -146,6 +147,17 @@ function condition(actor: SceneActorState, type: number, num: number) {
   return false;
 }
 export function attemptJoin(id: number, actor: SceneActorState) {
+  const targetSchool = Number(enemy(id).type || 0);
+  if (actor.classId === 9)
+    return {
+      ok: false,
+      text: String((originalText.have_school as string[])?.[0] || "你已经自立门户，不能再拜入他门。"),
+    };
+  if (actor.classId !== 0 && actor.classId !== targetSchool)
+    return {
+      ok: false,
+      text: String((originalText.have_school as string[])?.[1] || "你已经加入其他门派。"),
+    };
   const needs = (rec(originalTasks.teacher_need)[String(id)] as number[][]) || [
       [0, 0],
     ],
@@ -175,6 +187,39 @@ export function attemptJoin(id: number, actor: SceneActorState) {
       String(enemy(id).name || "师父"),
     ),
   };
+}
+
+export function canStudyWithNpc(id: number, actor: SceneActorState) {
+  if (id === 7 && actor.exp < 200000)
+    return {
+      ok: false,
+      text: String(originalText.daxia_exp || "你的江湖阅历尚不足以向独行大侠请教。"),
+    };
+  return { ok: true, text: "" };
+}
+
+export function resolveSpecialNpcTalk(id: number, actor: SceneActorState) {
+  const questTalk = rec(originalText.quest_talk)[String(id)] as string[] | undefined;
+  if (id === 139 && actor.gold >= 500000) {
+    actor.gold -= 500000;
+    actor.donateTimes = (actor.donateTimes || 0) + 1;
+    actor.luck = Math.min(250, actor.luck + 1);
+    return { handled: true, text: questTalk?.[0] || "多谢你的捐赠。" };
+  }
+  const snakeGall = "1:30";
+  if (
+    id === 111 &&
+    actor.teacherId === 111 &&
+    !actor.xue6 &&
+    (actor.skills["39"]?.level || 0) >= 150 &&
+    (actor.inventory[snakeGall] || 0) > 0
+  ) {
+    actor.inventory[snakeGall]--;
+    if (actor.inventory[snakeGall] <= 0) delete actor.inventory[snakeGall];
+    actor.xue6 = true;
+    return { handled: true, text: questTalk?.[0] || "你领悟了雪花六出的第六剑。" };
+  }
+  return { handled: false, text: "" };
 }
 
 export function studyOptions(id: number) {

@@ -69,7 +69,8 @@ test("ambient dialogue lifecycle rejects stale requests and ghost NPCs", () => {
   assert.match(source, /if \(item\.speechTargetName && !target\) return false/);
   assert.match(source, /ambientShouldPause/);
   assert.match(source, /killList \|\| \[\]\)\.join/);
-  assert.match(source, /visual\.kind !== "none" && visual\.kind !== "npc"/);
+  assert.match(source, /if \(!passable\(map, x, y, direction\)\) return false/);
+  assert.doesNotMatch(source, /visual\.kind !== "none" && visual\.kind !== "npc"/);
 });
 
 test("ambient conversations keep bounded context and highlight the player", () => {
