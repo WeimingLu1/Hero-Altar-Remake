@@ -1,5 +1,6 @@
 import type { SceneActorState } from "./scene-event";
 import { fullHp } from "./inventory-system";
+import { fullFp, fullMp } from "./cultivation-system";
 import { originalSystem, originalTables } from "./original-data";
 import { effectiveLevel } from "./skill-system";
 import { MAX_PLAYER_EXP } from "./progression-limits";
@@ -89,8 +90,8 @@ export function applyCheatQuick(
     actor.gold = Math.max(actor.gold, 1000000);
     actor.exp = Math.max(actor.exp, 1000000);
     actor.potential = Math.max(actor.potential, 1000000);
-    actor.maxFp = Math.max(actor.maxFp, 5000);
-    actor.maxMp = Math.max(actor.maxMp, 5000);
+    actor.maxFp = Math.max(actor.maxFp, fullFp(actor));
+    actor.maxMp = Math.max(actor.maxMp, fullMp(actor));
     clampModifierPower(actor);
     applyCheatQuick(actor, "recover");
     return "宗师秘技生效：资源、属性和已学功夫已经强化。";
@@ -146,6 +147,10 @@ export function cheatStatMaximum(actor: SceneActorState, index: number) {
   if (stat.key === "hp") return actor.maxHp;
   if (stat.key === "fp") return actor.maxFp;
   if (stat.key === "mp") return actor.maxMp;
+  // 上限对齐真实规则：内力/法力不能超过装备内功/法术允许的容量（保留基础 100）
+  if (stat.key === "maxHp") return fullHp(actor);
+  if (stat.key === "maxFp") return Math.max(100, fullFp(actor));
+  if (stat.key === "maxMp") return Math.max(100, fullMp(actor));
   if (stat.key === "food") return (actor.baseStr + 5) * 15;
   if (stat.key === "water") return (actor.baseStr + 4) * 15;
   if (stat.key === "fpPlus")

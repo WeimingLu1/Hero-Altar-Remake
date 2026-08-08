@@ -67,18 +67,21 @@ export function attackEffect(attacker: Combatant, target: Combatant, randomInt: 
   if (randomInt(secondTotal) < parryPara) return { damage: "Miss.2", hitType: attacker.hitType, hurt };
   if (randomInt(100) <= target.fenshen) return { damage: "Miss.3", hitType: attacker.hitType, hurt };
 
+  // force 倍率封顶 ×2.0：否则高 force 武功(如雪影擒拿手 force 250)会把
+  // 数值对标的 str/fp 放大成秒人伤害，破坏「数值对照即公平」的重平衡目标。
+  const force = Math.min(attacker.kfForce, 100);
   let damage1 = idiv(randomInt(Math.max(1, attacker.atk)) + attacker.atk, 2);
   damage1 += idiv(damage1 * attacker.kfDamage, 100);
   let fpAdd = Math.min(attacker.fp, attacker.fpPlus);
   attacker.fp -= fpAdd;
   let damage2: number;
   if (fpAdd === 0) {
-    damage2 = attacker.str + idiv(attacker.str * attacker.kfForce, 100);
+    damage2 = attacker.str + idiv(attacker.str * force, 100);
   } else {
     if (attacker.weaponId > 0) fpAdd = idiv(fpAdd, 6);
     fpAdd += idiv(Math.min(attacker.fp, 3000), 20) - idiv(target.fpPlus, 25);
     damage2 = fpAdd <= 0 ? attacker.str : attacker.str + fpAdd;
-    if (fpAdd > 0) damage2 += idiv(damage2 * attacker.kfForce, 100);
+    if (fpAdd > 0) damage2 += idiv(damage2 * force, 100);
   }
   const damage = damage1 + idiv(randomInt(Math.max(1, damage2)) + damage2, 2);
   if (randomInt(Math.max(1, damage)) > target.pdef) {

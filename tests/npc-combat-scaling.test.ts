@@ -4,7 +4,7 @@ import { originalTables } from "../app/game-core/original-data";
 import { npcCombatLevel } from "../app/game-core/npc-combat-scaling";
 import { beginOriginalBattle } from "../app/game-core/original-battle";
 
-const NPC_CEILING = 3600;
+const NPC_CEILING = 3500;
 
 test("无战斗武学的百姓保持原始弱小数值", () => {
   const child = originalTables.enemies[2] || {};
@@ -17,8 +17,8 @@ test("无战斗武学的百姓保持原始弱小数值", () => {
 });
 
 test("重平衡后顶级高手拥有与等级相称且不超玩家天花板的数值", () => {
-  const leader = originalTables.enemies[111] || {}; // 白瑞德，雪山内功 250
-  assert.equal(npcCombatLevel(leader), 250);
+  const leader = originalTables.enemies[111] || {}; // 白瑞德，掌门顶到 254
+  assert.equal(npcCombatLevel(leader), 254);
   assert.ok(
     Number(leader.maxhp) >= 3000,
     `白瑞德应获得与 250 级相称的血量，实际 ${leader.maxhp}`,

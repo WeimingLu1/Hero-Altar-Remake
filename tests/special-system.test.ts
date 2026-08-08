@@ -175,7 +175,9 @@ test("连珠雷支付组合术与三个子法术的原始消耗", () => {
   source.enemyMaxHp = 1;
   const battle = specialRound(source, a, 32);
   assert.equal(a.mp, 2570);
-  assert.equal(a.hp, 1800);
+  // hp 受敌人 exp 影响（魔法反激阈值 targetPower=enemy.exp*4/3），
+  // 重平衡后 潘小莲 exp 提高，反激伤害随之增加
+  assert.equal(a.hp, 1688);
   assert.equal(battle.turn, 1);
   assert.equal(
     battle.log.some((line) => /第 1 击/.test(line)),
