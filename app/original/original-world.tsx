@@ -4378,8 +4378,16 @@ function draw(ctx: CanvasRenderingContext2D, state: WorldSave, ambient: AmbientW
     kind: "player",
     shownAt: playerAmbient.bubbleShownAt,
   });
-  ambientBubbles.sort((first, second) => first.shownAt - second.shownAt).forEach((bubble) =>
-    drawAmbientBubble(ctx, bubble.x, bubble.y, bubble.text, bubble.kind));
+  // 玩家气泡永远最后绘制(最上层)：人多时 NPC 气泡按时间堆叠，但绝不盖住玩家台词。
+  ambientBubbles.sort((first, second) =>
+    first.kind === "player" && second.kind !== "player"
+      ? 1
+      : second.kind === "player" && first.kind !== "player"
+        ? -1
+        : first.shownAt - second.shownAt,
+  ).forEach((bubble) =>
+    drawAmbientBubble(ctx, bubble.x, bubble.y, bubble.text, bubble.kind),
+  );
   const shade = ctx.createRadialGradient(W / 2, H / 2, 120, W / 2, H / 2, 430);
   shade.addColorStop(0, "rgba(0,0,0,0)");
   shade.addColorStop(1, "rgba(2,7,4,.34)");

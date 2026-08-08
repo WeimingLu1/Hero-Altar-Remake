@@ -81,9 +81,11 @@ test("ambient conversations keep bounded context and highlight the player", () =
   assert.match(source, /#8ecbff/);
 });
 
-test("newest ambient bubble is rendered on the highest layer", () => {
+test("player ambient bubble is always on the highest layer", () => {
   assert.match(source, /bubbleShownAt/);
-  assert.match(source, /ambientBubbles\.sort\(\(first, second\) => first\.shownAt - second\.shownAt\)/);
+  // 玩家气泡永远最上层，NPC 气泡按出现时间堆叠
+  assert.match(source, /first\.kind === "player" && second\.kind !== "player"/);
+  assert.match(source, /first\.shownAt - second\.shownAt/);
   assert.ok(source.indexOf("ambientBubbles.push") < source.indexOf("ambientBubbles.sort"));
 });
 
