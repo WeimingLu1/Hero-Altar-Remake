@@ -457,7 +457,14 @@ export function wantedEnemyRecord(
     classes = (originalTasks.bad_data as number[][]) || [],
     data = classes[tasks.wantedClass] || classes[1] || [],
     weaponId = data[0] || 0,
-    use = [data[1], data[2], data[3], data[4], data[5], data[6]],
+    // 原版 set_badman 对法术型恶人(class_id==8)会把法术位改写为 rand(3)+52
+    // (五雷咒/万鸦咒/玄冰咒)；web 端按存档状态确定性派生，保证重载后同一
+    // 通缉犯的法术武功不变。
+    spellId =
+      tasks.wantedClass === 8
+        ? 52 + (Math.abs(tasks.wantedStarted + tasks.wantedPlace) % 3)
+        : data[6],
+    use = [data[1], data[2], data[3], data[4], data[5], spellId],
     ids = (data[8] as unknown as number[]) || [1, 2, 9, 10],
     maxhp = Math.max(1, Math.floor((actor.maxHp * percent) / 100)),
     maxfp = Math.max(0, Math.floor((actor.maxFp * percent) / 100));
@@ -539,7 +546,9 @@ export function taskJournal(tasks: TaskState) {
   if (tasks.findId > 0) lines.push(`寻物：${tasks.findName}`);
   if (tasks.killId > 0) lines.push(`除恶：${tasks.killName}`);
   if (tasks.wantedPlace > 0)
-    lines.push(`通缉：${tasks.wantedName} · Map ${tasks.wantedPlace}`);
+    lines.push(
+      `通缉：${tasks.wantedName} · ${getOriginalMap(tasks.wantedPlace).name}`,
+    );
   if (tasks.stoneStarted) lines.push("石料：将石料送回工地");
   if (tasks.finishFlag) lines.push("顾炎武处有任务奖励待领");
   return lines.length ? lines : ["当前没有进行中的任务。"];

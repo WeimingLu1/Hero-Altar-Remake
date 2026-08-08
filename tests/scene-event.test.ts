@@ -108,3 +108,45 @@ test("桃花源房间入口按房屋等级进入对应原作地图", () => {
     y: 12,
   });
 });
+
+test("告示牌无通缉时显示治安良好文本", () => {
+  const a = actor();
+  a.morals = 128;
+  const r = resolveSceneEvent({ type: 9 }, a, 0, {
+    wantedPlace: 0,
+    wantedName: "",
+    mapName: "平安镇",
+  });
+  assert.equal(r.tag, "wanted");
+  assert.match(r.lines[0], /治安良好/);
+  assert.doesNotMatch(r.lines[0], /『name』|『place』/);
+});
+
+test("告示牌按当前通缉替换姓名与目标地点", () => {
+  const a = actor();
+  a.morals = 128;
+  const r = resolveSceneEvent({ type: 9 }, a, 0, {
+    wantedPlace: 3,
+    wantedName: "赵梅",
+    mapName: "平安镇",
+  });
+  assert.equal(r.tag, "wanted:active");
+  assert.match(r.lines[0], /赵梅/);
+  assert.match(r.lines[0], /平安镇西/);
+  assert.doesNotMatch(r.lines[0], /『name』|『place』/);
+});
+
+test("恶名玩家查看告示牌会显示自己姓名与当前位置", () => {
+  const a = actor();
+  a.morals = 100;
+  a.name = "恶棍张三";
+  const r = resolveSceneEvent({ type: 9 }, a, 0, {
+    wantedPlace: 0,
+    wantedName: "",
+    mapName: "衙门",
+  });
+  assert.equal(r.tag, "wanted");
+  assert.match(r.lines[0], /恶棍张三/);
+  assert.match(r.lines[0], /衙门/);
+  assert.doesNotMatch(r.lines[0], /『name』|『place』/);
+});

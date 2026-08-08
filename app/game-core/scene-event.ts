@@ -5,6 +5,7 @@ import {
   originalText,
   type OriginalRecord,
 } from "./original-data";
+import { getOriginalMap } from "./original-world";
 
 export type SceneEventCall = { type: number; id?: number; extra?: number };
 export type SceneActorState = {
@@ -89,10 +90,17 @@ const nameAt = (table: Array<OriginalRecord | null>, id: number) =>
 const deterministic = (lines: string[], seed: number) =>
   lines.length ? lines[Math.abs(seed) % lines.length] : "……";
 
+type WantedContext = {
+  wantedPlace?: number;
+  wantedName?: string;
+  mapName?: string;
+};
+
 export function resolveSceneEvent(
   call: SceneEventCall,
   actor: SceneActorState,
   seed = 0,
+  context?: WantedContext,
 ): SceneResolution {
   const id = call.id || 0,
     type = call.type;
@@ -208,11 +216,31 @@ export function resolveSceneEvent(
       tag: `boss:${boss}`,
     };
   }
-  if (type === 9)
+  if (type === 9) {
+    // Original arrest_board shows the wanted notice with the badman's name and
+    // target map; a badman (morals < 128) sees their own name at the current
+    // location; with no active wanted it shows the calm-town notice instead.
+    const { wantedPlace = 0, wantedName = "", mapName = "" } = context || {},
+      playerBad = Number(actor.morals || 0) < 128,
+      active = wantedPlace > 0;
+    const template = playerBad || active
+        ? String(originalText.wanted_text || "告示牌上贴着最新的通缉令。")
+        : String(originalText.no_wanted_text || "本镇治安良好。"),
+      name = playerBad
+        ? String(actor.name || "少侠")
+        : active
+          ? wantedName
+          : "",
+      place = playerBad
+        ? mapName
+        : active
+          ? getOriginalMap(wantedPlace).name
+          : "";
     return {
-      lines: [String(originalText.wanted_text || "告示牌上贴着最新的通缉令。")],
-      tag: "wanted",
+      lines: [template.replaceAll("name", name).replaceAll("place", place)],
+      tag: active ? "wanted:active" : "wanted",
     };
+  }
   if (type === 10)
     return {
       lines: [String(originalText.suicide_ask || "你当真不想活了？")],

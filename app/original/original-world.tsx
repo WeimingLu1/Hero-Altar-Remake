@@ -680,6 +680,11 @@ export default function OriginalWorld() {
             sceneCall,
             next.actor,
             event.id + s.position.mapId,
+            {
+              wantedPlace: s.tasks.wantedPlace,
+              wantedName: s.tasks.wantedName,
+              mapName: map.name,
+            },
           );
         if (sceneCall.type === 6) {
           setArcade({ kind: "select", index: 0 });

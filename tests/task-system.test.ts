@@ -152,6 +152,12 @@ test("通缉犯不会生成在当前玩家格且保留法术门派动态属性",
   assert.equal(enemy.maxmp, 640);
   assert.equal(enemy.mp, 640);
   assert.equal(enemy.mp_plus, 16);
+  // class-8 spellcaster keeps a real spell kungfu (52-54) in the spell slot
+  const spellId = (enemy.skill_use as number[])[5];
+  assert.ok(
+    spellId >= 52 && spellId <= 54,
+    `spell id should be 52-54, got ${spellId}`,
+  );
 });
 
 test("逾期二十分钟完成任务会清空顾炎武奖励", () => {
