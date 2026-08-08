@@ -370,6 +370,8 @@ type AmbientPlayerState = {
   bubbleShownAt: number;
   replyAt: number;
   llmRequested: boolean;
+  // 群聊时：玩家说完一句后，队列里还等待回应玩家的 NPC eventId(按 eventId 升序)
+  responderQueue?: number[];
 };
 const newActor = (): SceneActorState => ({
   name: "江湖少侠",
@@ -2530,7 +2532,9 @@ export default function OriginalWorld() {
       if (ambientEpoch.current !== epoch || ambientPlayerEpoch.current !== playerEpoch || ambientPaused.current || !ambientPlayer.current.npcIds.length) return;
       const playerLine = cleanAmbientSpeech(answer, [current.actor.name, ...participants.map((npc) => npc.name)]);
       if (playerLine === "……") throw new Error("LM Studio returned no usable ambient player line");
-      ambientPlayer.current.bubble = `${current.actor.name || "少侠"} to ${target.name}：“${playerLine}”`;
+      // 群聊时玩家气泡也标「群聊 · 」
+      const groupMark = participants.length > 1 ? "群聊 · " : "";
+      ambientPlayer.current.bubble = `${groupMark}${current.actor.name || "少侠"} to ${target.name}：“${playerLine}”`;
       ambientPlayer.current.bubbleShownAt = Date.now();
       ambientPlayer.current.bubbleUntil = Date.now() + Math.max(4200, ambientPlayer.current.bubble.length * 180);
       ambientPlayerStarts.current = false;
@@ -2538,12 +2542,19 @@ export default function OriginalWorld() {
         npc.conversationContext = [...npc.conversationContext, ambientPlayer.current.bubble].slice(-6);
         if (npc.bubbleUntil <= Date.now()) npc.bubble = "";
       });
-      if (playerOpening) {
-        target.speechTargetName = current.actor.name || "少侠";
-        target.bubbleKind = "speech"; target.bubbleUntil = ambientPlayer.current.bubbleUntil + 12000;
-        target.llmRequested = false; target.generationPending = true; target.queuedAt = Date.now();
-        if (target.groupId) target.groupTurn = 0;
-      }
+      // 无论是否开场，都把目标设为回应玩家，并让群聊其余成员随后轮流回应，
+      // 保证每个群成员都参与，而不是只和一个人聊。
+      target.speechTargetName = current.actor.name || "少侠";
+      target.bubbleKind = "speech"; target.bubbleUntil = ambientPlayer.current.bubbleUntil + 12000;
+      target.llmRequested = false; target.generationPending = true; target.queuedAt = Date.now();
+      if (target.groupId) target.groupTurn = 0;
+      ambientPlayer.current.responderQueue =
+        participants.length > 1
+          ? participants
+              .filter((n) => n.eventId !== target.eventId)
+              .map((n) => n.eventId)
+              .sort((a, b) => a - b)
+          : [];
     } catch {
       if (ambientEpoch.current === epoch && ambientPlayerEpoch.current === playerEpoch && !ambientPaused.current) {
         ambientPlayer.current = { npcIds: [], replyToNpcId: 0, bubble: "", bubbleUntil: 0, bubbleShownAt: 0, replyAt: 0, llmRequested: true };
@@ -2648,8 +2659,25 @@ ${mode}输出必须符合古代武侠世界，不推动正式任务，不改变�
         npc.bubbleShownAt = Date.now();
         npc.generationPending = false;
         npc.bubbleUntil = Date.now() + Math.max(4200, npc.bubble.length * 180);
-        if (npc.speechTargetName === (stateRef.current.actor.name || "少侠") && ambientPlayer.current.replyToNpcId === npc.eventId)
-          ambientPlayer.current.replyAt = Math.max(Date.now(), npc.bubbleUntil - 200);
+        if (npc.speechTargetName === (stateRef.current.actor.name || "少侠") && ambientPlayer.current.replyToNpcId === npc.eventId) {
+          // 群聊：让队列里下一个成员接着回应玩家；都回完后玩家才能再次开口
+          const queue = ambientPlayer.current.responderQueue || [];
+          const nextId = queue.shift();
+          if (nextId) {
+            const next = ambientWorld.current.npcs.find((item) => item.eventId === nextId);
+            if (next && ambientCanHear(next, stateRef.current.position)) {
+              next.speechTargetName = stateRef.current.actor.name || "少侠";
+              next.bubbleKind = "speech"; next.bubbleUntil = Date.now() + 12000;
+              next.llmRequested = false; next.generationPending = true; next.queuedAt = Date.now();
+              if (next.groupId) next.groupTurn = 0;
+              ambientPlayer.current.replyToNpcId = next.eventId;
+            } else {
+              ambientPlayer.current.replyAt = Math.max(Date.now(), npc.bubbleUntil - 200);
+            }
+          } else {
+            ambientPlayer.current.replyAt = Math.max(Date.now(), npc.bubbleUntil - 200);
+          }
+        }
         if (npc.groupId) {
           const leader = ambientWorld.current.npcs.find((item) => item.eventId === npc.groupId);
           if (leader) {

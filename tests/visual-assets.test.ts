@@ -100,6 +100,12 @@ test("ambient conversations open on a self-raised matter and demand depth", () =
   assert.match(source, /空泛附和/);
 });
 
+test("group chats cycle through every member and mark the player bubble", () => {
+  assert.match(source, /responderQueue/);
+  assert.match(source, /participants\.length > 1 \? "群聊 · "/);
+  assert.match(source, /让群聊其余成员随后轮流回应/);
+});
+
 test("self-talk and action bubbles carry an explicit speaker label", () => {
   assert.match(source, /npc\.name\}正在和环境交互：/);
   assert.match(source, /npc\.name\}自言自语：/);
