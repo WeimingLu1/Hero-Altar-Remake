@@ -94,6 +94,12 @@ test("player ambient bubble is always on the highest layer", () => {
   assert.ok(source.indexOf("ambientBubbles.push") < source.indexOf("ambientBubbles.sort"));
 });
 
+test("self-talk and action bubbles carry an explicit speaker label", () => {
+  assert.match(source, /npc\.name\}正在和环境交互：/);
+  assert.match(source, /npc\.name\}自言自语：/);
+  assert.match(source, /\$\{address\}“/); // 定向对话保留 to 路由
+});
+
 test("every directed ambient turn requires one-tile hearing distance", () => {
   assert.match(ambientSource, /target && !ambientCanHear\(speaker, target\)/);
   assert.match(source, /partner && !ambientCanHear\(npc, partner\)/);

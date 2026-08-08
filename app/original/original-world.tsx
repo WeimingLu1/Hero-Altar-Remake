@@ -2629,7 +2629,14 @@ ${mode}输出必须符合古代武侠世界，不推动正式任务，不改变�
           : [npc.name];
         const generatedLine = npc.bubbleKind === "action" ? cleanAmbientAction(answer, participantNames) : cleanAmbientSpeech(answer, participantNames);
         if (generatedLine === "……") throw new Error("LM Studio returned no usable ambient line");
-        npc.bubble = npc.bubbleKind === "speech" ? `${address}“${generatedLine}”` : generatedLine;
+        // 动作标注「正在和环境交互」，无目标的自言自语标注「自言自语」，
+        // 定向对话(有 to 路由)保持原有格式。
+        npc.bubble =
+          npc.bubbleKind === "action"
+            ? `${npc.name}正在和环境交互：${generatedLine}`
+            : address
+              ? `${address}“${generatedLine}”`
+              : `${npc.name}自言自语：“${generatedLine}”`;
         npc.bubbleShownAt = Date.now();
         npc.generationPending = false;
         npc.bubbleUntil = Date.now() + Math.max(4200, npc.bubble.length * 180);
