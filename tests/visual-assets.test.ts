@@ -10,6 +10,10 @@ const ambientSource = readFileSync(
   new URL("../app/game-core/ambient-npc.ts", import.meta.url),
   "utf8",
 );
+const bubbleSource = readFileSync(
+  new URL("../app/game-core/ambient-bubble-layout.ts", import.meta.url),
+  "utf8",
+);
 
 test("player left and right directions use screen-facing sprite columns", () => {
   assert.match(source, /direction === 4 \? 2 : direction === 6 \? 1/);
@@ -77,8 +81,9 @@ test("ambient conversations keep bounded context and highlight the player", () =
   assert.match(source, /conversationContext/);
   assert.match(source, /slice\(-6\)/);
   assert.match(source, /maxOutputTokens: partner \? 150 : 96/);
-  assert.match(source, /kind: "player"/);
-  assert.match(source, /#8ecbff/);
+  // 玩家气泡样式与布局在独立的 ambient-bubble-layout 模块
+  assert.match(bubbleSource, /kind === "player"/);
+  assert.match(bubbleSource, /#8ecbff/);
 });
 
 test("player ambient bubble is always on the highest layer", () => {

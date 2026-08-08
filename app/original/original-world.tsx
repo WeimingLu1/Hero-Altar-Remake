@@ -25,6 +25,10 @@ import {
   type AmbientWorld,
 } from "../game-core/ambient-npc";
 import {
+  drawAmbientBubble,
+  resolveAmbientBubbleLayout,
+} from "../game-core/ambient-bubble-layout";
+import {
   applySceneResolution,
   resolveSceneEvent,
   type SceneActorState,
@@ -4378,16 +4382,18 @@ function draw(ctx: CanvasRenderingContext2D, state: WorldSave, ambient: AmbientW
     kind: "player",
     shownAt: playerAmbient.bubbleShownAt,
   });
-  // 玩家气泡永远最后绘制(最上层)：人多时 NPC 气泡按时间堆叠，但绝不盖住玩家台词。
-  ambientBubbles.sort((first, second) =>
-    first.kind === "player" && second.kind !== "player"
-      ? 1
-      : second.kind === "player" && first.kind !== "player"
-        ? -1
-        : first.shownAt - second.shownAt,
-  ).forEach((bubble) =>
-    drawAmbientBubble(ctx, bubble.x, bubble.y, bubble.text, bubble.kind),
+  // 玩家气泡永远最后绘制(最上层)；所有气泡再统一做碰撞错开布局。
+  const placedBubbles = resolveAmbientBubbleLayout(
+    ctx,
+    ambientBubbles.sort((first, second) =>
+      first.kind === "player" && second.kind !== "player"
+        ? 1
+        : second.kind === "player" && first.kind !== "player"
+          ? -1
+          : first.shownAt - second.shownAt,
+    ),
   );
+  placedBubbles.forEach((bubble) => drawAmbientBubble(ctx, bubble));
   const shade = ctx.createRadialGradient(W / 2, H / 2, 120, W / 2, H / 2, 430);
   shade.addColorStop(0, "rgba(0,0,0,0)");
   shade.addColorStop(1, "rgba(2,7,4,.34)");
@@ -4858,43 +4864,6 @@ function drawNpcMarker(
   ctx.fillRect(x - width / 2, y - 62, width, 13);
   ctx.fillStyle = accent;
   ctx.fillText(label, x, y - 52);
-}
-function drawAmbientBubble(
-  ctx: CanvasRenderingContext2D,
-  x: number,
-  y: number,
-  text: string,
-  kind: "speech" | "action" | "player",
-) {
-  const clean = text.replace(/\s+/g, " ").trim(),
-    accent = kind === "action" ? "#77d6c7" : kind === "player" ? "#8ecbff" : "#f0cf71";
-  ctx.save();
-  ctx.font = kind === "action" ? "italic 10px sans-serif" : kind === "player" ? "bold 10px sans-serif" : "10px sans-serif";
-  const maxTextWidth = 204,
-    lines: string[] = [];
-  let line = "";
-  for (const character of clean) {
-    const candidate = line + character;
-    if (line && ctx.measureText(candidate).width > maxTextWidth) {
-      lines.push(line);
-      line = character;
-    } else line = candidate;
-  }
-  if (line || !lines.length) lines.push(line);
-  const width = Math.min(220, Math.max(...lines.map((item) => ctx.measureText(item).width)) + 16),
-    height = lines.length * 14 + 8,
-    left = Math.max(3, Math.min(W - width - 3, x - width / 2)),
-    preferredTop = y - height,
-    top = preferredTop >= 3 ? preferredTop : Math.min(H - height - 3, y + 34);
-  ctx.fillStyle = "rgba(5,12,8,.94)";
-  ctx.strokeStyle = kind === "action" ? "rgba(82,174,162,.82)" : kind === "player" ? "rgba(91,166,224,.95)" : "rgba(193,157,75,.86)";
-  ctx.lineWidth = 1;
-  ctx.fillRect(left, top, width, height);
-  ctx.strokeRect(left + 0.5, top + 0.5, width - 1, height - 1);
-  ctx.fillStyle = accent;
-  ctx.textAlign = "center";
-  lines.forEach((line, index) => ctx.fillText(line, left + width / 2, top + 14 + index * 14));
-  ctx.restore();
 }
 function drawObjectMarker(
   ctx: CanvasRenderingContext2D,
