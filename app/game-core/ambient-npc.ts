@@ -23,6 +23,7 @@ export type AmbientNpc = {
   conversationTurn: number;
   conversationRound: number;
   conversationContext: string[];
+  conversationTopic: string;
   llmRequested: boolean;
   lastPartnerId: number;
   partnerCooldownUntil: number;
@@ -55,7 +56,7 @@ export function resetAmbientSessions(world: AmbientWorld, resumeAt: number) {
     npc.partnerId = 0; npc.groupId = 0; npc.groupMembers = []; npc.groupTurn = -1; npc.groupNextAt = 0;
     npc.conversationTurn = 0; npc.conversationRound = 0; npc.lastPartnerId = 0;
     npc.bubble = ""; npc.queuedBubble = ""; npc.generationPending = false; npc.llmRequested = true;
-    npc.speechTargetName = ""; npc.conversationContext = []; npc.nextBehaviorAt = resumeAt;
+    npc.speechTargetName = ""; npc.conversationContext = []; npc.conversationTopic = ""; npc.nextBehaviorAt = resumeAt;
   }
 }
 
@@ -65,6 +66,24 @@ const hash = (value: number) => {
   next = Math.imul(next ^ (next >>> 16), 0x45d9f3b);
   return (next ^ (next >>> 16)) >>> 0;
 };
+
+// 环境对话的议题池：让闲聊有随机但具体的议题，而不是泛泛寒暄。
+export const ambientTopics = [
+  "最近镇上刮起的一股风波",
+  "江湖上传得正盛的传闻",
+  "门派之间的一桩恩怨",
+  "这一带行商百姓的生计",
+  "一件尘封多年的旧事",
+  "武功与师承的来路",
+  "赶路途中碰上的怪事",
+  "一件悬而未决的悬案",
+  "身世与来历的疑云",
+  "一场正在发酵的争执",
+];
+
+export function pickAmbientTopic(seed: number) {
+  return ambientTopics[hash(seed) % ambientTopics.length];
+}
 
 export function createAmbientWorld(
   mapId: number,
@@ -91,6 +110,7 @@ export function createAmbientWorld(
       conversationTurn: 0,
       conversationRound: 0,
       conversationContext: [],
+      conversationTopic: "",
       llmRequested: true,
       lastPartnerId: 0,
       partnerCooldownUntil: 0,
@@ -161,7 +181,7 @@ export function tickAmbientWorld(options: {
     for (const item of world.npcs.filter((candidate) => memberIds.has(candidate.eventId))) {
       item.bubble = ""; item.queuedBubble = ""; item.generationPending = false; item.speechTargetName = ""; item.groupId = 0; item.groupMembers = [];
       item.groupTurn = -1; item.groupNextAt = 0; item.nextBehaviorAt = resumeAt; item.conversationContext = [];
-      item.partnerCooldownUntil = now + 30000;
+      item.conversationTopic = ""; item.partnerCooldownUntil = now + 30000;
     }
   };
   for (const npc of world.npcs.filter((item) => !isActive(item))) {
@@ -170,11 +190,11 @@ export function tickAmbientWorld(options: {
       const partner = world.npcs.find((item) => item.eventId === npc.partnerId);
       if (partner) {
         partner.partnerId = 0; partner.conversationTurn = 0; partner.conversationRound = 0;
-        partner.conversationContext = []; partner.bubble = ""; partner.queuedBubble = ""; partner.generationPending = false; partner.speechTargetName = "";
+        partner.conversationContext = []; partner.conversationTopic = ""; partner.bubble = ""; partner.queuedBubble = ""; partner.generationPending = false; partner.speechTargetName = "";
         partner.nextBehaviorAt = now + 700;
       }
     }
-    npc.x = npc.homeX; npc.y = npc.homeY; npc.partnerId = 0; npc.conversationTurn = 0; npc.conversationRound = 0; npc.conversationContext = [];
+    npc.x = npc.homeX; npc.y = npc.homeY; npc.partnerId = 0; npc.conversationTurn = 0; npc.conversationRound = 0; npc.conversationContext = []; npc.conversationTopic = "";
     npc.bubble = ""; npc.queuedBubble = ""; npc.generationPending = false; npc.speechTargetName = ""; npc.waitingForPlayer = false; npc.nextBehaviorAt = now + 700;
   }
   for (const npc of world.npcs) {
@@ -246,7 +266,7 @@ export function tickAmbientWorld(options: {
       const partner = world.npcs.find((item) => item.eventId === npc.partnerId);
       if (!partner) {
         npc.partnerId = 0; npc.speechTargetName = ""; npc.conversationTurn = 0; npc.conversationRound = 0;
-        npc.conversationContext = []; npc.generationPending = false; npc.nextBehaviorAt = now + 700;
+        npc.conversationContext = []; npc.conversationTopic = ""; npc.generationPending = false; npc.nextBehaviorAt = now + 700;
         continue;
       }
       if (!ambientCanHear(npc, partner)) {
@@ -264,11 +284,18 @@ export function tickAmbientWorld(options: {
             member.groupId = groupId; member.groupMembers = ids; member.groupTurn = -1; member.groupNextAt = 0;
             member.partnerId = 0; member.conversationTurn = 0; member.bubble = ""; member.nextBehaviorAt = now + 300;
           }
+          // 群聊开始时确定一个共同议题
+          const topic = pickAmbientTopic(hash(world.mapId * 131 + groupId * 17 + Math.floor(now / 4000)));
+          for (const member of members) member.conversationTopic = topic;
           continue;
         }
         npc.conversationTurn = 1;
         npc.conversationRound = partner.conversationRound = 1;
         npc.conversationContext = partner.conversationContext = [];
+        // 双人会话开始时确定一个议题，整段对话围绕它展开
+        npc.conversationTopic = partner.conversationTopic = pickAmbientTopic(
+          hash(world.mapId * 131 + npc.eventId * 17 + partner.eventId * 31 + Math.floor(now / 4000)),
+        );
         partner.conversationTurn = 2;
         npc.bubble = ""; npc.speechTargetName = partner.name; npc.generationPending = true; npc.queuedAt = now;
         partner.queuedBubble = ""; partner.speechTargetName = npc.name;
@@ -286,7 +313,7 @@ export function tickAmbientWorld(options: {
       const partner = world.npcs.find((item) => item.eventId === npc.partnerId);
       if (!partner) {
         npc.partnerId = 0; npc.speechTargetName = ""; npc.conversationTurn = 0; npc.conversationRound = 0;
-        npc.conversationContext = []; npc.generationPending = false; npc.nextBehaviorAt = now + 700;
+        npc.conversationContext = []; npc.conversationTopic = ""; npc.generationPending = false; npc.nextBehaviorAt = now + 700;
         continue;
       }
       const completedTurn = [npc.bubble, partner?.queuedBubble || ""].filter(Boolean);
@@ -306,7 +333,7 @@ export function tickAmbientWorld(options: {
       if (pausedConversationNpcIds.has(npc.eventId)) continue;
       if (npc.generationPending) continue;
       const partner = world.npcs.find((item) => item.eventId === npc.partnerId);
-      if (partner && npc.conversationRound < 2) {
+      if (partner && npc.conversationRound < 3) {
         partner.conversationRound = npc.conversationRound = npc.conversationRound + 1;
         partner.conversationTurn = 1; npc.conversationTurn = 2;
         partner.bubble = ""; partner.speechTargetName = npc.name; partner.generationPending = true; partner.queuedAt = now;
@@ -316,10 +343,10 @@ export function tickAmbientWorld(options: {
         continue;
       }
       const formerPartnerId = npc.partnerId;
-      npc.bubble = ""; npc.partnerId = 0; npc.speechTargetName = ""; npc.conversationTurn = 0; npc.conversationRound = 0; npc.conversationContext = [];
+      npc.bubble = ""; npc.partnerId = 0; npc.speechTargetName = ""; npc.conversationTurn = 0; npc.conversationRound = 0; npc.conversationContext = []; npc.conversationTopic = "";
       npc.lastPartnerId = formerPartnerId; npc.partnerCooldownUntil = now + 30000; npc.nextBehaviorAt = now + 400;
       if (partner) {
-        partner.bubble = ""; partner.partnerId = 0; partner.speechTargetName = ""; partner.conversationTurn = 0; partner.conversationRound = 0; partner.conversationContext = [];
+        partner.bubble = ""; partner.partnerId = 0; partner.speechTargetName = ""; partner.conversationTurn = 0; partner.conversationRound = 0; partner.conversationContext = []; partner.conversationTopic = "";
         partner.lastPartnerId = npc.eventId; partner.partnerCooldownUntil = now + 30000; partner.nextBehaviorAt = now + 400;
       }
       continue;

@@ -526,7 +526,7 @@ const buildAutoPlayerPrompt = (
 【主角不可改写事实】${actor.age}岁，性别${profile.gender}，门派“${profile.school}”，师从“${profile.teacher}”，外貌${profile.appearance}（容貌第${profile.appearanceTier}/8阶），综合武境第${profile.realmTier}/50阶“${profile.realm}”，目前使用${profile.weapon}，道德名声${actor.morals}，气血${actor.hp}/${actor.maxHp}、内力${actor.fp}/${actor.maxFp}、银两${actor.gold}。
 【当前场景】你在${mapName}，正在与“${lore.name}”交谈。【对方不可改写事实】${npcConversationFacts(id)}；性情${lore.personality}；说话方式${lore.speech}。你应记住此前双方的动作和话语，自然延续话题。
 
-规则：根据主角已有设定、江湖处境、对方身份和前文，自主推动一轮有意义的互动；双方姓名、年龄、性别、门派、外貌与武境均为硬事实，称谓和代词必须符合明确性别，性别未知时使用中性称呼；可以问询、回应、试探、讲述、调侃、示好、质疑或结束某个话题，但不要替NPC行动；不要凭空取得物品、完成任务、发动正式战斗或修改游戏状态；不要念出编号和属性数字。
+规则：根据主角已有设定、江湖处境、对方身份和前文，自主推动一轮有意义的互动；双方姓名、年龄、性别、门派、外貌与武境均为硬事实，称谓和代词必须符合明确性别，性别未知时使用中性称呼；可以问询、回应、试探、讲述、调侃、示好、质疑或结束某个话题，但不要替NPC行动；不要凭空取得物品、完成任务、发动正式战斗或修改游戏状态；不要念出编号和属性数字。要围绕当前话题深入：提出新信息、立场、疑问或反驳，给出有血有肉的具体内容，不要“是啊”“不错”这类空泛附和，也不要简单复述对方。
 
 每次必须严格按以下三个字段输出纯文本，不要添加Markdown、姓名或其他标题：
 状态：主角此刻可被观察到的神态、情绪或姿态
@@ -1112,7 +1112,7 @@ export default function OriginalWorld() {
       const current = stateRef.current,
         answer = await streamNpcReply({
           system: buildAutoPlayerPrompt(id, current.actor, getOriginalMap(current.position.mapId).name),
-          messages: history.length ? history : [{ role: "assistant", content: `${npcLore(id).name}正在等待你的回应。` }],
+          messages: history.length ? history : [{ role: "assistant", content: `${npcLore(id).name}正打量着你，等你先开口。挑一个具体话题——江湖近况、门派见闻、一个传闻或一桩旧事——自然开启交谈，不要只是寒暄。` }],
           signal: controller.signal,
           nextSpeaker: "主角",
           onToken: () => {},
@@ -2571,16 +2571,20 @@ export default function OriginalWorld() {
       groupNames = npc.groupId ? npc.groupMembers.map((id) => ambientWorld.current.npcs.find((item) => item.eventId === id)?.name).filter(Boolean).join("、") : "",
       groupNpcs = npc.groupId ? npc.groupMembers.map((id) => ambientWorld.current.npcs.find((item) => item.eventId === id)).filter((item): item is AmbientNpc => Boolean(item)) : [],
       groupLeader = npc.groupId ? ambientWorld.current.npcs.find((item) => item.eventId === npc.groupId) : undefined,
-      sessionContext = (groupLeader?.conversationContext || npc.conversationContext).slice(-6),
+      sessionContext = (groupLeader?.conversationContext || npc.conversationContext).slice(-8),
+      topic = npc.conversationTopic || "就近的见闻与感慨",
+      depthRule =
+        "台词必须有具体内容：一个疑问、见闻、立场、经历或反驳，真正推进讨论；" +
+        "严禁“是啊”“不错”“确实”“原来如此”“言之有理”这类空泛附和，严禁重复前文或复述对方原话。",
       mode = npc.groupId
-        ? `你正参与临时讨论，成员有${groupNames}。当前轮只允许${npc.name}发言，回应现有气泡所指向的上一位说话者；不得替其他成员发言、不得提前生成下一轮、不得交换发言顺序。请紧接本轮前文，只输出当前发言者嘴里实际说出的一句台词。严禁描写天气、风景、地点、环境、声音、衣物、身体、神态或动作。系统会在正文外标识关系；正文绝对不得输出或讨论 to、谁对谁、发言者、接收者、对话对象、气泡、格式、路由或标记，不得再次出现任何成员姓名。禁止旁白、括号说明或舞台提示。`
+        ? `你正参与围绕议题「${topic}」的临时讨论，成员有${groupNames}。当前轮只允许${npc.name}发言，回应上一位说话者的同时把讨论往前推：提出新事实、立场、经历或反驳。${depthRule}系统会在正文外标识关系；正文绝对不得输出或讨论 to、谁对谁、发言者、接收者、对话对象、气泡、格式、路由或标记，不得再次出现任何成员姓名。只输出嘴里实际说出的台词，严禁描写天气、风景、地点、环境、声音、衣物、身体、神态或动作，禁止旁白、括号说明或舞台提示。`
         : partner
-        ? `让${lore.name}与${partnerLore?.name || partner.name}延续同一个话题进行交谈，不要各说各话。发言顺序严格固定：先由${lore.name}说甲句，再由${partnerLore?.name || partner.name}针对甲句说乙句；不得颠倒、插话、替对方发言或生成第三句。系统会在正文外标识关系；正文绝对不得输出或讨论 to、谁对谁、发言者、接收者、对话对象、气泡、格式、路由或标记，也不得出现双方姓名。只写两人嘴里实际说出的台词，严禁描写天气、风景、地点、环境、声音、衣物、身体、动作或神态，禁止旁白、括号说明或舞台提示。严格只输出两行：\n甲：第一人的一句台词\n乙：第二人针对甲内容的一句台词`
+        ? `让${lore.name}与${partnerLore?.name || partner.name}围绕议题「${topic}」展开一场有来有回的交谈。发言顺序严格固定：先由${lore.name}说甲句(就议题给出具体的疑问、见闻或立场)，再由${partnerLore?.name || partner.name}针对甲句说乙句(承接并推进：补充细节、提出异议或说出自己的经历)。${depthRule}系统会在正文外标识关系；正文绝对不得输出或讨论 to、谁对谁、发言者、接收者、对话对象、气泡、格式、路由或标记，也不得出现双方姓名。只写两人嘴里实际说出的台词，严禁描写天气、风景、地点、环境、声音、衣物、身体、动作或神态，禁止旁白、括号说明或舞台提示。严格只输出两行：\n甲：第一人的一句台词\n乙：第二人针对甲内容的一句台词`
         : npc.speechTargetName
-          ? `让${lore.name}只对${npc.speechTargetName}说一句自然的开场或回应。只输出嘴里实际说出的台词正文。严禁描写天气、风景、地点、环境、声音、衣物、身体、动作或神态，不输出姓名、关系标记、旁白或格式说明。`
+          ? `让${lore.name}围绕议题「${topic}」对${npc.speechTargetName}说一句具体的话：可以提问、表态、分享见闻或反驳。${depthRule}只输出嘴里实际说出的台词正文。严禁描写天气、风景、地点、环境、声音、衣物、身体、动作或神态，不输出姓名、关系标记、旁白或格式说明。`
         : npc.bubbleKind === "action"
           ? `由你随机构思${lore.name}此刻做出的一个简短、具体且符合身份与地点的日常动作。必须由模型现场生成，只输出动作本身，不加姓名、引号、解释、台词或默认占位内容。`
-          : `写${lore.name}此刻随口说出的一句简短自言自语，只输出嘴里实际说出的话。严禁描写天气、风景、地点、环境、声音、衣物、身体、动作或神态，不加姓名、旁白或解释。`;
+          : `写${lore.name}此刻围绕议题「${topic}」或当下心绪的一句简短自言自语，要有具体的内心活动、判断或感慨，不要泛泛。只输出嘴里实际说出的台词，严禁描写天气、风景、地点、环境、声音、衣物、身体、动作或神态，不加姓名、旁白或解释。`;
     try {
       const namedTarget = npc.speechTargetName
         ? ambientWorld.current.npcs.find((item) => item.name === npc.speechTargetName)
@@ -2597,6 +2601,7 @@ export default function OriginalWorld() {
       ].filter((fact, index, facts) => facts.indexOf(fact) === index).join("\n");
       const answer = await streamNpcReply({
         system: `地点是${map.name}。
+本次交谈议题：${topic}。你们的讨论应围绕这个议题展开，给出具体立场、经历或见闻，避免泛泛而谈和空泛附和。
 【参与者不可改写事实】
 ${participantFacts}
 ${lore.name}的性情是${lore.personality}，说话方式是${lore.speech}。${partnerLore ? `${partnerLore.name}的性情是${partnerLore.personality}。` : ""}
@@ -2620,7 +2625,7 @@ ${mode}输出必须符合古代武侠世界，不推动正式任务，不改变�
         npc.generationPending = false;
         npc.bubbleUntil = Date.now() + Math.max(3400, npc.bubble.length * 180);
         partner.queuedBubble = `${partner.name} to ${npc.name}：“${lines[1]}”`;
-        const nextContext = [...npc.conversationContext, npc.bubble, partner.queuedBubble].filter(Boolean).slice(-6);
+        const nextContext = [...npc.conversationContext, npc.bubble, partner.queuedBubble].filter(Boolean).slice(-8);
         npc.conversationContext = partner.conversationContext = nextContext;
       } else {
         const address = npc.speechTargetName ? `${npc.name} to ${npc.speechTargetName}：` : "";
@@ -2646,7 +2651,7 @@ ${mode}输出必须符合古代武侠世界，不推动正式任务，不改变�
           const leader = ambientWorld.current.npcs.find((item) => item.eventId === npc.groupId);
           if (leader) {
             leader.groupNextAt = npc.bubbleUntil;
-            leader.conversationContext = [...leader.conversationContext, npc.bubble].slice(-6);
+            leader.conversationContext = [...leader.conversationContext, npc.bubble].slice(-8);
           }
         }
       }

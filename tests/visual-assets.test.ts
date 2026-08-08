@@ -94,6 +94,13 @@ test("player ambient bubble is always on the highest layer", () => {
   assert.ok(source.indexOf("ambientBubbles.push") < source.indexOf("ambientBubbles.sort"));
 });
 
+test("ambient conversations thread a topic and demand depth", () => {
+  assert.match(ambientSource, /conversationTopic/);
+  assert.match(ambientSource, /ambientTopics/);
+  assert.match(source, /本次交谈议题：/);
+  assert.match(source, /空泛附和/);
+});
+
 test("self-talk and action bubbles carry an explicit speaker label", () => {
   assert.match(source, /npc\.name\}正在和环境交互：/);
   assert.match(source, /npc\.name\}自言自语：/);
