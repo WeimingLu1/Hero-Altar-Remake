@@ -38,3 +38,14 @@ yarn-error.log*
 /.wrangler/
 /outputs/
 /work/
+
+# Local agent instructions and workspace automation state
+AGENTS.md
+**/AGENTS.md
+CLAUDE.md
+**/CLAUDE.md
+.agents/
+.codex/
+
+# Local duplicate produced by filesystem conflict resolution
+/README 2.md

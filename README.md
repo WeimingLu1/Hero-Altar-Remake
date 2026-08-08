@@ -1,107 +1,156 @@
-# 英雄坛说：云游志 Web 版
+# Hero Altar Remake · 英雄坛说：云游志
 
-当前游戏内容、视觉设计、地图规划、人物系统与版本状态，见
-[`docs/CURRENT_GAME_DESIGN.md`](docs/CURRENT_GAME_DESIGN.md)。
+一个以经典武侠 RPG 规则为基础、面向现代浏览器重制的单机 Web 游戏。
 
-工程与原作移植维护规范见 [`AGENTS.md`](AGENTS.md)。
+这个项目不只想复刻旧游戏界面，而是尝试打造一个会自行运转、让玩家感觉“人物真的生活在这里”的武侠世界：原作任务、武功、战斗、门派与数值系统构成稳定的游戏规则；本地大语言模型负责 NPC 的即时对话、自言自语和环境动作，让世界在玩家探索时持续发生小型演绎。
 
-## 工程运行
+> 当前版本已经具备完整地图探索、原作任务与战斗、人物成长、本地存档、NPC动态活动及本地LLM环境对话。NPC长期记忆、自主目标和长期规划仍在未来路线图中。
 
-A clean full-stack starter running on
-[vinext](https://github.com/cloudflare/vinext), with optional Cloudflare D1 and
-Drizzle support.
+## 实机画面
 
-### Prerequisites
+![英雄坛说：云游志](docs/screenshots/title.png)
 
-- Node.js `>=22.13.0`
+### 地图探索与室内场景
 
-### Quick Start
+![地图探索与室内场景](docs/screenshots/world-home.png)
+
+### NPC近身对话与世界演绎
+
+![NPC近身对话](docs/screenshots/ambient-dialogue.png)
+
+### 武功、调息与修炼系统
+
+![修炼与武功系统](docs/screenshots/training.png)
+
+战斗系统包含切磋、生死战与剧情战，支持普通攻击、武器匹配、招架、主动绝招、法术链、冷却、战斗物品、逃跑、战利品和道德/任务结算；战斗双方使用统一人物立绘，战斗过程保留完整事实记录并可由本地模型生成武侠叙事。
+
+## 已实现内容
+
+- 69张原作地图与完整转场网络。
+- 400个地图事件、955条事件指令和215个浏览器事件适配。
+- 原作NPC交谈、主线、悬赏、义工、石料、寻物、隐藏交换和坛挑战等任务。
+- 60门武功、40项主动绝招，以及打坐、冥思、吸气、疗伤、加力、法点和练功。
+- 33种物品、32种武器、34种防具、装备派生属性、自制武器与重铸。
+- 切磋、生死战、剧情战、掉落、道德、击杀记录和任务结算。
+- 饥饿、饮水、恢复、游戏时间、年龄、钓鱼、小游戏、铸剑、家园和家具。
+- 浏览器本地存档及JSON导入/导出。
+- 原创像素人物、门派服装、人物立绘、建筑、地形和室内家具。
+- NPC在当前屏幕真实可见格子内随机行走、避障、面对面靠近和恢复活动。
+- NPC自言自语、动作、一对一会话、定向群聊和玩家近身自动参与。
+- 统一LLM队列：玩家对话优先，其次为NPC近身对话、自言自语和动作。
+- 严格3×3近身听觉圈：玩家和NPC只有近身才能对话，同屏但未近身只能独演。
+- 气泡按照出现时间分层，最新内容显示在最上层；台词与动作使用不同颜色。
+- 独立的自由对话界面，支持玩家输入行动/语言和自动轮流对话。
+
+更完整的产品现状与每个系统的规则见：
+
+- [当前游戏设计与完成度](docs/CURRENT_GAME_DESIGN.md)
+- [技术架构与LLM接入](docs/ARCHITECTURE.md)
+- [后续路线图](docs/ROADMAP.md)
+- [移植审计](docs/PORT_AUDIT.md)
+- [严格一致性审计](docs/STRICT_PARITY_AUDIT.md)
+- [美术资源与署名](ART_CREDITS.md)
+
+## NPC世界模拟
+
+当前NPC运行时只模拟玩家当前地图和实际出现在640×480画布中的20×15格区域，以控制本地模型和浏览器资源消耗。
+
+- NPC在可通行区域随机活动，并避开玩家、NPC、入口和交互事件。
+- NPC可从较远处发现其他NPC并走近，但只有进入彼此周围一圈格子后才能对话。
+- 玩家进入同样的近身范围后，NPC或玩家可自然开场；多名近身NPC会形成有顺序的定向群聊。
+- 玩家移动会立即退出环境会话；NPC结束谈话后恢复活动。
+- 未近身但仍在屏幕中的NPC可自言自语或进行独立动作演绎。
+- 所有环境文本都由LLM生成；项目不内置默认台词、动作池或模型失败时的文本兜底。
+- 即时会话只有短期上下文，不写入存档，也不会修改任务、背包或战斗状态。
+
+## 本地LLM与LM Studio
+
+当前默认使用[LM Studio](https://lmstudio.ai/)在玩家本机运行模型，通过它的OpenAI兼容接口生成：
+
+- NPC自由对话；
+- 玩家自动回复；
+- NPC与NPC的即时对话和群聊；
+- NPC自言自语和动作；
+- 可选的战斗叙事。
+
+默认代理地址为同源的`/api/lm-studio`，服务端再访问：
+
+```text
+http://127.0.0.1:1234/v1/chat/completions
+```
+
+使用方式：
+
+1. 安装并打开LM Studio。
+2. 下载一个支持中文角色扮演的指令模型。
+3. 在LM Studio中加载模型并启动Local Server。
+4. 确保端口为`1234`，然后启动本项目。
+
+本地模型不是硬编码依赖。所有模型请求集中在`app/game-core/lm-studio.ts`和`app/api/lm-studio/route.ts`。如果希望接入OpenAI、Anthropic、Gemini、Ollama或其他LLM API，可以替换服务端代理与传输层，同时保留现有提示词、队列、会话生命周期和游戏状态隔离规则。接入云端API时请自行处理密钥、费用、限流、隐私和内容政策，切勿把API密钥提交到仓库。
+
+## 运行项目
+
+要求Node.js `>=22.13.0`。
 
 ```bash
+git clone https://github.com/WeimingLu1/Hero-Altar-Remake.git
+cd Hero-Altar-Remake
 npm install
 npm run dev
-npm run build
 ```
 
-This starter does not use `wrangler.jsonc`.
+打开终端显示的本地地址，正式游戏入口为`/original`。
 
-### Included Shape
+常用命令：
 
-- edit site code under `app/`
-- `.openai/hosting.json` declares optional Sites D1 and R2 bindings
-- `vite.config.ts` simulates declared bindings for local development
-- `db/schema.ts` starts intentionally empty
-- `examples/d1/` contains an optional D1 example surface
-- `drizzle.config.ts` supports local migration generation when needed
-
-### Workspace Auth Headers
-
-Signed-in visitors receive both `oai-authenticated-user-id` and `oai-authenticated-user-email`. Private Sites require every visitor to sign in; public Sites may also have anonymous visitors, for whom neither header is present.
-
-The user ID is stable for the same user on the same Site and different across Sites. Email and name are intended for display or contact purposes.
-
-SIWC-authenticated workspace sites may also receive
-`oai-authenticated-user-full-name` when the user's SIWC profile has a non-empty
-`name` claim. The full-name value is percent-encoded UTF-8 and is accompanied by
-`oai-authenticated-user-full-name-encoding: percent-encoded-utf-8`.
-
-Treat the full name as optional and fall back to email when it is absent:
-
-```tsx
-import { headers } from "next/headers";
-
-export default async function Home() {
-  const requestHeaders = await headers();
-  const userId = requestHeaders.get("oai-authenticated-user-id");
-  const email = requestHeaders.get("oai-authenticated-user-email");
-  const encodedFullName = requestHeaders.get("oai-authenticated-user-full-name");
-  const fullName =
-    encodedFullName &&
-    requestHeaders.get("oai-authenticated-user-full-name-encoding") ===
-      "percent-encoded-utf-8"
-      ? decodeURIComponent(encodedFullName)
-      : null;
-
-  const displayName = fullName ?? email;
-  // ...
-}
+```bash
+npm run dev      # 本地开发
+npm run lint     # ESLint检查
+npm test         # 正式构建 + 全量逻辑/视觉/SSR测试
+npm run build    # 生产构建
+npm run start    # 启动生产构建
 ```
 
-### Optional Dispatch-Owned ChatGPT Sign-In
+没有运行LM Studio时，原作地图、任务、战斗、成长和存档仍可使用；依赖LLM的即时演绎会静默取消，不会使用预设文本冒充模型输出。
 
-Import the ready-to-use helpers from `app/chatgpt-auth.ts` when the site needs
-optional or required ChatGPT sign-in:
+## 操作
 
-- Use `getChatGPTUser()` for optional signed-in UI.
-- Use `requireChatGPTUser(returnTo)` for server-rendered pages that should send
-  anonymous visitors through Sign in with ChatGPT.
-- Use `chatGPTSignInPath(returnTo)` and `chatGPTSignOutPath(returnTo)` for
-  browser links or actions.
-- Pass a same-origin relative `returnTo` path for the destination after sign-in
-  or sign-out. The helper validates and safely encodes it.
-- Mark protected pages with `export const dynamic = "force-dynamic"` because
-  they depend on per-request identity headers.
+- 移动：`WASD`或方向键
+- 互动/确认：`E`或`Enter`
+- 返回：`X`或`Escape`
+- 人物、背包和武功：`C`
+- 修炼：`R`
+- 任务：`T`
+- 轻功：`H`
+- 秘技：`K`
+- 战斗绝招：`Q`
+- 战斗物品：`I`
+- 生死战逃跑：`G`
 
-Dispatch owns `/signin-with-chatgpt`, `/signout-with-chatgpt`, `/callback`, the
-OAuth cookies, and identity header injection. Do not implement app routes for
-those reserved paths. Routes that do not import and call the helper remain
-anonymous-compatible.
+## 项目目标与未来方向
 
-SIWC establishes identity only; it does not prove workspace membership. Use the
-Sites hosting platform's access policy controls for workspace-wide restrictions,
-or enforce explicit server-side membership or allowlist checks.
+现阶段已经证明“原作确定性规则 + LLM即时演绎”可以在本地单机游戏中共同运行。下一阶段的重点不是无限增加随机台词，而是让NPC形成连续生活：
 
-Use SIWC for account pages, user-specific dashboards, saved records, and write
-actions tied to the current ChatGPT user. Leave public content anonymous.
+- 可控、可遗忘、可总结的NPC长期记忆；
+- NPC个人目标、日程、关系与地点规划；
+- 记忆对称性、谣言传播和关系变化；
+- 行为规划器与游戏规则验证层，避免LLM直接篡改状态；
+- 更通用的LLM Provider接口和配置界面；
+- 对本地模型速度、上下文与多人场景的性能评测；
+- 更多原创地图模块、角色动作帧、战斗特效和音乐音效；
+- 自动化端到端游玩测试和更多平台部署方式。
 
-### Useful Commands
+详细优先级、风险和验收标准见[ROADMAP](docs/ROADMAP.md)。
 
-- `npm run dev`: start local development
-- `npm run build`: verify the vinext build output
-- `npm test`: build the starter and verify its rendered loading skeleton
-- `npm run db:generate`: generate Drizzle migrations after schema changes
+## 设计原则
 
-### Learn More
+1. 原作任务和数值结算由确定性代码负责，LLM不能直接改变正式状态。
+2. 对话必须近身；屏幕范围决定哪些NPC被模拟，听觉圈决定谁能交谈。
+3. 玩家相关生成永远优先，并为玩家保留本地模型资源。
+4. 模型不可用时静默失败，不伪造默认输出。
+5. 环境会话短暂、可取消、不持久化；未来记忆系统必须可审计和可控。
+6. 原创美术不覆盖关键事件、入口和碰撞规则。
 
-- [vinext Documentation](https://github.com/cloudflare/vinext)
-- [Drizzle D1 Guide](https://orm.drizzle.team/docs/get-started/d1-new)
+## 当前状态
+
+当前主分支通过142项逻辑/视觉测试和3项服务端渲染测试，共145项，0失败。项目仍在积极开发中，接口、存档结构和美术资源可能继续调整。

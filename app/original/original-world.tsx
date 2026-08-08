@@ -5,11 +5,23 @@ import {
   friendlyEventName,
   getOriginalMap,
   originalStart,
+  passable,
   triggerEvent,
   type MapEvent,
   type OriginalMap,
   type WorldPosition,
 } from "../game-core/original-world";
+import {
+  ambientNpcAt,
+  ambientCanHear,
+  ambientNpcInViewport,
+  ambientViewportBounds,
+  createAmbientWorld,
+  tickAmbientWorld,
+  type AmbientBubbleKind,
+  type AmbientNpc,
+  type AmbientWorld,
+} from "../game-core/ambient-npc";
 import {
   applySceneResolution,
   resolveSceneEvent,
@@ -341,6 +353,15 @@ type NpcDialogueMessage =
       speech: string;
       raw: string;
     };
+type AmbientPlayerState = {
+  npcIds: number[];
+  replyToNpcId: number;
+  bubble: string;
+  bubbleUntil: number;
+  bubbleShownAt: number;
+  replyAt: number;
+  llmRequested: boolean;
+};
 const newActor = (): SceneActorState => ({
   name: "江湖少侠",
   inventory: {},
@@ -444,6 +465,44 @@ const parseNpcDialogue = (raw: string) => {
     speech: section("语言") || (!/[状态动作语言][：:]/.test(raw) ? raw.trim() : ""),
   };
 };
+const cleanAmbientSpeech = (raw: string, forbiddenNames: string[] = []) => {
+  const parsed = parseNpcDialogue(raw),
+    speechOnly = parsed.speech || raw,
+    escapedNames = forbiddenNames.filter(Boolean).map((name) => name.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")),
+    namePattern = escapedNames.length ? escapedNames.join("|") : "(?!)",
+    withoutDirections = speechOnly
+      .replace(/(?:^|\n)\s*(?:状态|动作|神态|表情|姿态|旁白)[：:].*(?=\n|$)/g, " ")
+      .replace(/[（(【[].*?[）)】\]]/g, " ")
+      .replace(/^\s*(?:甲|乙|语言|台词)[：:]\s*/, "")
+      .replace(/^[^：\n]{1,20}\s+to\s+[^：\n]{1,20}[：:]\s*/, "")
+      .replace(/[^，。！？；：\n“”]{1,16}\s+to\s+[^，。！？；：\n“”]{1,16}/gi, " ")
+      .replace(/(?:谁|某人|某某|发言者)\s*(?:对|到|to)\s*(?:谁|某人|某某|接收者)/gi, " ")
+      .replace(/(?:发言者|接收者|说话者|对话对象|外层|气泡|格式|路由|标记)[：:]?/g, " ")
+      .replace(new RegExp(`^(?:${namePattern})(?:说|说道|问道|答道|道)?[：:,，]?\\s*`, "g"), "")
+      .replace(new RegExp(`(?:对|向)(?:${namePattern})(?:说|说道|问道|答道)[：:,，]?\\s*`, "g"), "")
+      .replace(new RegExp(`(?:${namePattern})`, "g"), "")
+      .replace(/[*_`#]/g, "")
+      .replace(/[“”]/g, "")
+      .replace(/\s+/g, " ")
+      .trim(),
+    narration = /(?:风|雨|雪|月光|阳光|雾|云|竹林|树影|花瓣|衣袖|发丝|眼眸|目光|嘴角|声音|回声).{0,14}(?:吹|掠|穿|落|摇|映|响|传|动|起|泛|垂|飘)|(?:微微|轻轻|缓缓|悄然).{0,10}(?:动|笑|抬|垂|转|望|看|吹|走|摇|点|皱)|(?:站|坐|走|立|倚)在.{0,14}(?:上|下|旁|边|前|后|中)/,
+    spokenClauses = withoutDirections.split(/(?<=[，。！？；])/).filter((clause) => !narration.test(clause)).join("").trim();
+  return spokenClauses && !/^(?:to|谁|某某|格式|接收者|发言者)+$/i.test(spokenClauses) ? spokenClauses : "……";
+};
+
+const cleanAmbientAction = (raw: string, forbiddenNames: string[] = []) => {
+  const escapedNames = forbiddenNames.filter(Boolean).map((name) => name.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")),
+    namePattern = escapedNames.length ? escapedNames.join("|") : "(?!)",
+    action = (parseNpcDialogue(raw).action || raw)
+      .replace(/(?:^|\n)\s*(?:状态|语言|台词|解释|旁白)[：:].*(?=\n|$)/g, " ")
+      .replace(/^\s*(?:动作)[：:]\s*/, "")
+      .replace(/[（(【[].*?[）)】\]]/g, " ")
+      .replace(new RegExp(`(?:${namePattern})`, "g"), "")
+      .replace(/[*_`#“”]/g, "")
+      .replace(/\s+/g, " ")
+      .trim();
+  return action && !/^(?:没有动作|无动作|无|暂无|……)$/.test(action) ? action : "……";
+};
 
 const buildAutoPlayerPrompt = (
   id: number,
@@ -523,6 +582,16 @@ export default function OriginalWorld() {
     nameInput = useRef<HTMLInputElement>(null),
     chatEnd = useRef<HTMLDivElement>(null),
     chatAbort = useRef<AbortController | null>(null),
+    ambientWorld = useRef<AmbientWorld>({ mapId: 0, npcs: [] }),
+    ambientPlayer = useRef<AmbientPlayerState>({ npcIds: [], replyToNpcId: 0, bubble: "", bubbleUntil: 0, bubbleShownAt: 0, replyAt: 0, llmRequested: true }),
+    ambientPlayerStarts = useRef(false),
+    lastPlayerMove = useRef(0),
+    ambientPlayerCooldown = useRef(0),
+    ambientLlmActive = useRef(0),
+    ambientEpoch = useRef(0),
+    ambientPaused = useRef(false),
+    ambientWasPaused = useRef(false),
+    ambientControllers = useRef<Set<AbortController>>(new Set()),
     battleNarrationAbort = useRef<AbortController | null>(null),
     battleNarrativesRef = useRef<BattleNarrative[]>([]),
     stateRef = useRef<WorldSave>(state),
@@ -680,6 +749,19 @@ export default function OriginalWorld() {
   );
   const move = useCallback(
     (dx: number, dy: number) => {
+      lastPlayerMove.current = Date.now();
+      const interruptedIds = new Set(ambientPlayer.current.npcIds);
+      for (const npc of ambientWorld.current.npcs.filter((item) => interruptedIds.has(item.eventId))) {
+        npc.partnerId = 0; npc.groupId = 0; npc.groupMembers = []; npc.groupTurn = -1; npc.groupNextAt = 0;
+        npc.bubble = ""; npc.queuedBubble = ""; npc.generationPending = false; npc.llmRequested = true;
+        npc.speechTargetName = ""; npc.conversationContext = []; npc.nextBehaviorAt = Date.now() + 700;
+      }
+      ambientEpoch.current += 1;
+      ambientControllers.current.forEach((controller) => controller.abort());
+      ambientControllers.current.clear();
+      ambientPlayer.current = { npcIds: [], replyToNpcId: 0, bubble: "", bubbleUntil: 0, bubbleShownAt: 0, replyAt: 0, llmRequested: true };
+      ambientPlayerStarts.current = false;
+      ambientPlayerCooldown.current = Date.now() + 450;
       if (
         eventText ||
         npcMenu ||
@@ -703,20 +785,12 @@ export default function OriginalWorld() {
         sync(s);
         return;
       }
-      const blocking = map.events.find((e) => {
-        const visual = eventVisual(e, s);
-        return (
-          e.x === nx &&
-          e.y === ny &&
-          visual.kind === "npc" &&
-          !activePage(e).through
-        );
-      });
+      const ambientBlocking = ambientNpcAt(ambientWorld.current, nx, ny);
       const wantedBlocking =
         s.tasks.wantedPlace === s.position.mapId &&
         s.tasks.wantedX === nx &&
         s.tasks.wantedY === ny;
-      if (!blocking && !wantedBlocking) {
+      if (!ambientBlocking && !wantedBlocking) {
         if (npcChat) {
           chatAbort.current?.abort();
           chatAbort.current = null;
@@ -764,17 +838,14 @@ export default function OriginalWorld() {
         [p.x + 1, p.y],
         [p.x, p.y - 1],
       ],
-      npc = candidates.find(([x, y]) => {
-        const event = map.events.find((e) => e.x === x && e.y === y);
-        return event && eventVisual(event, s).kind === "npc";
-      }),
+      npc = candidates.map(([x, y]) => ambientNpcAt(ambientWorld.current, x, y)).find(Boolean),
       interactive = candidates.find(([x, y]) => {
         const event = map.events.find((e) => e.x === x && e.y === y);
         const kind = event ? eventVisual(event, s).kind : "none";
-        return event && kind !== "none" && kind !== "corpse";
+        return event && kind !== "none" && kind !== "corpse" && kind !== "npc";
       });
     if (npc) {
-      runAt(npc[0], npc[1]);
+      runAt(npc.homeX, npc.homeY);
       return;
     }
     if (interactive) {
@@ -2278,11 +2349,305 @@ export default function OriginalWorld() {
     const id = window.setInterval(() => studySelected(), 1000 / 120);
     return () => window.clearInterval(id);
   }, [study, studyActive, studySelected]);
+  const ambientPopulationKey = `${state.position.mapId}:${(state.actor.killList || []).join(",")}`,
+    ambientShouldPause = screen !== "play" || Boolean(eventText || npcMenu || npcChat || shop || study || battle || menu || cheatMenu || cultivation !== null || arcade || life);
+  useEffect(() => {
+    ambientPaused.current = ambientShouldPause;
+    if (ambientShouldPause && !ambientWasPaused.current) {
+      const interruptedIds = new Set(ambientPlayer.current.npcIds);
+      for (const npc of ambientWorld.current.npcs.filter((item) => interruptedIds.has(item.eventId))) {
+        npc.partnerId = 0; npc.groupId = 0; npc.groupMembers = []; npc.groupTurn = -1; npc.groupNextAt = 0;
+        npc.bubble = ""; npc.queuedBubble = ""; npc.generationPending = false; npc.llmRequested = true;
+        npc.speechTargetName = ""; npc.conversationContext = []; npc.nextBehaviorAt = Date.now() + 700;
+      }
+      ambientEpoch.current += 1;
+      ambientControllers.current.forEach((controller) => controller.abort());
+      ambientControllers.current.clear();
+      ambientPlayer.current = { npcIds: [], replyToNpcId: 0, bubble: "", bubbleUntil: 0, bubbleShownAt: 0, replyAt: 0, llmRequested: true };
+      ambientPlayerStarts.current = false;
+      lastPlayerMove.current = Date.now();
+    }
+    ambientWasPaused.current = ambientShouldPause;
+  }, [ambientShouldPause]);
+  useEffect(() => {
+    const map = getOriginalMap(state.position.mapId),
+      entries = map.events.flatMap((event) => {
+        const visual = eventVisual(event, stateRef.current);
+        if (visual.kind !== "npc") return [];
+        const lore = npcLore(visual.npcId || 0);
+        return [{ eventId: event.id, npcId: visual.npcId || 0, name: visual.label, identity: lore.identity, x: event.x, y: event.y }];
+      });
+    ambientWorld.current = createAmbientWorld(map.id, Date.now(), entries);
+    ambientEpoch.current += 1;
+    ambientControllers.current.forEach((controller) => controller.abort());
+    ambientControllers.current.clear();
+    ambientPlayer.current = { npcIds: [], replyToNpcId: 0, bubble: "", bubbleUntil: 0, bubbleShownAt: 0, replyAt: 0, llmRequested: true };
+    ambientPlayerStarts.current = false;
+    lastPlayerMove.current = Date.now();
+  }, [ambientPopulationKey, state.position.mapId]);
+  useEffect(() => {
+    if (screen !== "play") return;
+    const id = window.setInterval(() => {
+      if (ambientPaused.current) return;
+      const current = stateRef.current,
+        map = getOriginalMap(current.position.mapId),
+        world = ambientWorld.current;
+      if (world.mapId !== map.id) return;
+      const viewport = ambientViewportBounds(map.width, map.height, current.position.x, current.position.y);
+      tickAmbientWorld({
+        world,
+        now: Date.now(),
+        playerX: current.position.x,
+        playerY: current.position.y,
+        indoor: mapTheme(map) === "indoor",
+        viewport,
+        pausedConversationNpcIds: ambientPlayer.current.npcIds,
+        canEnter: (moving, x, y) => {
+          const direction = x < moving.x ? 4 : x > moving.x ? 6 : y < moving.y ? 8 : 2;
+          if (!passable(map, x, y, direction)) return false;
+          if (map.events.some((event) => {
+            const visual = eventVisual(event, current);
+            return event.id !== moving.eventId && event.x === x && event.y === y && visual.kind !== "none" && visual.kind !== "npc";
+          })) return false;
+          return !world.npcs.some((npc) => npc.eventId !== moving.eventId && npc.x === x && npc.y === y);
+        },
+      });
+      const now = Date.now(), playerAmbient = ambientPlayer.current;
+      if (playerAmbient.bubble && playerAmbient.bubbleUntil <= now) {
+        ambientPlayer.current = { npcIds: [], replyToNpcId: 0, bubble: "", bubbleUntil: 0, bubbleShownAt: 0, replyAt: 0, llmRequested: true };
+        ambientPlayerStarts.current = false;
+        ambientPlayerCooldown.current = now + 10000;
+      }
+      if (now - lastPlayerMove.current >= 450 && now >= ambientPlayerCooldown.current && !ambientPlayer.current.npcIds.length) {
+        const nearby = world.npcs.filter((npc) => ambientCanHear(npc, current.position)).sort((a, b) => a.eventId - b.eventId);
+        if (nearby.length) {
+          const ids = nearby.map((npc) => npc.eventId), groupId = nearby.length > 1 ? ids[0] : 0,
+            candidate = nearby[0], playerStarts = (map.id + current.position.x + current.position.y + ids.reduce((sum, id) => sum + id, 0)) % 2 === 0;
+          const priorLinks = new Set(nearby.flatMap((npc) => [...npc.groupMembers, npc.partnerId].filter(Boolean)));
+          for (const linked of world.npcs.filter((npc) => priorLinks.has(npc.eventId) && !ids.includes(npc.eventId))) {
+            linked.partnerId = 0; linked.groupId = 0; linked.groupMembers = []; linked.groupTurn = -1; linked.groupNextAt = 0;
+            linked.bubble = ""; linked.queuedBubble = ""; linked.generationPending = false; linked.speechTargetName = "";
+            linked.conversationContext = []; linked.nextBehaviorAt = now + 700;
+          }
+          for (const npc of nearby) {
+            npc.partnerId = 0; npc.conversationTurn = 0; npc.conversationRound = 0;
+            npc.groupId = groupId; npc.groupMembers = groupId ? ids : []; npc.groupTurn = groupId ? -1 : 0; npc.groupNextAt = 0;
+            npc.bubble = ""; npc.queuedBubble = ""; npc.generationPending = false; npc.conversationContext = [];
+            npc.nextBehaviorAt = now + 30000;
+          }
+          if (!playerStarts) {
+            candidate.speechTargetName = current.actor.name || "少侠";
+            candidate.bubbleKind = "speech"; candidate.bubbleUntil = now + 12000;
+            candidate.llmRequested = false; candidate.generationPending = true; candidate.queuedAt = now;
+            if (groupId) candidate.groupTurn = 0;
+          }
+          ambientPlayerStarts.current = playerStarts;
+          ambientPlayer.current = { npcIds: ids, replyToNpcId: candidate.eventId, bubble: "", bubbleUntil: 0, bubbleShownAt: 0, replyAt: now + (playerStarts ? 0 : 1200), llmRequested: false };
+        }
+      }
+    }, 650);
+    return () => window.clearInterval(id);
+  }, [screen, state.position.mapId]);
+  const enrichAmbientPlayer = useCallback(async () => {
+    const player = ambientPlayer.current;
+    if (player.llmRequested || !player.npcIds.length || Date.now() < player.replyAt || ambientLlmActive.current >= 3) return;
+    player.llmRequested = true;
+    ambientLlmActive.current += 1;
+    const epoch = ambientEpoch.current;
+    const controller = new AbortController();
+    ambientControllers.current.add(controller);
+    const current = stateRef.current,
+      participants = player.npcIds.map((eventId) => ambientWorld.current.npcs.find((npc) => npc.eventId === eventId)).filter((npc): npc is AmbientNpc => Boolean(npc)),
+      target = participants.find((npc) => npc.eventId === player.replyToNpcId) || participants[0];
+    if (!target) { ambientControllers.current.delete(controller); ambientLlmActive.current -= 1; return; }
+    const playerOpening = ambientPlayerStarts.current;
+    if (!playerOpening && (target.generationPending || !target.bubble)) {
+      player.llmRequested = false;
+      ambientControllers.current.delete(controller);
+      ambientLlmActive.current -= 1;
+      if (!target.generationPending) {
+        ambientPlayer.current = { npcIds: [], replyToNpcId: 0, bubble: "", bubbleUntil: 0, bubbleShownAt: 0, replyAt: 0, llmRequested: true };
+        ambientPlayerStarts.current = false;
+      }
+      return;
+    }
+    try {
+      const answer = await streamNpcReply({
+        system: `${buildAutoPlayerPrompt(target.npcId, current.actor, getOriginalMap(current.position.mapId).name)}\n你是被附近NPC主动搭话，或刚刚驻足加入了他们的谈话。请依据主角设定和本轮前文自然接话，不要生硬自我介绍，不要另起无关话题。${participants.length > 1 ? `在场NPC有${participants.map((npc) => npc.name).join("、")}，你的话应能融入多人交流。` : ""}\n本次是地图头顶即时会话，覆盖上面的三字段格式：只输出主角实际说出口的一句台词。系统会在正文之外标识说话关系；正文绝对不得输出或讨论 to、谁对谁、发言者、接收者、对话对象、气泡、格式、路由或标记，不得再次出现任何参与者姓名，不得写“某某说/问/答”或“对某某说”。禁止输出状态、动作、神态、表情、姿态、旁白、姓名、字段标题、括号说明或舞台提示。`,
+        messages: [{ role: "assistant", content: [...new Set(participants.flatMap((npc) => npc.conversationContext)), ...participants.map((npc) => npc.bubble).filter(Boolean)].slice(-6).join("\n") || (playerOpening ? "你刚刚走近了附近人物，决定自然地开口。" : "附近人物正在看着你。") }],
+        nextSpeaker: "主角", maxOutputTokens: 120, signal: controller.signal, onToken: () => {},
+      });
+      if (ambientEpoch.current !== epoch || ambientPaused.current || !ambientPlayer.current.npcIds.length) return;
+      const playerLine = cleanAmbientSpeech(answer, [current.actor.name, ...participants.map((npc) => npc.name)]);
+      if (playerLine === "……") throw new Error("LM Studio returned no usable ambient player line");
+      ambientPlayer.current.bubble = `${current.actor.name || "少侠"} to ${target.name}：“${playerLine}”`;
+      ambientPlayer.current.bubbleShownAt = Date.now();
+      ambientPlayer.current.bubbleUntil = Date.now() + Math.max(4200, ambientPlayer.current.bubble.length * 180);
+      ambientPlayerStarts.current = false;
+      participants.forEach((npc) => {
+        npc.conversationContext = [...npc.conversationContext, ambientPlayer.current.bubble].slice(-6);
+        if (npc.bubbleUntil <= Date.now()) npc.bubble = "";
+      });
+      if (playerOpening) {
+        target.speechTargetName = current.actor.name || "少侠";
+        target.bubbleKind = "speech"; target.bubbleUntil = ambientPlayer.current.bubbleUntil + 12000;
+        target.llmRequested = false; target.generationPending = true; target.queuedAt = Date.now();
+        if (target.groupId) target.groupTurn = 0;
+      }
+    } catch {
+      if (ambientEpoch.current === epoch && !ambientPaused.current) {
+        ambientPlayer.current = { npcIds: [], replyToNpcId: 0, bubble: "", bubbleUntil: 0, bubbleShownAt: 0, replyAt: 0, llmRequested: true };
+        ambientPlayerStarts.current = false;
+      }
+    } finally {
+      ambientControllers.current.delete(controller);
+      ambientLlmActive.current = Math.max(0, ambientLlmActive.current - 1);
+    }
+  }, []);
+  const enrichAmbientNpc = useCallback(async (npc: AmbientNpc) => {
+    if (ambientLlmActive.current >= 3) return;
+    ambientLlmActive.current += 1;
+    const epoch = ambientEpoch.current;
+    const controller = new AbortController();
+    ambientControllers.current.add(controller);
+    npc.llmRequested = true;
+    npc.bubbleUntil = Date.now() + 30000;
+    const current = stateRef.current,
+      map = getOriginalMap(current.position.mapId),
+      lore = npcLore(npc.npcId),
+      partner = npc.partnerId && !npc.groupId ? ambientWorld.current.npcs.find((item) => item.eventId === npc.partnerId) : undefined,
+      partnerLore = partner ? npcLore(partner.npcId) : undefined,
+      groupNames = npc.groupId ? npc.groupMembers.map((id) => ambientWorld.current.npcs.find((item) => item.eventId === id)?.name).filter(Boolean).join("、") : "",
+      groupLeader = npc.groupId ? ambientWorld.current.npcs.find((item) => item.eventId === npc.groupId) : undefined,
+      sessionContext = (groupLeader?.conversationContext || npc.conversationContext).slice(-6),
+      mode = npc.groupId
+        ? `你正参与临时讨论，成员有${groupNames}。当前轮只允许${npc.name}发言，回应现有气泡所指向的上一位说话者；不得替其他成员发言、不得提前生成下一轮、不得交换发言顺序。请紧接本轮前文，只输出当前发言者嘴里实际说出的一句台词。严禁描写天气、风景、地点、环境、声音、衣物、身体、神态或动作。系统会在正文外标识关系；正文绝对不得输出或讨论 to、谁对谁、发言者、接收者、对话对象、气泡、格式、路由或标记，不得再次出现任何成员姓名。禁止旁白、括号说明或舞台提示。`
+        : partner
+        ? `让${lore.name}与${partnerLore?.name || partner.name}延续同一个话题进行交谈，不要各说各话。发言顺序严格固定：先由${lore.name}说甲句，再由${partnerLore?.name || partner.name}针对甲句说乙句；不得颠倒、插话、替对方发言或生成第三句。系统会在正文外标识关系；正文绝对不得输出或讨论 to、谁对谁、发言者、接收者、对话对象、气泡、格式、路由或标记，也不得出现双方姓名。只写两人嘴里实际说出的台词，严禁描写天气、风景、地点、环境、声音、衣物、身体、动作或神态，禁止旁白、括号说明或舞台提示。严格只输出两行：\n甲：第一人的一句台词\n乙：第二人针对甲内容的一句台词`
+        : npc.speechTargetName
+          ? `让${lore.name}只对${npc.speechTargetName}说一句自然的开场或回应。只输出嘴里实际说出的台词正文。严禁描写天气、风景、地点、环境、声音、衣物、身体、动作或神态，不输出姓名、关系标记、旁白或格式说明。`
+        : npc.bubbleKind === "action"
+          ? `由你随机构思${lore.name}此刻做出的一个简短、具体且符合身份与地点的日常动作。必须由模型现场生成，只输出动作本身，不加姓名、引号、解释、台词或默认占位内容。`
+          : `写${lore.name}此刻随口说出的一句简短自言自语，只输出嘴里实际说出的话。严禁描写天气、风景、地点、环境、声音、衣物、身体、动作或神态，不加姓名、旁白或解释。`;
+    try {
+      const namedTarget = npc.speechTargetName
+        ? ambientWorld.current.npcs.find((item) => item.name === npc.speechTargetName)
+        : undefined;
+      if (partner && !ambientCanHear(npc, partner)) throw new Error("ambient speakers moved out of hearing range");
+      if (namedTarget && !ambientCanHear(npc, namedTarget)) throw new Error("ambient target moved out of hearing range");
+      if (npc.speechTargetName === (current.actor.name || "少侠") && !ambientCanHear(npc, current.position))
+        throw new Error("player moved out of hearing range");
+      const answer = await streamNpcReply({
+        system: `地点是${map.name}。${lore.name}的身份是${lore.identity}，性情是${lore.personality}，说话方式是${lore.speech}。${partnerLore ? `${partnerLore.name}的身份是${partnerLore.identity}，性情是${partnerLore.personality}。` : ""}${mode}输出必须符合古代武侠世界，不推动正式任务，不改变物品或战斗状态。`,
+        messages: [{ role: "user", content: `${sessionContext.length ? `本轮仅供理解上下文的已说台词：\n${sessionContext.join("\n")}\n` : ""}${npc.bubbleKind === "action" ? "只生成一个动作。" : "只生成要求的口头台词，不补充任何背景描写。"}` }],
+        signal: controller.signal,
+        nextSpeaker: npc.bubbleKind === "action" ? "动作" : npc.name,
+        // A pair request produces two connected lines; solo and group turns only need one.
+        // Keeping the shared context short and budgets asymmetric prevents busy maps from
+        // monopolising a small local LM Studio model.
+        maxOutputTokens: partner ? 150 : 96,
+        onToken: () => {},
+      });
+      if (ambientEpoch.current !== epoch || ambientPaused.current || ambientWorld.current.mapId !== map.id || !npc.generationPending) return;
+      if (partner) {
+        const lines = answer.split("\n").map((line) => cleanAmbientSpeech(line, [npc.name, partner.name])).filter((line) => line !== "……");
+        if (lines.length < 2) throw new Error("LM Studio returned an incomplete paired exchange");
+        npc.bubble = `${npc.name} to ${partner.name}：“${lines[0]}”`;
+        npc.bubbleShownAt = Date.now();
+        npc.generationPending = false;
+        npc.bubbleUntil = Date.now() + Math.max(3400, npc.bubble.length * 180);
+        partner.queuedBubble = `${partner.name} to ${npc.name}：“${lines[1]}”`;
+        const nextContext = [...npc.conversationContext, npc.bubble, partner.queuedBubble].filter(Boolean).slice(-6);
+        npc.conversationContext = partner.conversationContext = nextContext;
+      } else {
+        const address = npc.speechTargetName ? `${npc.name} to ${npc.speechTargetName}：` : "";
+        const participantNames = npc.groupId
+          ? [...npc.groupMembers.map((id) => ambientWorld.current.npcs.find((item) => item.eventId === id)?.name || ""), npc.speechTargetName]
+          : [npc.name];
+        const generatedLine = npc.bubbleKind === "action" ? cleanAmbientAction(answer, participantNames) : cleanAmbientSpeech(answer, participantNames);
+        if (generatedLine === "……") throw new Error("LM Studio returned no usable ambient line");
+        npc.bubble = npc.bubbleKind === "speech" ? `${address}“${generatedLine}”` : generatedLine;
+        npc.bubbleShownAt = Date.now();
+        npc.generationPending = false;
+        npc.bubbleUntil = Date.now() + Math.max(4200, npc.bubble.length * 180);
+        if (npc.speechTargetName === (stateRef.current.actor.name || "少侠") && ambientPlayer.current.replyToNpcId === npc.eventId)
+          ambientPlayer.current.replyAt = Math.max(Date.now(), npc.bubbleUntil - 200);
+        if (npc.groupId) {
+          const leader = ambientWorld.current.npcs.find((item) => item.eventId === npc.groupId);
+          if (leader) {
+            leader.groupNextAt = npc.bubbleUntil;
+            leader.conversationContext = [...leader.conversationContext, npc.bubble].slice(-6);
+          }
+        }
+      }
+    } catch {
+      npc.bubble = ""; npc.queuedBubble = ""; npc.generationPending = false;
+      npc.bubbleUntil = Date.now(); npc.nextBehaviorAt = Date.now() + 1800;
+      if (npc.groupId) {
+        for (const member of ambientWorld.current.npcs.filter((item) => npc.groupMembers.includes(item.eventId))) {
+          member.bubble = ""; member.queuedBubble = ""; member.generationPending = false;
+          member.groupId = 0; member.groupMembers = []; member.groupTurn = -1; member.groupNextAt = 0;
+          member.conversationContext = []; member.speechTargetName = ""; member.nextBehaviorAt = Date.now() + 1800;
+        }
+      }
+      if (partner) {
+        npc.partnerId = 0; npc.conversationTurn = 0; npc.conversationRound = 0; npc.conversationContext = [];
+        partner.bubble = ""; partner.queuedBubble = ""; partner.generationPending = false;
+        partner.partnerId = 0; partner.conversationTurn = 0; partner.conversationRound = 0; partner.conversationContext = [];
+        partner.bubbleUntil = Date.now(); partner.nextBehaviorAt = Date.now() + 1800;
+      }
+    } finally {
+      ambientControllers.current.delete(controller);
+      ambientLlmActive.current = Math.max(0, ambientLlmActive.current - 1);
+    }
+  }, []);
+  useEffect(() => {
+    if (screen !== "play") return;
+    const id = window.setInterval(() => {
+      if (ambientPaused.current) return;
+      // This is the sole dispatcher for ambient LLM work. Player work claims capacity
+      // first; NPC-only dialogue, monologue and action jobs follow in that order.
+      void enrichAmbientPlayer();
+      const capacity = Math.max(0, 3 - ambientLlmActive.current),
+        position = stateRef.current.position,
+        actorName = stateRef.current.actor.name || "少侠",
+        playerNpcIds = new Set(ambientPlayer.current.npcIds),
+        map = getOriginalMap(position.mapId),
+        viewport = ambientViewportBounds(map.width, map.height, position.x, position.y),
+        inRange = ambientWorld.current.npcs.filter((item) => ambientNpcInViewport(item, viewport)),
+        isPlayerWork = (item: AmbientNpc) => item.speechTargetName === actorName || playerNpcIds.has(item.eventId),
+        conversationIsClose = (item: AmbientNpc) => {
+          if (item.speechTargetName === actorName) return ambientCanHear(item, position);
+          const target = item.partnerId
+            ? ambientWorld.current.npcs.find((other) => other.eventId === item.partnerId)
+            : item.speechTargetName
+              ? ambientWorld.current.npcs.find((other) => other.name === item.speechTargetName)
+              : undefined;
+          return !target || ambientCanHear(item, target);
+        },
+        activeNpcOnlySessions = inRange.filter((item) => !isPlayerWork(item) && (Boolean(item.bubble) || (item.generationPending && item.llmRequested))).length,
+        pending = inRange
+          .filter((item) => item.generationPending && !item.llmRequested && conversationIsClose(item))
+          .sort((first, second) => {
+            const priority = (item: AmbientNpc) => isPlayerWork(item) ? 0 : item.partnerId || item.groupId ? 1 : item.bubbleKind === "speech" ? 2 : 3;
+            return priority(first) - priority(second) || first.queuedAt - second.queuedAt || first.eventId - second.eventId;
+          });
+      let npcOnlySlots = Math.max(0, 2 - activeNpcOnlySessions), dispatched = 0;
+      for (const npc of pending) {
+        if (dispatched >= capacity) break;
+        if (!isPlayerWork(npc) && npcOnlySlots <= 0) continue;
+        if (!isPlayerWork(npc)) npcOnlySlots -= 1;
+        dispatched += 1;
+        void enrichAmbientNpc(npc);
+      }
+    }, 320);
+    return () => window.clearInterval(id);
+  }, [enrichAmbientNpc, enrichAmbientPlayer, screen, state.position.mapId]);
   useEffect(() => {
     let raf = 0;
     const frame = () => {
       const ctx = canvas.current?.getContext("2d");
-      if (ctx) draw(ctx, stateRef.current);
+      if (ctx) draw(ctx, stateRef.current, ambientWorld.current, ambientPlayer.current);
       raf = requestAnimationFrame(frame);
     };
     frame();
@@ -2609,46 +2974,48 @@ export default function OriginalWorld() {
                 <b>{npcLore(npcChat.id).name}</b>
                 <small>{npcLore(npcChat.id).identity}</small>
               </aside>
-              <div className="npc-chat-log" aria-live="polite">
-              {npcChat.messages.length === 0 && (
-                <p className="npc-chat-hint">{npcLore(npcChat.id).name}就在你面前。你可以开口，也可以先做一个动作。</p>
-              )}
-              {npcChat.messages.map((message, index) => message.role === "user" ? (
-                <article className="dialogue-bubble user" key={`user-${index}`}>
-                  <small>{state.actor.name}</small>
-                  {message.action && <i>行动 · {message.action}</i>}
-                  {message.speech && <p>{message.speech}</p>}
-                </article>
-              ) : (
-                <article className="dialogue-bubble assistant" key={`assistant-${index}`}>
-                  <small>{npcLore(npcChat.id).name}</small>
-                  {message.state && <em>状态 · {message.state}</em>}
-                  {message.action && <i>动作 · {message.action}</i>}
-                  {message.speech && <p>{message.speech}</p>}
-                  {!message.raw && npcChat.loading && <p className="thinking">正在观察你的反应……</p>}
-                </article>
-              ))}
-              <div ref={chatEnd} />
+              <div className="npc-chat-stage">
+                <div className="npc-chat-log" aria-live="polite">
+                {npcChat.messages.length === 0 && (
+                  <p className="npc-chat-hint">{npcLore(npcChat.id).name}就在你面前。你可以开口，也可以先做一个动作。</p>
+                )}
+                {npcChat.messages.map((message, index) => message.role === "user" ? (
+                  <article className="dialogue-bubble user" key={`user-${index}`}>
+                    <small>{state.actor.name}</small>
+                    {message.action && <i>行动 · {message.action}</i>}
+                    {message.speech && <p>{message.speech}</p>}
+                  </article>
+                ) : (
+                  <article className="dialogue-bubble assistant" key={`assistant-${index}`}>
+                    <small>{npcLore(npcChat.id).name}</small>
+                    {message.state && <em>状态 · {message.state}</em>}
+                    {message.action && <i>动作 · {message.action}</i>}
+                    {message.speech && <p>{message.speech}</p>}
+                    {!message.raw && npcChat.loading && <p className="thinking">正在观察你的反应……</p>}
+                  </article>
+                ))}
+                <div ref={chatEnd} />
+                </div>
+                {npcChat.error && <p className="npc-chat-error">{npcChat.error}</p>}
+                <form onSubmit={(event) => { event.preventDefault(); void sendNpcChat(); }}>
+                  <label>
+                    <span>行动</span>
+                    <textarea maxLength={180} rows={2} placeholder="例如：抱拳行礼、递上一壶酒、拔剑后退……"
+                      value={npcChat.action} disabled={npcChat.loading || npcChat.auto}
+                      onChange={(event) => setNpcChat({ ...npcChat, action: event.target.value, error: "" })} />
+                  </label>
+                  <label>
+                    <span>语言</span>
+                    <textarea maxLength={300} rows={2} placeholder="输入你想对他说的话……"
+                      value={npcChat.speech} disabled={npcChat.loading || npcChat.auto}
+                      onChange={(event) => setNpcChat({ ...npcChat, speech: event.target.value, error: "" })} />
+                  </label>
+                  <button type="submit" disabled={npcChat.auto || npcChat.loading || (!npcChat.action.trim() && !npcChat.speech.trim())}>
+                    {npcChat.auto ? "自动推进中" : npcChat.loading ? "对方回应中" : "行动并交谈"}
+                  </button>
+                </form>
               </div>
             </div>
-            {npcChat.error && <p className="npc-chat-error">{npcChat.error}</p>}
-            <form onSubmit={(event) => { event.preventDefault(); void sendNpcChat(); }}>
-              <label>
-                <span>行动</span>
-                <textarea maxLength={180} rows={2} placeholder="例如：抱拳行礼、递上一壶酒、拔剑后退……"
-                  value={npcChat.action} disabled={npcChat.loading || npcChat.auto}
-                  onChange={(event) => setNpcChat({ ...npcChat, action: event.target.value, error: "" })} />
-              </label>
-              <label>
-                <span>语言</span>
-                <textarea maxLength={300} rows={2} placeholder="输入你想对他说的话……"
-                  value={npcChat.speech} disabled={npcChat.loading || npcChat.auto}
-                  onChange={(event) => setNpcChat({ ...npcChat, speech: event.target.value, error: "" })} />
-              </label>
-              <button type="submit" disabled={npcChat.auto || npcChat.loading || (!npcChat.action.trim() && !npcChat.speech.trim())}>
-                {npcChat.auto ? "自动推进中" : npcChat.loading ? "对方回应中" : "行动并交谈"}
-              </button>
-            </form>
           </section>
         )}
         {shop && (
@@ -3838,13 +4205,13 @@ function SkillRows({
   );
 }
 
-function draw(ctx: CanvasRenderingContext2D, state: WorldSave) {
+function draw(ctx: CanvasRenderingContext2D, state: WorldSave, ambient: AmbientWorld, playerAmbient: AmbientPlayerState) {
   const pos = state.position,
     map = getOriginalMap(pos.mapId),
-    ox = Math.floor(W / 2 / T),
-    oy = Math.floor(H / 2 / T),
-    sx = Math.max(0, Math.min(map.width - 20, pos.x - ox)),
-    sy = Math.max(0, Math.min(map.height - 15, pos.y - oy));
+    viewport = ambientViewportBounds(map.width, map.height, pos.x, pos.y),
+    sx = viewport.left,
+    sy = viewport.top,
+    ambientBubbles: Array<{ x: number; y: number; text: string; kind: AmbientBubbleKind | "player"; shownAt: number }> = [];
   ctx.fillStyle = "#0c1410";
   ctx.fillRect(0, 0, W, H);
   for (let y = 0; y < 15; y++)
@@ -3858,25 +4225,36 @@ function draw(ctx: CanvasRenderingContext2D, state: WorldSave) {
   drawPinganTownPlan(ctx, map, sx, sy);
   drawMapStructures(ctx, map, state, sx, sy);
   for (const e of map.events) {
-    if (e.x < sx || e.y < sy || e.x >= sx + 20 || e.y >= sy + 15) continue;
     const visual = eventVisual(e, state),
-      near = Math.abs(e.x - pos.x) + Math.abs(e.y - pos.y) <= 2;
+      roaming = visual.kind === "npc" ? ambient.npcs.find((npc) => npc.eventId === e.id) : undefined,
+      eventX = roaming?.x ?? e.x,
+      eventY = roaming?.y ?? e.y;
+    if (eventX < sx || eventY < sy || eventX >= sx + 20 || eventY >= sy + 15) continue;
+    const near = Math.abs(eventX - pos.x) + Math.abs(eventY - pos.y) <= 2;
     if (visual.kind === "npc") {
       drawActor(
         ctx,
-        (e.x - sx) * T + 16,
-        (e.y - sy) * T + 23,
+        (eventX - sx) * T + 16,
+        (eventY - sy) * T + 23,
         hash(visual.label),
         false,
         npcCharacterSprite(visual.npcId || 0, visual.label),
+        roaming?.direction || 2,
       );
       drawNpcMarker(
         ctx,
-        (e.x - sx) * T + 16,
-        (e.y - sy) * T + 23,
+        (eventX - sx) * T + 16,
+        (eventY - sy) * T + 23,
         visual.label,
         near,
       );
+      if (roaming?.bubble) ambientBubbles.push({
+        x: (eventX - sx) * T + 16,
+        y: (eventY - sy) * T - 13,
+        text: roaming.bubble,
+        kind: roaming.bubbleKind,
+        shownAt: roaming.bubbleShownAt,
+      });
     } else if (visual.kind === "door")
       drawDoorMarker(
         ctx,
@@ -3934,6 +4312,15 @@ function draw(ctx: CanvasRenderingContext2D, state: WorldSave) {
     { sheet: 0, row: state.actor.gender ? 1 : 0 },
     pos.direction,
   );
+  if (playerAmbient.bubble) ambientBubbles.push({
+    x: (pos.x - sx) * T + 16,
+    y: (pos.y - sy) * T - 13,
+    text: playerAmbient.bubble,
+    kind: "player",
+    shownAt: playerAmbient.bubbleShownAt,
+  });
+  ambientBubbles.sort((first, second) => first.shownAt - second.shownAt).forEach((bubble) =>
+    drawAmbientBubble(ctx, bubble.x, bubble.y, bubble.text, bubble.kind));
   const shade = ctx.createRadialGradient(W / 2, H / 2, 120, W / 2, H / 2, 430);
   shade.addColorStop(0, "rgba(0,0,0,0)");
   shade.addColorStop(1, "rgba(2,7,4,.34)");
@@ -4404,6 +4791,43 @@ function drawNpcMarker(
   ctx.fillRect(x - width / 2, y - 62, width, 13);
   ctx.fillStyle = accent;
   ctx.fillText(label, x, y - 52);
+}
+function drawAmbientBubble(
+  ctx: CanvasRenderingContext2D,
+  x: number,
+  y: number,
+  text: string,
+  kind: "speech" | "action" | "player",
+) {
+  const clean = text.replace(/\s+/g, " ").trim(),
+    accent = kind === "action" ? "#77d6c7" : kind === "player" ? "#8ecbff" : "#f0cf71";
+  ctx.save();
+  ctx.font = kind === "action" ? "italic 10px sans-serif" : kind === "player" ? "bold 10px sans-serif" : "10px sans-serif";
+  const maxTextWidth = 204,
+    lines: string[] = [];
+  let line = "";
+  for (const character of clean) {
+    const candidate = line + character;
+    if (line && ctx.measureText(candidate).width > maxTextWidth) {
+      lines.push(line);
+      line = character;
+    } else line = candidate;
+  }
+  if (line || !lines.length) lines.push(line);
+  const width = Math.min(220, Math.max(...lines.map((item) => ctx.measureText(item).width)) + 16),
+    height = lines.length * 14 + 8,
+    left = Math.max(3, Math.min(W - width - 3, x - width / 2)),
+    preferredTop = y - height,
+    top = preferredTop >= 3 ? preferredTop : Math.min(H - height - 3, y + 34);
+  ctx.fillStyle = "rgba(5,12,8,.94)";
+  ctx.strokeStyle = kind === "action" ? "rgba(82,174,162,.82)" : kind === "player" ? "rgba(91,166,224,.95)" : "rgba(193,157,75,.86)";
+  ctx.lineWidth = 1;
+  ctx.fillRect(left, top, width, height);
+  ctx.strokeRect(left + 0.5, top + 0.5, width - 1, height - 1);
+  ctx.fillStyle = accent;
+  ctx.textAlign = "center";
+  lines.forEach((line, index) => ctx.fillText(line, left + width / 2, top + 14 + index * 14));
+  ctx.restore();
 }
 function drawObjectMarker(
   ctx: CanvasRenderingContext2D,

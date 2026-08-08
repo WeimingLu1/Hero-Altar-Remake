@@ -6,6 +6,10 @@ const source = readFileSync(
   new URL("../app/original/original-world.tsx", import.meta.url),
   "utf8",
 );
+const ambientSource = readFileSync(
+  new URL("../app/game-core/ambient-npc.ts", import.meta.url),
+  "utf8",
+);
 
 test("player left and right directions use screen-facing sprite columns", () => {
   assert.match(source, /direction === 4 \? 2 : direction === 6 \? 1/);
@@ -42,10 +46,88 @@ test("portraits are shared by dialogue chat status and battle", () => {
 
 test("free chat has a fixed history region and continuous automatic dialogue", () => {
   assert.match(source, /className="npc-chat-log"/);
+  assert.match(source, /className="npc-chat-stage"/);
   assert.match(source, /自动对话中/);
   assert.match(source, /function buildAutoPlayerPrompt|const buildAutoPlayerPrompt/);
   assert.match(source, /nextSpeaker: "主角"/);
   assert.match(source, /last\?\.role === "user"/);
+});
+
+test("a nearby player can be addressed and join ambient NPC conversations", () => {
+  assert.match(source, /now - lastPlayerMove\.current >= 450/);
+  assert.match(source, /const ids = nearby\.map\(\(npc\) => npc\.eventId\)/);
+  assert.match(source, /groupId = nearby\.length > 1/);
+  assert.match(source, /buildAutoPlayerPrompt\(target\.npcId/);
+  assert.match(source, /ambientPlayer\.current = \{ npcIds: \[\], replyToNpcId: 0, bubble: ""/);
+});
+
+test("ambient dialogue lifecycle rejects stale requests and ghost NPCs", () => {
+  assert.match(source, /ambientEpoch\.current \+= 1/);
+  assert.match(source, /ambientControllers\.current\.forEach\(\(controller\) => controller\.abort\(\)\)/);
+  assert.match(source, /ambientShouldPause/);
+  assert.match(source, /killList \|\| \[\]\)\.join/);
+  assert.match(source, /visual\.kind !== "none" && visual\.kind !== "npc"/);
+});
+
+test("ambient conversations keep bounded context and highlight the player", () => {
+  assert.match(source, /conversationContext/);
+  assert.match(source, /slice\(-6\)/);
+  assert.match(source, /maxOutputTokens: partner \? 150 : 96/);
+  assert.match(source, /kind: "player"/);
+  assert.match(source, /#8ecbff/);
+});
+
+test("newest ambient bubble is rendered on the highest layer", () => {
+  assert.match(source, /bubbleShownAt/);
+  assert.match(source, /ambientBubbles\.sort\(\(first, second\) => first\.shownAt - second\.shownAt\)/);
+  assert.ok(source.indexOf("ambientBubbles.push") < source.indexOf("ambientBubbles.sort"));
+});
+
+test("every directed ambient turn requires one-tile hearing distance", () => {
+  assert.match(ambientSource, /target && !ambientCanHear\(speaker, target\)/);
+  assert.match(source, /partner && !ambientCanHear\(npc, partner\)/);
+  assert.match(source, /namedTarget && !ambientCanHear\(npc, namedTarget\)/);
+  assert.match(source, /player moved out of hearing range/);
+  assert.match(source, /conversationIsClose/);
+  assert.match(source, /conversationIsClose\(item\)/);
+});
+
+test("ambient conversations strip narration and request spoken lines only", () => {
+  assert.match(source, /const cleanAmbientSpeech/);
+  assert.match(source, /const cleanAmbientAction/);
+  assert.match(source, /严禁描写天气、风景、地点、环境/);
+  assert.match(source, /只生成要求的口头台词，不补充任何背景描写/);
+  assert.match(source, /spokenClauses/);
+  assert.match(source, /禁止输出状态、动作、神态/);
+  assert.match(source, /严禁描写天气、风景、地点、环境、声音、衣物、身体、动作或神态/);
+  assert.match(source, /cleanAmbientSpeech\(line, \[npc\.name, partner\.name\]\)/);
+  assert.match(source, /不得再次出现任何参与者姓名/);
+  assert.match(source, /绝对不得输出或讨论 to、谁对谁/);
+  assert.match(source, /\\s\+to\\s\+/);
+});
+
+test("ambient performance text is generated without canned fallback lines", () => {
+  assert.match(source, /item\.generationPending && !item\.llmRequested/);
+  assert.match(source, /LM Studio returned no usable ambient line/);
+  assert.doesNotMatch(source, /const openers =/);
+  assert.doesNotMatch(source, /retain the local fallback/);
+  assert.match(source, /必须由模型现场生成/);
+  assert.match(source, /npc\.bubbleKind === "action" \? cleanAmbientAction/);
+});
+
+test("LLM sessions use a player-first bounded priority queue", () => {
+  assert.match(source, /activeNpcOnlySessions/);
+  assert.match(source, /Math\.max\(0, 2 - activeNpcOnlySessions\)/);
+  assert.match(source, /isPlayerWork\(item\) \? 0/);
+  assert.match(source, /sole dispatcher for ambient LLM work/);
+  assert.match(source, /now - lastPlayerMove\.current >= 450/);
+  assert.match(source, /world\.npcs\.filter\(\(npc\) => ambientCanHear\(npc, current\.position\)\)/);
+  assert.match(source, /ambientPlayerStarts\.current = playerStarts/);
+  assert.match(source, /npcIds: ids/);
+  assert.match(source, /first\.queuedAt - second\.queuedAt/);
+  assert.match(source, /ambientViewportBounds\(map\.width, map\.height/);
+  assert.match(source, /ambientNpcInViewport\(item, viewport\)/);
+  assert.doesNotMatch(source, /generationPending && !item\.llmRequested && item\.bubbleUntil > Date\.now/);
 });
 
 test("map entrances anchor coherent multi-tile buildings", () => {

@@ -10,6 +10,7 @@ type ProxyPayload = {
   system?: string;
   transcript?: string;
   nextSpeaker?: string;
+  maxOutputTokens?: number;
 };
 
 export async function POST(request: Request) {
@@ -18,6 +19,7 @@ export async function POST(request: Request) {
     const system = payload.system?.trim() || "";
     const transcript = payload.transcript?.trim() || "";
     const nextSpeaker = payload.nextSpeaker?.trim().slice(0, 12) || "NPC";
+    const maxOutputTokens = Math.max(64, Math.min(NPC_MAX_OUTPUT_TOKENS, Number(payload.maxOutputTokens) || NPC_MAX_OUTPUT_TOKENS));
     if (!system || !transcript || system.length > 16_000 || transcript.length > NPC_TRANSCRIPT_CHAR_BUDGET)
       return Response.json({ error: "对话上下文无效" }, { status: 400 });
 
@@ -33,7 +35,7 @@ export async function POST(request: Request) {
         store: false,
         temperature: 0.8,
         top_p: 0.9,
-        max_output_tokens: NPC_MAX_OUTPUT_TOKENS,
+        max_output_tokens: maxOutputTokens,
       }),
       signal: request.signal,
     });

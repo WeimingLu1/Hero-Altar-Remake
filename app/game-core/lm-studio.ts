@@ -36,6 +36,7 @@ export async function streamNpcReply(options: {
   transportUrl?: string;
   model?: string;
   nextSpeaker?: string;
+  maxOutputTokens?: number;
 }) {
   const endpoint = (options.endpoint || LM_STUDIO_ENDPOINT).replace(/\/$/, "");
   const transcript = messagesWithinContext(options.messages).map((message) =>
@@ -52,6 +53,7 @@ export async function streamNpcReply(options: {
       system: options.system,
       transcript,
       nextSpeaker,
+      maxOutputTokens: options.maxOutputTokens,
     } : {
         model: options.model || LM_STUDIO_MODEL,
         system_prompt: options.system,
@@ -61,7 +63,7 @@ export async function streamNpcReply(options: {
         store: false,
         temperature: 0.8,
         top_p: 0.9,
-        max_output_tokens: NPC_MAX_OUTPUT_TOKENS,
+        max_output_tokens: options.maxOutputTokens || NPC_MAX_OUTPUT_TOKENS,
       }),
     signal: options.signal,
   });
