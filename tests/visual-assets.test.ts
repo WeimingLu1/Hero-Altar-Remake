@@ -63,7 +63,10 @@ test("a nearby player can be addressed and join ambient NPC conversations", () =
 
 test("ambient dialogue lifecycle rejects stale requests and ghost NPCs", () => {
   assert.match(source, /ambientEpoch\.current \+= 1/);
-  assert.match(source, /ambientControllers\.current\.forEach\(\(controller\) => controller\.abort\(\)\)/);
+  assert.match(source, /ambientControllers\.current\.forEach\(\(_job, controller\) => controller\.abort\(\)\)/);
+  assert.match(source, /Map<AbortController, \{ player: boolean; npcEventId\?: number \}>/);
+  assert.match(source, /ambientPlayerEpoch/);
+  assert.match(source, /if \(item\.speechTargetName && !target\) return false/);
   assert.match(source, /ambientShouldPause/);
   assert.match(source, /killList \|\| \[\]\)\.join/);
   assert.match(source, /visual\.kind !== "none" && visual\.kind !== "npc"/);

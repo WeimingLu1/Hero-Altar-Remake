@@ -50,6 +50,15 @@ export function ambientNpcInViewport(npc: Pick<AmbientNpc, "x" | "y">, viewport:
   return npc.x >= viewport.left && npc.x < viewport.right && npc.y >= viewport.top && npc.y < viewport.bottom;
 }
 
+export function resetAmbientSessions(world: AmbientWorld, resumeAt: number) {
+  for (const npc of world.npcs) {
+    npc.partnerId = 0; npc.groupId = 0; npc.groupMembers = []; npc.groupTurn = -1; npc.groupNextAt = 0;
+    npc.conversationTurn = 0; npc.conversationRound = 0; npc.lastPartnerId = 0;
+    npc.bubble = ""; npc.queuedBubble = ""; npc.generationPending = false; npc.llmRequested = true;
+    npc.speechTargetName = ""; npc.conversationContext = []; npc.nextBehaviorAt = resumeAt;
+  }
+}
+
 const hash = (value: number) => {
   let next = value | 0;
   next = Math.imul(next ^ (next >>> 16), 0x45d9f3b);
@@ -148,7 +157,8 @@ export function tickAmbientWorld(options: {
     return false;
   };
   const clearGroup = (member: AmbientNpc, resumeAt: number) => {
-    for (const item of world.npcs.filter((candidate) => member.groupMembers.includes(candidate.eventId))) {
+    const memberIds = new Set([...member.groupMembers, member.eventId]);
+    for (const item of world.npcs.filter((candidate) => memberIds.has(candidate.eventId))) {
       item.bubble = ""; item.queuedBubble = ""; item.generationPending = false; item.speechTargetName = ""; item.groupId = 0; item.groupMembers = [];
       item.groupTurn = -1; item.groupNextAt = 0; item.nextBehaviorAt = resumeAt; item.conversationContext = [];
       item.partnerCooldownUntil = now + 30000;
@@ -182,6 +192,13 @@ export function tickAmbientWorld(options: {
     if (npc.groupId) {
       const members = npc.groupMembers.map((id) => world.npcs.find((item) => item.eventId === id)).filter((item): item is AmbientNpc => Boolean(item)),
         leader = members.reduce((first, item) => item.eventId < first.eventId ? item : first, members[0] || npc);
+      if (members.length < 2 || !members.some((item) => item.eventId === npc.eventId)) {
+        clearGroup(npc, now + 700);
+        continue;
+      }
+      // Every member freezes while the player owns this conversation. Previously
+      // only the leader paused, allowing other participants to walk out of range.
+      if (members.some((item) => pausedConversationNpcIds.has(item.eventId))) continue;
       if (npc.eventId !== leader.eventId) {
         if (!ambientCanHear(npc, leader)) stepToward(npc, leader);
         else faceToward(npc, leader);
@@ -189,7 +206,6 @@ export function tickAmbientWorld(options: {
       }
       // The player has joined this circle: freeze the NPC turn cursor until the
       // player's visible reply finishes, so nobody talks over the current turn.
-      if (members.some((item) => pausedConversationNpcIds.has(item.eventId))) continue;
       if (members.some((item) => item.generationPending)) continue;
       if (members.some((item) => item.eventId !== leader.eventId && !ambientCanHear(item, leader))) continue;
       if (leader.groupTurn < 0) {
@@ -228,7 +244,11 @@ export function tickAmbientWorld(options: {
     if (npc.partnerId && npc.conversationTurn === 0) {
       if (pausedConversationNpcIds.has(npc.eventId)) continue;
       const partner = world.npcs.find((item) => item.eventId === npc.partnerId);
-      if (!partner) { npc.partnerId = 0; continue; }
+      if (!partner) {
+        npc.partnerId = 0; npc.speechTargetName = ""; npc.conversationTurn = 0; npc.conversationRound = 0;
+        npc.conversationContext = []; npc.generationPending = false; npc.nextBehaviorAt = now + 700;
+        continue;
+      }
       if (!ambientCanHear(npc, partner)) {
         stepToward(npc, partner);
         npc.nextBehaviorAt = now + 500;
@@ -264,6 +284,11 @@ export function tickAmbientWorld(options: {
       if (pausedConversationNpcIds.has(npc.eventId)) continue;
       if (npc.generationPending) continue;
       const partner = world.npcs.find((item) => item.eventId === npc.partnerId);
+      if (!partner) {
+        npc.partnerId = 0; npc.speechTargetName = ""; npc.conversationTurn = 0; npc.conversationRound = 0;
+        npc.conversationContext = []; npc.generationPending = false; npc.nextBehaviorAt = now + 700;
+        continue;
+      }
       const completedTurn = [npc.bubble, partner?.queuedBubble || ""].filter(Boolean);
       npc.bubble = "";
       npc.conversationTurn = 3;

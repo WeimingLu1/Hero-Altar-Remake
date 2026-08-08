@@ -41,6 +41,15 @@ back.
 These files do not incorporate or use the original project's published bitmap
 files as image inputs or visual references.
 
+## Documentation screenshots
+
+The files under `docs/screenshots/` are project gameplay captures supplied by
+the repository owner. They show the actual browser build, including the title
+screen, ambient NPC simulation, player proximity dialogue, free dialogue, and
+battle narration. The current README images were resized and JPEG-compressed
+locally from the 2026-08-08 captures; no third-party artwork was added during
+that documentation pass.
+
 ## Future third-party assets
 
 Every third-party asset added later must record its title, creator, source URL,

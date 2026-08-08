@@ -4,6 +4,7 @@ import { originalData } from "../app/game-core/original-data";
 import {
   buildNpcSystemPrompt,
   npcLore,
+  npcConversationFacts,
   npcLoreStatus,
   npcMartialProfile,
   reputationLabel,
@@ -37,7 +38,10 @@ test("every original NPC record receives a complete stable lore profile", () => 
     assert.ok(lore.background.length > 8);
     assert.ok(lore.personality.length > 5);
     assert.ok(lore.speech.length > 5);
-    assert.equal(npcLoreStatus(lore.id).length, 7);
+    assert.ok(lore.age > 0);
+    assert.match(lore.gender, /^(男|女|未知)$/);
+    assert.ok(lore.school.length > 0);
+    assert.equal(npcLoreStatus(lore.id).length, 8);
   }
 });
 
@@ -53,6 +57,7 @@ test("NPC prompt combines world, personal, player, location and task context", (
   assert.match(prompt, /气宇轩昂/);
   assert.match(prompt, /颇有侠名/);
   assert.match(prompt, /师承、武境差距、年龄、容貌和名声/);
+  assert.match(prompt, /称谓和代词必须符合明确性别/);
   assert.match(prompt, /玩家每轮可能提供“行动”和“语言”/);
   assert.match(prompt, /状态：具体描述此刻/);
   assert.match(prompt, /动作：描述紧接着/);
@@ -61,6 +66,16 @@ test("NPC prompt combines world, personal, player, location and task context", (
   assert.doesNotMatch(prompt, /不超过160个汉字/);
   assert.match(prompt, /不能跳出角色/);
   assert.ok(prompt.includes(WORLD_LORE));
+});
+
+test("compact NPC conversation facts include immutable social and martial identity", () => {
+  const facts = npcConversationFacts(1);
+  assert.match(facts, /潘小莲/);
+  assert.match(facts, /岁，性别(男|女|未知)/);
+  assert.match(facts, /门派/);
+  assert.match(facts, /身份/);
+  assert.match(facts, /外貌/);
+  assert.match(facts, /综合武境第\d+\/50阶/);
 });
 
 test("NPC martial realm and player reputation use readable original-world labels", () => {

@@ -1,5 +1,9 @@
 # RMXP-Hero browser port completion audit
 
+> Updated 2026-08-08. This audit covers deterministic RMXP parity; the newer
+> LLM-driven ambient simulation is an additive browser-remake layer and cannot
+> alter the deterministic task, inventory, combat, or save state directly.
+
 This document tracks parity against the checked-in RMXP source. A row is only
 marked complete when the browser runtime has executable behavior and a relevant
 test or runtime check. Data extraction alone is not implementation evidence.
@@ -28,8 +32,9 @@ test or runtime check. Data extraction alone is not implementation evidence.
 | Time/survival            | Original 15-second digestion, hunger/thirst decay, passive recovery, aging, drinking, wine time changes and all task deadlines run from the persisted game clock                                                                          | Implemented |
 | Save files               | Versioned local JSON import/export, normalization and editable actor/world/task/forge/home/minigame fields                                                                                                                                | Implemented |
 | Keyboard                 | Mac/Windows-compatible WASD/arrows, Z/Enter/Space, X/Escape, M/R/H/F6/T/Q/I/G/F and every modal have keyboard and clickable controls                                                                                                      | Implemented |
-| Visual redraw            | Source bitmaps are not shipped; maps, terrain, buildings, figures, objects, effects and UI are rendered from new programmatic pixel primitives, palettes and CSS                                                                          | Implemented |
-| Production               | Production build plus 66 core logic and 3 server-render tests pass; matching commit/archive is deployed by Sites with a succeeded status                                                                                                  | Implemented |
+| Visual redraw            | Source bitmaps are not shipped; maps, terrain, buildings, figures, portraits, objects and furniture use project-original generated atlases plus CSS/canvas composition                                                                     | Implemented |
+| Ambient world layer      | Current-screen NPC roaming, 3×3 hearing, directed pair/group dialogue, player-priority queue, immutable character facts and cancellable LM Studio requests remain isolated from deterministic state                                         | Implemented |
+| Production               | Production build plus 147 logic/visual and 3 server-render tests pass (150 total, 0 failures)                                                                                                                                               | Implemented |
 
 ## Completion gate
 

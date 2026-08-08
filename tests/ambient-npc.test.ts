@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { ambientCanHear, ambientNpcAt, ambientNpcInPlayerRange, ambientNpcInViewport, ambientViewportBounds, createAmbientWorld, tickAmbientWorld } from "../app/game-core/ambient-npc";
+import { ambientCanHear, ambientNpcAt, ambientNpcInPlayerRange, ambientNpcInViewport, ambientViewportBounds, createAmbientWorld, resetAmbientSessions, tickAmbientWorld } from "../app/game-core/ambient-npc";
 
 test("ambient NPCs exist only in the initialized current map", () => {
   const world = createAmbientWorld(2, 0, [{ eventId: 1, npcId: 3, name: "捕快", identity: "官差", x: 4, y: 4 }]);
@@ -163,6 +163,51 @@ test("a player reply locks the current conversation turn", () => {
   });
   assert.equal(world.npcs[0].groupTurn, 0);
   assert.equal(world.npcs[1].bubble, "");
+});
+
+test("all group members freeze while the player owns the conversation", () => {
+  const world = createAmbientWorld(2, 0, [
+    { eventId: 1, npcId: 1, name: "甲", identity: "侠客", x: 4, y: 4 },
+    { eventId: 2, npcId: 2, name: "乙", identity: "商人", x: 7, y: 4 },
+  ]);
+  for (const npc of world.npcs) { npc.groupId = 1; npc.groupMembers = [1, 2]; npc.groupTurn = 0; }
+  tickAmbientWorld({ world, now: 1000, playerX: 5, playerY: 5, indoor: false, pausedConversationNpcIds: [1, 2], canEnter: () => true });
+  assert.deepEqual(world.npcs.map((npc) => [npc.x, npc.y]), [[4, 4], [7, 4]]);
+});
+
+test("a missing pair partner cannot leave an NPC stuck in conversation", () => {
+  const world = createAmbientWorld(2, 0, [{ eventId: 1, npcId: 1, name: "甲", identity: "侠客", x: 4, y: 4 }]);
+  const npc = world.npcs[0];
+  npc.partnerId = 99; npc.conversationTurn = 1; npc.bubbleUntil = 100;
+  tickAmbientWorld({ world, now: 200, playerX: 10, playerY: 10, indoor: false, canEnter: () => true });
+  assert.equal(npc.partnerId, 0);
+  assert.equal(npc.conversationTurn, 0);
+  assert.equal(npc.generationPending, false);
+});
+
+test("a malformed group clears the member instead of creating self-talk", () => {
+  const world = createAmbientWorld(2, 0, [{ eventId: 1, npcId: 1, name: "甲", identity: "侠客", x: 4, y: 4 }]);
+  const npc = world.npcs[0];
+  npc.groupId = 99; npc.groupMembers = [99]; npc.groupTurn = -1;
+  tickAmbientWorld({ world, now: 200, playerX: 10, playerY: 10, indoor: false, canEnter: () => true });
+  assert.equal(npc.groupId, 0);
+  assert.equal(npc.generationPending, false);
+  assert.equal(npc.speechTargetName, "");
+});
+
+test("global pause resets every in-flight NPC session", () => {
+  const world = createAmbientWorld(2, 0, [
+    { eventId: 1, npcId: 1, name: "甲", identity: "侠客", x: 4, y: 4 },
+    { eventId: 2, npcId: 2, name: "乙", identity: "商人", x: 5, y: 4 },
+  ]);
+  for (const npc of world.npcs) { npc.partnerId = npc.eventId === 1 ? 2 : 1; npc.generationPending = true; npc.llmRequested = true; npc.bubble = "旧气泡"; }
+  resetAmbientSessions(world, 1700);
+  for (const npc of world.npcs) {
+    assert.equal(npc.partnerId, 0);
+    assert.equal(npc.generationPending, false);
+    assert.equal(npc.bubble, "");
+    assert.equal(npc.nextBehaviorAt, 1700);
+  }
 });
 
 test("group dialogue forms a directed reply chain without broadcasts", () => {
