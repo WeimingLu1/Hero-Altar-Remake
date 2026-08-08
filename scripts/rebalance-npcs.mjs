@@ -24,12 +24,13 @@ const combatLevel = (skillList) =>
 const isCaster = (skillList) =>
   (skillList || []).some(([id, level]) => kungfuType(id) === 8 && Number(level) > 0);
 
-// —— 满级玩家数值基准（NPC 永远略低于玩家）——
-// maxFp≈11870-13110(max内功有效等级127), 基础满血≈3700, 四维≈55(先天30+基本功25),
-// atk≈99(绣花针)/自制武器更高, pdef 可叠防具到 ~400。
+// —— 玩家数值基准（NPC 略低于玩家；规则公平，两者同一上限）——
+// 玩家可通过物品(如王蛇胆 add_mfp 无上限)把内力上限堆到 65535，气血随之到 ~16783。
+// NPC 天花板取适中值：血 8000 / 内力 30000——让顶级宗师与高属性玩家旗鼓相当，
+// 又不因伤害公式每击封顶而把战斗拖成上百回合拉锯。
 const CEIL = {
-  hp: 3650, // 玩家 3700
-  fp: 13000, // 玩家 11870-13110（接近满级容量）
+  hp: 12000,
+  fp: 45000,
   four: 45, // 玩家约 55
   atk: 110, // 玩家 99-300（自制武器）
   pdef: 200, // 玩家可叠到 400
@@ -44,9 +45,9 @@ const cap = (value, ceiling) => Math.min(ceiling, Math.max(0, Math.round(value))
 // —— 武功等级阶梯：按原始档位分档，让更多高手足以与满级玩家过招 ——
 // 宗师/顶尖高手/高手统一高武功与高数值，其余人按曲线平滑下降。
 const TIERS = [
-  { min: 220, skill: 254, stat: 1.0 }, // 宗师（门派掌门/三大宗师）
-  { min: 160, skill: 250, stat: 0.95 }, // 顶尖高手
-  { min: 110, skill: 242, stat: 0.82 }, // 高手
+  { min: 220, skill: 254, stat: 1.0 }, // 宗师（门派掌门/三大宗师）→ 满血
+  { min: 180, skill: 250, stat: 0.85 }, // 顶尖高手
+  { min: 140, skill: 242, stat: 0.6 }, // 高手
 ];
 const tierFor = (lvl0) => TIERS.find((t) => lvl0 >= t.min) || null;
 const topTierLevel = 254;
@@ -57,8 +58,8 @@ const targetLevel = (lvl0) =>
 const targetExp = (lvl0) => {
   const tier = tierFor(lvl0);
   if (tier && tier.min >= 220) return 6_500_000;
-  if (tier && tier.min >= 160) return 6_000_000;
-  if (tier && tier.min >= 110) return 5_000_000;
+  if (tier && tier.min >= 180) return 6_000_000;
+  if (tier && tier.min >= 140) return 5_000_000;
   return Math.round(2_500_000 * Math.pow(lvl0 / 255, 1.3));
 };
 
@@ -124,9 +125,9 @@ for (let i = 0; i < data.length; i++) {
     tier
       ? cap(ceiling * tier.stat * idv(key, existing), ceiling)
       : cap(curve(level, base, ceiling, p) * idv(key, existing), ceiling);
-  const maxhp = scaled(100, CEIL.hp, 1.8, "maxhp", e.maxhp);
-  const maxfp = scaled(80, CEIL.fp, 1.8, "maxfp", e.maxfp);
-  const maxmp = caster ? scaled(80, CEIL.fp, 1.8, "maxfp", e.maxfp) : 0;
+  const maxhp = scaled(100, CEIL.hp, 2.2, "maxhp", e.maxhp);
+  const maxfp = scaled(80, CEIL.fp, 2.2, "maxfp", e.maxfp);
+  const maxmp = caster ? scaled(80, CEIL.fp, 2.2, "maxfp", e.maxfp) : 0;
   e.maxhp = e.hp = e.full_hp = maxhp;
   e.maxfp = e.fp = e.maxsp = maxfp;
   e.maxmp = e.mp = maxmp;

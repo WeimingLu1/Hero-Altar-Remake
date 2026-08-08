@@ -97,8 +97,6 @@ import {
 } from "../game-core/task-system";
 import {
   cultivationAvailability,
-  fullFp,
-  fullMp,
   healWounds,
   meditateForce,
   meditateMagic,
@@ -435,33 +433,19 @@ const fresh = (): WorldSave => ({
   actor: newActor(),
   tasks: freshTaskState(),
 });
-// 把超限存档（旧作弊/手工 JSON）钳制到规则上限：内力/法力不能超过
-// 装备内功/法术允许的容量，气血不能超过 fullHp，避免"作弊超人"碾压平衡后的 NPC。
-const clampToRuleLimits = (actor: SceneActorState) => {
-  actor.exp = Math.min(actor.exp, MAX_PLAYER_EXP);
-  actor.maxFp = Math.min(actor.maxFp || 0, fullFp(actor));
-  actor.maxMp = Math.min(actor.maxMp || 0, fullMp(actor));
-  actor.maxHp = Math.min(actor.maxHp || 0, fullHp(actor));
-  actor.fp = Math.min(actor.fp || 0, actor.maxFp);
-  actor.mp = Math.min(actor.mp || 0, actor.maxMp);
-  actor.hp = Math.min(actor.hp || 0, actor.maxHp);
-  return actor;
-};
-const normalize = (value: WorldSave): WorldSave => {
-  const actor = clampToRuleLimits({
+const normalize = (value: WorldSave): WorldSave => ({
+  ...value,
+  actor: {
     ...newActor(),
     ...(value.actor || {}),
     skills: value.actor?.skills || {},
     inventory: value.actor?.inventory || {},
-  });
-  return {
-    ...value,
-    actor,
-    flags: value.flags || {},
-    variables: value.variables || {},
-    tasks: { ...freshTaskState(), ...(value.tasks || {}) },
-  };
-};
+    exp: Math.min(Number(value.actor?.exp || 0), MAX_PLAYER_EXP),
+  },
+  flags: value.flags || {},
+  variables: value.variables || {},
+  tasks: { ...freshTaskState(), ...(value.tasks || {}) },
+});
 const loadLocalSave = (): WorldSave => {
   try {
     const raw = localStorage.getItem("rmxp-original-world-v1");
@@ -626,7 +610,7 @@ export default function OriginalWorld() {
     keys = useRef(new Set<string>()),
     held = useRef<Record<string, number>>({});
   const sync = useCallback((next: WorldSave) => {
-    clampToRuleLimits(next.actor);
+    next.actor.exp = Math.min(next.actor.exp, MAX_PLAYER_EXP);
     stateRef.current = next;
     setState(structuredClone(next));
   }, []);
