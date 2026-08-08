@@ -104,6 +104,9 @@ test("group chats cycle through every member and mark the player bubble", () => 
   assert.match(source, /responderQueue/);
   assert.match(source, /participants\.length > 1 \? "群聊 · "/);
   assert.match(source, /让群聊其余成员随后轮流回应/);
+  // 群成员回应时不强制对玩家：一半概率随机指向群里另一个人
+  assert.match(source, /Math\.random\(\) < 0\.5/);
+  assert.match(source, /peers\[Math\.floor\(Math\.random\(\) \* peers\.length\)\]\.name/);
 });
 
 test("self-talk and action bubbles carry an explicit speaker label", () => {

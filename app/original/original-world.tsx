@@ -2546,9 +2546,13 @@ export default function OriginalWorld() {
         npc.conversationContext = [...npc.conversationContext, ambientPlayer.current.bubble].slice(-6);
         if (npc.bubbleUntil <= Date.now()) npc.bubble = "";
       });
-      // 无论是否开场，都把目标设为回应玩家，并让群聊其余成员随后轮流回应，
-      // 保证每个群成员都参与，而不是只和一个人聊。
-      target.speechTargetName = current.actor.name || "少侠";
+      // 无论是否开场，都把目标设为回应(可能回应玩家，也可能随机回应群里另一个人)，
+      // 并让群聊其余成员随后轮流回应，保证每个群成员都参与，而不是只和玩家或一个人聊。
+      const playerName = current.actor.name || "少侠";
+      const peer = participants.filter((n) => n.eventId !== target.eventId);
+      target.speechTargetName = peer.length && Math.random() < 0.5
+        ? peer[Math.floor(Math.random() * peer.length)].name
+        : playerName;
       target.bubbleKind = "speech"; target.bubbleUntil = ambientPlayer.current.bubbleUntil + 12000;
       target.llmRequested = false; target.generationPending = true; target.queuedAt = Date.now();
       if (target.groupId) target.groupTurn = 0;
@@ -2663,14 +2667,22 @@ ${mode}输出必须符合古代武侠世界，不推动正式任务，不改变�
         npc.bubbleShownAt = Date.now();
         npc.generationPending = false;
         npc.bubbleUntil = Date.now() + Math.max(4200, npc.bubble.length * 180);
-        if (npc.speechTargetName === (stateRef.current.actor.name || "少侠") && ambientPlayer.current.replyToNpcId === npc.eventId) {
-          // 群聊：让队列里下一个成员接着回应玩家；都回完后玩家才能再次开口
+        if (ambientPlayer.current.replyToNpcId === npc.eventId) {
+          // 群聊：让队列里下一个成员接着回应(可能回应玩家，也可能随机回应群里另一个人)；
+          // 都回完后玩家才能再次开口
           const queue = ambientPlayer.current.responderQueue || [];
           const nextId = queue.shift();
           if (nextId) {
             const next = ambientWorld.current.npcs.find((item) => item.eventId === nextId);
             if (next && ambientCanHear(next, stateRef.current.position)) {
-              next.speechTargetName = stateRef.current.actor.name || "少侠";
+              const playerName = stateRef.current.actor.name || "少侠";
+              const peers = ambientPlayer.current.npcIds
+                .map((id) => ambientWorld.current.npcs.find((item) => item.eventId === id))
+                .filter((item): item is AmbientNpc => Boolean(item) && item.eventId !== next.eventId);
+              next.speechTargetName =
+                peers.length && Math.random() < 0.5
+                  ? peers[Math.floor(Math.random() * peers.length)].name
+                  : playerName;
               next.bubbleKind = "speech"; next.bubbleUntil = Date.now() + 12000;
               next.llmRequested = false; next.generationPending = true; next.queuedAt = Date.now();
               if (next.groupId) next.groupTurn = 0;
