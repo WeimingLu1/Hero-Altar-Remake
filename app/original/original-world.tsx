@@ -179,14 +179,12 @@ type WuxiaArt = {
   environment: HTMLImageElement | null;
   characters: Array<HTMLImageElement | null>;
   furniture: HTMLImageElement | null;
-  lpcInterior: HTMLImageElement | null;
 };
 type CharacterSprite = { sheet: number; row: number; portrait?: number };
 const wuxiaArt: WuxiaArt = {
   environment: null,
   characters: [null, null, null, null, null, null, null],
   furniture: null,
-  lpcInterior: null,
 };
 
 function loadWuxiaArt() {
@@ -214,9 +212,6 @@ function loadWuxiaArt() {
   );
   load("/game-assets/generated/wuxia-indoor-furniture-v1.png", (image) => {
     wuxiaArt.furniture = image;
-  });
-  load("/game-assets/open-source/lpc-house-interior/interior.png", (image) => {
-    wuxiaArt.lpcInterior = image;
   });
 }
 
@@ -4706,23 +4701,6 @@ function drawFurnitureCell(
   x: number,
   y: number,
 ) {
-  const lpcAtlas = wuxiaArt.lpcInterior;
-  const lpcCell = lpcFurnitureCells[source];
-  if (lpcAtlas?.complete && lpcAtlas.naturalWidth && lpcCell) {
-    ctx.imageSmoothingEnabled = false;
-    ctx.drawImage(
-      lpcAtlas,
-      lpcCell[0] * 32,
-      lpcCell[1] * 32,
-      32,
-      32,
-      x,
-      y,
-      T,
-      T,
-    );
-    return;
-  }
   const atlas = wuxiaArt.furniture;
   if (!atlas?.complete || !atlas.naturalWidth) return;
   const cellWidth = atlas.naturalWidth / 8,
@@ -4739,19 +4717,6 @@ function drawFurnitureCell(
     T + 5,
   );
 }
-
-// Semantic bridge from the existing room planner to mature 32px LPC furniture.
-// Unmapped bespoke wuxia props continue to use the project-original atlas.
-const lpcFurnitureCells: Readonly<Record<number, readonly [number, number]>> = {
-  0: [14, 1], 1: [15, 1], 7: [15, 2],
-  8: [13, 2], 9: [14, 2], 11: [13, 1], 12: [14, 1], 13: [15, 1],
-  15: [0, 6], 17: [1, 6], 18: [2, 6], 19: [3, 6], 20: [13, 2],
-  21: [4, 6], 22: [4, 9], 23: [5, 9], 24: [6, 9], 25: [6, 6],
-  26: [7, 6], 27: [8, 6], 30: [9, 6], 32: [10, 6],
-  34: [0, 7], 35: [1, 7], 36: [2, 7], 39: [3, 7],
-  44: [4, 7], 45: [5, 7], 46: [13, 4], 49: [14, 4],
-  50: [0, 9], 55: [1, 9],
-};
 
 function drawVisualLayer(
   ctx: CanvasRenderingContext2D,
@@ -4992,17 +4957,18 @@ function drawNpcMarker(
 ) {
   const pulse = Math.sin(Date.now() / 180) > 0,
     accent = hostile ? "#ff6a63" : "#ffd866";
-  ctx.strokeStyle = accent;
+  ctx.strokeStyle = near ? accent : "rgba(255,216,102,.72)";
   ctx.lineWidth = near ? 3 : 2;
   ctx.strokeRect(x - 11, y + 8, 22, near ? 5 : 3);
   ctx.fillStyle = accent;
   ctx.fillRect(x - 2, y - 47 - (pulse ? 2 : 0), 5, 7);
   ctx.fillRect(x - 2, y - 38 - (pulse ? 2 : 0), 5, 3);
+  if (!near) return;
   const label = name.length > 7 ? `${name.slice(0, 7)}…` : name;
   ctx.font = "bold 10px sans-serif";
   ctx.textAlign = "center";
   const width = Math.ceil(ctx.measureText(label).width) + 8;
-  ctx.fillStyle = near ? "rgba(7,12,9,.94)" : "rgba(7,12,9,.82)";
+  ctx.fillStyle = "rgba(7,12,9,.92)";
   ctx.fillRect(x - width / 2, y - 62, width, 13);
   ctx.fillStyle = accent;
   ctx.fillText(label, x, y - 52);
@@ -5015,14 +4981,16 @@ function drawObjectMarker(
   near: boolean,
 ) {
   const accent = "#70e0d0";
-  ctx.strokeStyle = accent;
+  ctx.strokeStyle = near ? accent : "rgba(112,224,208,.34)";
   ctx.lineWidth = near ? 2 : 1;
   ctx.beginPath();
   ctx.ellipse(x, y + 7, near ? 11 : 7, near ? 4 : 2, 0, 0, Math.PI * 2);
   ctx.stroke();
-  ctx.fillStyle = accent;
-  ctx.fillRect(x - 2, y - 13, 4, 4);
-  drawMarkerLabel(ctx, x, y - 17, name, accent, near, true);
+  if (near) {
+    ctx.fillStyle = accent;
+    ctx.fillRect(x - 2, y - 13, 4, 4);
+  }
+  drawMarkerLabel(ctx, x, y - 17, name, accent, near);
 }
 function drawCorpseMarker(
   ctx: CanvasRenderingContext2D,
@@ -5041,7 +5009,7 @@ function drawCorpseMarker(
   ctx.fillRect(x + 2, y - 1, 2, 2);
   ctx.strokeStyle = accent;
   ctx.strokeRect(x - 11, y, 22, 9);
-  drawMarkerLabel(ctx, x, y - 12, name, accent, near, true);
+  drawMarkerLabel(ctx, x, y - 12, name, accent, near);
 }
 function drawDoorMarker(
   ctx: CanvasRenderingContext2D,
@@ -5051,15 +5019,17 @@ function drawDoorMarker(
   near: boolean,
 ) {
   const accent = "#8ee28f";
-  ctx.strokeStyle = accent;
+  ctx.strokeStyle = near ? accent : "rgba(142,226,143,.28)";
   ctx.lineWidth = near ? 2 : 1;
   ctx.beginPath();
   ctx.moveTo(x - (near ? 10 : 6), y + 8);
   ctx.lineTo(x + (near ? 10 : 6), y + 8);
   ctx.stroke();
-  ctx.fillStyle = near ? "rgba(142,226,143,.22)" : "rgba(142,226,143,.12)";
-  ctx.fillRect(x - 12, y - 9, 24, 18);
-  drawMarkerLabel(ctx, x, y - 12, name, accent, near, true);
+  if (near) {
+    ctx.fillStyle = "rgba(142,226,143,.18)";
+    ctx.fillRect(x - 12, y - 9, 24, 18);
+  }
+  drawMarkerLabel(ctx, x, y - 12, name, accent, near);
 }
 function drawMarkerLabel(
   ctx: CanvasRenderingContext2D,
