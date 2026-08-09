@@ -1,75 +1,67 @@
 # 360° 实机 Demo 图库
 
-本页集中展示当前 Web 版本的主要玩法、地图和界面。全部截图均为完整游戏页面的浏览器实机画面；“演示侠客”是通过正式 JSON 导入能力创建的文档专用虚拟角色，只用于快速展示中后期内容。
+本页使用当前 Web 版本的高清完整页面截图，集中展示地图探索、人物资料、门派成长、任务、环境会话、自由对话和战斗系统。
 
-## 开始、创建与说明
+## 世界与地域
 
-| 标题界面 | 角色创建 |
+![失落的世界](screenshots/lost-world.jpg)
+
+| 冰火岛渡口 | 东海 |
 | --- | --- |
-| ![标题界面](screenshots/demo-01-title.png) | ![角色创建](screenshots/demo-02-character-create.png) |
+| ![冰火岛渡口与 NPC 会话](screenshots/ice-fire-island.jpg) | ![东海水域与道路网络](screenshots/east-sea.jpg) |
 
-| 操作说明 | 家园起点 |
+| 红莲教 | 大雪山寨 |
 | --- | --- |
-| ![操作说明](screenshots/demo-04-help.png) | ![家园起点](screenshots/demo-03-home.png) |
+| ![红莲教人物与环境演出](screenshots/red-lotus.jpg) | ![大雪山寨门派区域](screenshots/faction.jpg) |
 
-## 城镇、室内与环境会话
-
-| 平安镇 | 商业街环境会话 |
+| 茅山 | 长白山 |
 | --- | --- |
-| ![平安镇探索](screenshots/world-latest.png) | ![主角参与的共享会话](screenshots/player-conversation-latest.png) |
+| ![茅山多人环境会话](screenshots/maoshan.jpg) | ![长白山主角会话与独白](screenshots/changbai.jpg) |
 
-环境会话按参与者合并显示，主角参与的会话使用蓝色高亮、保持最高绘制层，并从主角头顶开始随内容向上扩展。自言自语与动作仍使用独立气泡。
+这些画面完整展示草地、木地板、石材、雪地、水域和道路基底，以及建筑入口、透明植被、NPC 分布与门派环境演出。
 
-## 门派与地域
+## 环境对话
 
-| 玉女峰 | 红莲教 |
+![玉女峰多组 NPC 会话](screenshots/npc-dialogue.jpg)
+
+![大雪山客房中的主角高亮对话](screenshots/player-dialogue.jpg)
+
+同一组人物的台词会合并成有顺序的会话卡；主角参与时使用蓝色强调并保持最高绘制层。自言自语和动作继续作为独立气泡显示。
+
+## NPC 人物背景、拜师与请教
+
+![NPC 完整人物背景](screenshots/npc-profile.jpg)
+
+| 拜师结果 | 请教功夫 |
 | --- | --- |
-| ![玉女峰](screenshots/demo-20-yunv-peak.png) | ![红莲教](screenshots/demo-21-red-lotus.png) |
+| ![拜师李青照](screenshots/apprenticeship.jpg) | ![向师父请教功夫](screenshots/teaching.jpg) |
 
-| 武当山 | 冰火岛 |
+人物背景包括身份、事实、性情、武境、外貌、活动地点、阅历、属性、装备和武功。拜师和请教继续执行原作门派、师承、潜能与等级规则。
+
+## 状态与功夫
+
+![人物状态与江湖履历](screenshots/status.jpg)
+
+![完整功夫分类和当前运用](screenshots/kungfu.jpg)
+
+状态页集中展示武境、出手、容貌、精气、先天与实战属性、履历、装备和武功；功夫页按类别显示所有已学武学、等级、境界、当前运用和招架配置。
+
+## 任务系统
+
+| 捕快发布任务 | 地图追捕目标 |
 | --- | --- |
-| ![武当山](screenshots/demo-22-wudang.png) | ![冰火岛](screenshots/demo-23-ice-fire-island.png) |
+| ![捕快发布通缉任务](screenshots/quest-dialogue.jpg) | ![平安镇东郊通缉犯](screenshots/quest-target.jpg) |
 
-| 大雪山寨 | 茅山 |
-| --- | --- |
-| ![大雪山寨](screenshots/demo-24-snow-mountain.png) | ![茅山](screenshots/demo-25-maoshan.png) |
+任务从原作事件逻辑产生；发布、目标标识、地图位置、击杀与奖励均由正式游戏状态管理。
 
-| 长白山 | 时空的尽头 |
-| --- | --- |
-| ![长白山](screenshots/demo-26-changbai.png) | ![时空的尽头](screenshots/demo-27-space-time.png) |
+## 独立自由对话
 
-这些画面覆盖石地、草地、雪地、岛屿与科幻基底，以及不同门派的人物、入口、植被和场景组织。
+![与柳如是自动推进自由对话](screenshots/free-dialogue.jpg)
 
-## 自由对话
-
-![与李青照的独立自由对话](screenshots/demo-30-free-dialogue.png)
-
-自由对话拥有独立历史区和固定输入区。玩家可以分别填写动作与语言，也可以让主角和 NPC 自动轮流推进；人物姓名、年龄、性别、门派、外貌和武境作为不可改写事实进入提示。
+自由对话同时展示人物立绘、可滚动历史、行动描述、语言内容和自动推进状态。角色事实不会因为模型生成而被改写。
 
 ## 战斗过程
 
-| 生死战开场 | 第一次攻防结算 |
-| --- | --- |
-| ![生死战开场](screenshots/demo-31-battle-start.png) | ![战斗行动与战况实录](screenshots/demo-32-battle-action.png) |
+![与白瑞德的多回合生死战](screenshots/battle.jpg)
 
-战斗界面同时呈现双方立绘、气血、回合、事实战报和操作区；普通攻击、主动绝招、物品与逃跑都通过同一套确定性规则结算。本地模型不可用时，真实战斗结算仍会保留。
-
-## 人物、行囊、武功、修炼与任务
-
-| 人物状态 | 行囊装备 |
-| --- | --- |
-| ![人物状态](screenshots/demo-12-status.png) | ![行囊装备](screenshots/demo-11-inventory.png) |
-
-| 完整武功列表 | 修炼界面 |
-| --- | --- |
-| ![完整武功列表](screenshots/demo-15-kungfu-full.png) | ![修炼界面](screenshots/demo-17-training.png) |
-
-![任务簿](screenshots/demo-16-tasks.png)
-
-## 秘技与回归测试
-
-| 快速调整 | 全部武功与配置 |
-| --- | --- |
-| ![秘技快速调整](screenshots/demo-10-cheat.png) | ![秘技全部武功](screenshots/demo-14-cheat-skills.png) |
-
-秘技面板服务于开发回归和自由体验，所有修改仍写入正式存档结构，并遵守属性、经验、加力和法点的合法范围。
+战斗画面完整呈现双方立绘、气血、回合、事实结算、模型叙事、普通攻击、绝招、物品和逃跑操作。

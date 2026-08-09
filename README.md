@@ -10,25 +10,23 @@
 
 ## 实机画面
 
-下列画面均直接截取自当前 Web 版本。为了完整展示中后期界面，截图使用了仅用于文档的虚拟角色“演示侠客”和 JSON 演示存档，不会写入仓库运行时或改变正常开局。
+下列高清画面均直接截取自当前 Web 版本，完整保留地图、侧栏、人物、互动层与功能界面的细节。
 
-| 开始游戏 | 城镇探索 |
+![失落的世界全景](docs/screenshots/lost-world.jpg)
+
+| NPC 近身群聊 | 主角参与环境对话 |
 | --- | --- |
-| ![标题界面](docs/screenshots/demo-01-title.png) | ![平安镇与完整侧栏](docs/screenshots/world-latest.png) |
+| ![NPC 与主角参与的多人会话](docs/screenshots/npc-dialogue.jpg) | ![主角高亮对话](docs/screenshots/player-dialogue.jpg) |
 
-| 门派地域 | 特殊地域 |
+| 独立自由对话 | 多回合生死战 |
 | --- | --- |
-| ![武当山](docs/screenshots/demo-22-wudang.png) | ![时空的尽头](docs/screenshots/demo-27-space-time.png) |
+| ![自动推进的独立自由对话](docs/screenshots/free-dialogue.jpg) | ![完整战斗过程](docs/screenshots/battle.jpg) |
 
-| 独立自由对话 | 生死战过程 |
+| 人物状态 | 完整功夫配置 |
 | --- | --- |
-| ![与李青照自由对话](docs/screenshots/demo-30-free-dialogue.png) | ![战斗行动与战况实录](docs/screenshots/demo-32-battle-action.png) |
+| ![人物状态](docs/screenshots/status.jpg) | ![功夫与当前运用](docs/screenshots/kungfu.jpg) |
 
-| 武功与运用 | 开发秘技 |
-| --- | --- |
-| ![完整武功界面](docs/screenshots/demo-15-kungfu-full.png) | ![秘技与全部武功](docs/screenshots/demo-14-cheat-skills.png) |
-
-完整图库还覆盖角色创建、家园、操作说明、行囊、人物状态、任务、修炼、环境群聊，以及玉女峰、红莲教、冰火岛、大雪山寨、茅山、长白山等门派与地域：见 [360° 实机 Demo 图库](docs/SCREENSHOT_GALLERY.md)。
+完整图库还覆盖 NPC 人物背景、拜师、请教、任务发布与追捕，以及冰火岛、东海、红莲教、大雪山寨、茅山、长白山等地域：见 [360° 实机 Demo 图库](docs/SCREENSHOT_GALLERY.md)。
 
 网页版本保留原作69张地图及转场关系；地图事件继续负责交易、任务、拜师、战斗和场景转移。玩家近身加入环境会话时，整组对话使用蓝色会话卡并从主角头顶向上展开；独立自由对话支持行动、语言和自动推进；战斗支持普通攻击、主动绝招、物品、逃跑与完整战况记录。
 
