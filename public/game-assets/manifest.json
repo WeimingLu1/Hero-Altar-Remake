@@ -45,6 +45,19 @@
       "license": "CC-BY-SA-3.0 OR GPL-2.0 OR GPL-3.0",
       "source": "https://opengameart.org/content/lpc-house-interior-and-decorations",
       "purpose": "mature LPC 32px furniture, storage, workshop and household props"
+    },
+    "openSourceWorld": {
+      "src": [
+        "/game-assets/open-source/lpc-world/terrain.png",
+        "/game-assets/open-source/lpc-world/trees.png",
+        "/game-assets/open-source/lpc-world/plants.png",
+        "/game-assets/open-source/lpc-world/walls.png",
+        "/game-assets/open-source/lpc-world/forest.png",
+        "/game-assets/open-source/lpc-world/semantic-environment.png"
+      ],
+      "logicalTileSize": 32,
+      "license": "CC-BY-SA-3.0",
+      "purpose": "primary outdoor terrain, water, sand, snow, stone courts, vegetation, walls and forest props"
     }
   }
 }

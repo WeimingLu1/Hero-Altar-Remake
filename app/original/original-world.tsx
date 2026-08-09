@@ -180,6 +180,11 @@ type WuxiaArt = {
   characters: Array<HTMLImageElement | null>;
   furniture: HTMLImageElement | null;
   lpcInterior: HTMLImageElement | null;
+  lpcTerrain: HTMLImageElement | null;
+  lpcTrees: HTMLImageElement | null;
+  lpcPlants: HTMLImageElement | null;
+  lpcWalls: HTMLImageElement | null;
+  lpcForest: HTMLImageElement | null;
 };
 type CharacterSprite = { sheet: number; row: number; portrait?: number };
 const wuxiaArt: WuxiaArt = {
@@ -187,6 +192,11 @@ const wuxiaArt: WuxiaArt = {
   characters: [null, null, null, null, null, null, null],
   furniture: null,
   lpcInterior: null,
+  lpcTerrain: null,
+  lpcTrees: null,
+  lpcPlants: null,
+  lpcWalls: null,
+  lpcForest: null,
 };
 
 function loadWuxiaArt() {
@@ -196,7 +206,7 @@ function loadWuxiaArt() {
     image.onload = () => ready(image);
     image.src = src;
   };
-  load("/game-assets/generated/wuxia-map-modules-v2.png", (image) => {
+  load("/game-assets/open-source/lpc-world/semantic-environment.png", (image) => {
     wuxiaArt.environment = image;
   });
   [
@@ -217,6 +227,21 @@ function loadWuxiaArt() {
   });
   load("/game-assets/open-source/lpc-house-interior/interior.png", (image) => {
     wuxiaArt.lpcInterior = image;
+  });
+  load("/game-assets/open-source/lpc-world/terrain.png", (image) => {
+    wuxiaArt.lpcTerrain = image;
+  });
+  load("/game-assets/open-source/lpc-world/trees.png", (image) => {
+    wuxiaArt.lpcTrees = image;
+  });
+  load("/game-assets/open-source/lpc-world/plants.png", (image) => {
+    wuxiaArt.lpcPlants = image;
+  });
+  load("/game-assets/open-source/lpc-world/walls.png", (image) => {
+    wuxiaArt.lpcWalls = image;
+  });
+  load("/game-assets/open-source/lpc-world/forest.png", (image) => {
+    wuxiaArt.lpcForest = image;
   });
 }
 
@@ -4795,20 +4820,93 @@ function drawEnvironmentCell(
   width = T,
   height = T,
 ) {
+  if (drawOpenSourceEnvironmentCell(ctx, source, x, y, width, height)) return;
   const atlas = wuxiaArt.environment;
   if (!atlas?.complete || !atlas.naturalWidth) return;
   const cell = atlas.naturalWidth / 8;
+  const inset = atlas.naturalWidth === 256 ? 0 : 2;
   ctx.drawImage(
     atlas,
-    (source % 8) * cell + 2,
-    Math.floor(source / 8) * cell + 2,
-    cell - 4,
-    cell - 4,
+    (source % 8) * cell + inset,
+    Math.floor(source / 8) * cell + inset,
+    cell - inset * 2,
+    cell - inset * 2,
     x,
     y,
     width,
     height,
   );
+}
+
+const lpcGroundCells: Readonly<Record<number, readonly [number, number]>> = {
+  0: [9, 58],   // meadow grass
+  7: [25, 57],  // dry earth
+  8: [9, 62],   // compacted road
+  15: [12, 62], // stone court
+  16: [9, 59],  // snow
+  24: [9, 60],  // open water
+};
+const lpcWallCells: Readonly<Record<number, readonly [number, number]>> = {
+  32: [0, 58], 33: [1, 58], 34: [2, 58],
+  36: [0, 60], 37: [1, 60], 39: [2, 60],
+  40: [3, 60], 41: [4, 60], 42: [5, 60],
+};
+const lpcPlantCells: Readonly<Record<number, readonly [number, number]>> = {
+  48: [0, 0], 49: [1, 0], 50: [5, 0], 51: [6, 0],
+  54: [2, 2], 55: [3, 2],
+};
+
+function drawAtlasCell(
+  ctx: CanvasRenderingContext2D,
+  atlas: HTMLImageElement,
+  cell: readonly [number, number],
+  x: number,
+  y: number,
+  width: number,
+  height: number,
+) {
+  ctx.imageSmoothingEnabled = false;
+  ctx.drawImage(atlas, cell[0] * 32, cell[1] * 32, 32, 32, x, y, width, height);
+}
+
+function drawOpenSourceEnvironmentCell(
+  ctx: CanvasRenderingContext2D,
+  source: number,
+  x: number,
+  y: number,
+  width: number,
+  height: number,
+) {
+  const ground = lpcGroundCells[source];
+  if (ground && wuxiaArt.lpcTerrain?.complete) {
+    drawAtlasCell(ctx, wuxiaArt.lpcTerrain, ground, x, y, width, height);
+    return true;
+  }
+  if ((source === 46 || source === 47) && wuxiaArt.lpcInterior?.complete) {
+    drawAtlasCell(ctx, wuxiaArt.lpcInterior, source === 46 ? [0, 2] : [1, 2], x, y, width, height);
+    return true;
+  }
+  const wall = lpcWallCells[source];
+  if (wall && wuxiaArt.lpcWalls?.complete) {
+    drawAtlasCell(ctx, wuxiaArt.lpcWalls, wall, x, y, width, height);
+    return true;
+  }
+  if (source === 53 && wuxiaArt.lpcTrees?.complete) {
+    ctx.imageSmoothingEnabled = false;
+    ctx.drawImage(wuxiaArt.lpcTrees, 0, 0, 64, 64, x - 16, y - 32, width + 32, height + 32);
+    return true;
+  }
+  const plant = lpcPlantCells[source];
+  if (plant && wuxiaArt.lpcPlants?.complete) {
+    drawAtlasCell(ctx, wuxiaArt.lpcPlants, plant, x, y, width, height);
+    return true;
+  }
+  if (source === 56 && wuxiaArt.lpcForest?.complete) {
+    ctx.imageSmoothingEnabled = false;
+    ctx.drawImage(wuxiaArt.lpcForest, 384, 0, 64, 64, x - 8, y - 24, width + 16, height + 24);
+    return true;
+  }
+  return false;
 }
 
 function drawMapStructures(

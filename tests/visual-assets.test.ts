@@ -52,6 +52,16 @@ test("mature open-source LPC furniture is the primary indoor prop atlas", () => 
   assert.ok(source.indexOf("const lpcAtlas = wuxiaArt.lpcInterior") < source.indexOf("const atlas = wuxiaArt.furniture"));
 });
 
+test("terrain structures and vegetation use the open-source LPC world atlas", () => {
+  assert.match(source, /open-source\/lpc-world\/semantic-environment\.png/);
+  assert.match(source, /open-source\/lpc-world\/terrain\.png/);
+  assert.match(source, /open-source\/lpc-world\/trees\.png/);
+  assert.match(source, /open-source\/lpc-world\/plants\.png/);
+  assert.match(source, /open-source\/lpc-world\/walls\.png/);
+  assert.match(source, /source === 46 \|\| source === 47/);
+  assert.match(source, /15: \[12, 62\]/);
+});
+
 test("portraits are shared by dialogue chat status and battle", () => {
   assert.match(source, /function CharacterPortrait/);
   assert.match(source, /className="dialog-portrait"/);

@@ -70,6 +70,22 @@ for common indoor furniture:
 Project-original wuxia furniture remains only as a fallback for culturally
 specific props without a suitable LPC equivalent.
 
+The environment renderer also uses the following established LPC collections
+as its primary world-art library:
+
+- [LPC Terrains](https://opengameart.org/content/lpc-terrains)
+- [LPC Trees](https://opengameart.org/content/lpc-trees)
+- [LPC Flowers / Plants / Fungi / Wood](https://opengameart.org/content/lpc-flowers-plants-fungi-wood)
+- [LPC Walls](https://opengameart.org/content/lpc-walls)
+- [LPC Forest Tiles](https://opengameart.org/content/lpc-forest-tiles)
+
+All are used under CC BY-SA 3.0. Their detailed upstream contributor lists are
+preserved verbatim in `public/game-assets/open-source/lpc-world/CREDITS-*.txt`.
+The source atlases are unmodified; the project additionally distributes a
+32px semantic selection atlas assembled exclusively from the credited LPC
+files. Grass, water, sand, earth, snow, stone, trees, flowers, walls and forest
+props now prefer this library over generated project artwork.
+
 ## Future third-party assets
 
 Every third-party asset added later must record its title, creator, source URL,
