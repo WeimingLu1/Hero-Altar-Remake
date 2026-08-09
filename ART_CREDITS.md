@@ -50,6 +50,26 @@ battle narration. The current README images were resized and JPEG-compressed
 locally from the 2026-08-08 captures; no third-party artwork was added during
 that documentation pass.
 
+## Open-source LPC artwork
+
+The runtime uses `LPC House Interior and Decorations` as its primary source
+for common indoor furniture:
+
+- Source: https://opengameart.org/content/lpc-house-interior-and-decorations
+- Primary author: Tuomo Untinen (Reemax)
+- Contributors: Lanea Zimmerman (Sharm), Hyptosis, Daniel Eddeland,
+  William Thompson, wulax and Matthew Krohn.
+- License selected for this distribution: CC BY-SA 3.0.
+- Files used: the unmodified `interior.png` atlas.
+- Runtime modification: individual 32×32 cells are selected and drawn on the
+  existing 32px grid.
+- Bundled attribution and license:
+  `public/game-assets/open-source/lpc-house-interior/AUTHORS.txt` and
+  `LICENSE-CC-BY-SA-3.0.txt`.
+
+Project-original wuxia furniture remains only as a fallback for culturally
+specific props without a suitable LPC equivalent.
+
 ## Future third-party assets
 
 Every third-party asset added later must record its title, creator, source URL,

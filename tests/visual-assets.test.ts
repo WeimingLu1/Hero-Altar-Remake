@@ -40,6 +40,18 @@ test("NPC marker stays above the character face", () => {
   assert.match(source, /y - 47 - \(pulse \? 2 : 0\)/);
 });
 
+test("all interactive anchors keep a visible highlight and label", () => {
+  assert.match(source, /drawMarkerLabel\(ctx, x, y - 17, name, accent, near, true\)/);
+  assert.match(source, /drawMarkerLabel\(ctx, x, y - 12, name, accent, near, true\)/);
+  assert.doesNotMatch(source, /if \(!near\) return;/);
+});
+
+test("mature open-source LPC furniture is the primary indoor prop atlas", () => {
+  assert.match(source, /open-source\/lpc-house-interior\/interior\.png/);
+  assert.match(source, /const lpcFurnitureCells/);
+  assert.ok(source.indexOf("const lpcAtlas = wuxiaArt.lpcInterior") < source.indexOf("const atlas = wuxiaArt.furniture"));
+});
+
 test("portraits are shared by dialogue chat status and battle", () => {
   assert.match(source, /function CharacterPortrait/);
   assert.match(source, /className="dialog-portrait"/);
