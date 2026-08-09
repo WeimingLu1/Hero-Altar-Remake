@@ -9,7 +9,7 @@ import type { SceneActorState } from "./scene-event";
 import { npcLoreStatus } from "./npc-lore";
 
 export type NpcOption =
-  "talk" | "chat" | "status" | "battle" | "trade" | "join" | "study";
+  "talk" | "chat" | "status" | "battle" | "trade" | "join" | "study" | "forge";
 export type ShopGood = {
   kind: 1 | 2 | 3;
   id: number;
@@ -33,6 +33,8 @@ export function npcOptions(id: number, actor: SceneActorState): NpcOption[] {
   if (type === -1) result.push("trade");
   else if (type > 0) result.push(actor.teacherId === id ? "study" : "join");
   else if (id === 7 || id === 31) result.push("study");
+  // 干匠(148)：铸剑挑战入口。
+  if (id === 148) result.push("forge");
   return result;
 }
 export const npcOptionLabel: Record<NpcOption, string> = {
@@ -43,6 +45,7 @@ export const npcOptionLabel: Record<NpcOption, string> = {
   trade: "交易",
   join: "拜师",
   study: "请教",
+  forge: "铸剑",
 };
 
 export function npcStatus(id: number) {

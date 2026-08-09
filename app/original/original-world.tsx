@@ -750,6 +750,25 @@ export default function OriginalWorld() {
     localStorage.setItem("rmxp-original-world-v1", JSON.stringify(next));
     setNotice("原版世界进度已保存");
   }, [sync]);
+  // 铸剑挑战：未通过则先打四轮墨邪(149)；已通过则打开铸剑界面。
+  const startSwordChallenge = useCallback(() => {
+    const s = stateRef.current;
+    if (s.actor.swordBattle) {
+      setLife({ kind: "forge", index: 0 });
+      return;
+    }
+    if (s.actor.exp < 150000) {
+      setEventText("干匠\n你的江湖阅历还不足以接受铸剑挑战。");
+      return;
+    }
+    const nextForge = structuredClone(s),
+      required = [8, 15, 25, 21];
+    nextForge.actor.forgeChallengeStep = 0;
+    nextForge.actor.inventory[`2:${required[0]}`] = 1;
+    nextForge.actor.weaponId = required[0];
+    sync(nextForge);
+    setBattle(beginOriginalBattle(149, s.tasks.clock + 149, undefined, "story"));
+  }, [sync]);
   const runAt = useCallback(
     (x: number, y: number, automatic = false) => {
       const s = stateRef.current,
@@ -812,21 +831,7 @@ export default function OriginalWorld() {
           return true;
         }
         if (sceneCall.type === 14) {
-          if (!s.actor.swordBattle) {
-            if (s.actor.exp < 150000) {
-              setEventText("干匠\n你的江湖阅历还不足以接受铸剑挑战。");
-              return true;
-            }
-            const nextForge = structuredClone(s),
-              required = [8, 15, 25, 21];
-            nextForge.actor.forgeChallengeStep = 0;
-            nextForge.actor.inventory[`2:${required[0]}`] = 1;
-            nextForge.actor.weaponId = required[0];
-            sync(nextForge);
-            setBattle(
-              beginOriginalBattle(149, s.tasks.clock + 149, undefined, "story"),
-            );
-          } else setLife({ kind: "forge", index: 0 });
+          startSwordChallenge();
           return true;
         }
         if (sceneCall.type === 15) {
@@ -898,7 +903,7 @@ export default function OriginalWorld() {
       }
       return page.trigger > 0;
     },
-    [sync],
+    [sync, startSwordChallenge],
   );
   const move = useCallback(
     (dx: number, dy: number) => {
@@ -1018,6 +1023,11 @@ export default function OriginalWorld() {
   const chooseNpc = useCallback(
     (id: number, option: NpcOption) => {
       setEventNpcId(["talk", "status", "join"].includes(option) ? id : null);
+      if (option === "forge") {
+        setNpcMenu(null);
+        startSwordChallenge();
+        return;
+      }
       const next = structuredClone(stateRef.current);
       if (option === "talk") {
         const tasks = next.tasks,
@@ -1160,7 +1170,7 @@ export default function OriginalWorld() {
       }
       setNpcMenu(null);
     },
-    [sync],
+    [sync, startSwordChallenge],
   );
   const closeNpcChat = useCallback(() => {
     chatAbort.current?.abort();
@@ -1431,6 +1441,8 @@ export default function OriginalWorld() {
             } else {
               next.actor.swordBattle = true;
               next.actor.forgeChallengeStep = 0;
+              // 与原版一致：通过后传送进铸剑谷(67)。
+              next.position = { mapId: 67, x: 9, y: 11, direction: 8 };
               altarText = "四轮铸剑挑战全部通过，铸剑谷已经开放。";
             }
           }
@@ -2478,6 +2490,7 @@ export default function OriginalWorld() {
     closeNpcChat,
     openBagEntry,
     openFlyMenu,
+    startSwordChallenge,
     save,
     shop,
     study,

@@ -65,6 +65,18 @@ test("merchant menu and stock come from enemy database", () => {
   assert.equal(goods[0].name, "白玉豆腐");
   assert.equal(npcOptionLabel.battle, "战斗");
 });
+
+test("干匠(148) 提供铸剑挑战入口", () => {
+  const a = actor();
+  assert.deepEqual(npcOptions(148, a), [
+    "talk",
+    "chat",
+    "status",
+    "battle",
+    "forge",
+  ]);
+  assert.equal(npcOptionLabel.forge, "铸剑");
+});
 test("NPC 状态完整展示原作描述、装备、携带物品与武功", () => {
   const status = npcStatus(3).join("\n");
   assert.match(status, /人物描述：六扇门里的捕快/);
