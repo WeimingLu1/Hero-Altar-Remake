@@ -19,6 +19,12 @@ export type AmbientBubbleBox = {
   lines: string[];
 };
 
+export type ConversationCardInput = {
+  x: number;
+  y: number;
+  lines: string[];
+};
+
 const W = 640;
 const H = 480;
 
@@ -149,5 +155,45 @@ export function drawAmbientBubble(
   lines.forEach((line, index) =>
     ctx.fillText(line, left + width / 2, top + 14 + index * 14),
   );
+  ctx.restore();
+}
+
+function conversationParts(value: string) {
+  const clean = value.replace(/^群聊\s*·\s*/, "").trim(),
+    routed = clean.match(/^(.+?)\s+to\s+(.+?)：[“"]?(.*?)[”"]?$/);
+  if (routed) return { route: `${routed[1]} → ${routed[2]}`, text: routed[3] };
+  const solo = clean.match(/^(.+?)(?:自言自语|正在和环境交互)：[“"]?(.*?)[”"]?$/);
+  return solo ? { route: solo[1], text: solo[2] } : { route: "交谈", text: clean };
+}
+
+export function drawConversationCard(ctx: CanvasRenderingContext2D, card: ConversationCardInput) {
+  const width = 244,
+    entries = card.lines.slice(-3).map(conversationParts),
+    wrapped = entries.map((entry) => {
+      const lines: string[] = []; let line = "";
+      ctx.save(); ctx.font = "11px sans-serif";
+      for (const character of entry.text) {
+        const next = line + character;
+        if (line && ctx.measureText(next).width > width - 24) { lines.push(line); line = character; }
+        else line = next;
+      }
+      if (line) lines.push(line);
+      ctx.restore();
+      return { ...entry, lines: lines.slice(0, 2) };
+    }),
+    height = 12 + wrapped.reduce((sum, entry) => sum + 15 + entry.lines.length * 14, 0),
+    left = Math.max(5, Math.min(W - width - 5, card.x - width / 2)),
+    top = Math.max(5, Math.min(H - height - 5, card.y - height));
+  ctx.save();
+  ctx.fillStyle = "rgba(5,12,10,.95)"; ctx.fillRect(left, top, width, height);
+  ctx.strokeStyle = "rgba(207,177,95,.88)"; ctx.lineWidth = 1.5; ctx.strokeRect(left + .75, top + .75, width - 1.5, height - 1.5);
+  let cursor = top + 17;
+  wrapped.forEach((entry, index) => {
+    ctx.textAlign = "left"; ctx.font = "bold 10px sans-serif"; ctx.fillStyle = index === wrapped.length - 1 ? "#f2d67f" : "#9eb7aa";
+    ctx.fillText(entry.route, left + 10, cursor); cursor += 14;
+    ctx.font = "11px sans-serif"; ctx.fillStyle = "#e8eadf";
+    entry.lines.forEach((line) => { ctx.fillText(line, left + 12, cursor); cursor += 14; });
+    cursor += 2;
+  });
   ctx.restore();
 }

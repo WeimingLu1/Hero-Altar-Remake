@@ -242,6 +242,17 @@ test("world canvas renders characters props bubbles and text at high resolution"
   assert.doesNotMatch(worldCss, /image-rendering:\s*pixelated/);
 });
 
+test("paired and group conversations share one ordered conversation card", () => {
+  assert.match(source, /function conversationSessionKey/);
+  assert.match(source, /`group:\$\{npc\.groupId\}`/);
+  assert.match(source, /`pair:\$\{Math\.min\(npc\.eventId, npc\.partnerId\)\}/);
+  assert.match(source, /function collectConversationCards/);
+  assert.match(source, /\.slice\(-3\)/);
+  assert.match(source, /drawConversationCard\(ctx, card\)/);
+  assert.match(source, /roaming\?\.bubble && !conversationSessionKey/);
+  assert.match(source, /playerAmbient\.bubble && !playerGrouped/);
+});
+
 test("indoor furnishing follows repeatable scene-specific patterns", () => {
   assert.match(source, /tableSet =/);
   assert.match(source, /for \(let y = 5; y < map\.height - 4; y \+= 4\)/);

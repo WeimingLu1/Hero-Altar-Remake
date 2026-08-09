@@ -26,6 +26,7 @@ import {
 } from "../game-core/ambient-npc";
 import {
   drawAmbientBubble,
+  drawConversationCard,
   resolveAmbientBubbleLayout,
 } from "../game-core/ambient-bubble-layout";
 import {
@@ -4350,6 +4351,38 @@ function SkillRows({
   );
 }
 
+function conversationSessionKey(npc: AmbientNpc, player: AmbientPlayerState) {
+  if (npc.bubbleKind === "action") return "";
+  if (npc.groupId) return `group:${npc.groupId}`;
+  if (npc.partnerId) return `pair:${Math.min(npc.eventId, npc.partnerId)}:${Math.max(npc.eventId, npc.partnerId)}`;
+  if (player.npcIds.includes(npc.eventId) && npc.speechTargetName)
+    return `player:${[...player.npcIds].sort((a, b) => a - b).join(":")}`;
+  return "";
+}
+
+function collectConversationCards(ambient: AmbientWorld, player: AmbientPlayerState, sx: number, sy: number) {
+  const sessions = new Map<string, AmbientNpc[]>();
+  for (const npc of ambient.npcs) {
+    const key = conversationSessionKey(npc, player);
+    if (!key) continue;
+    sessions.set(key, [...(sessions.get(key) || []), npc]);
+  }
+  return [...sessions.values()].flatMap((members) => {
+    const contexts = members.map((member) => member.conversationContext).sort((a, b) => b.length - a.length),
+      active = members.filter((member) => member.bubble).sort((a, b) => a.bubbleShownAt - b.bubbleShownAt).map((member) => member.bubble),
+      includesPlayer = members.some((member) => player.npcIds.includes(member.eventId)),
+      history = [...(contexts[0] || []), ...active, ...(includesPlayer && player.bubble ? [player.bubble] : [])]
+        .filter((line, index, all) => line && all.indexOf(line) === index)
+        .slice(-3);
+    if (!history.length) return [];
+    return [{
+      x: members.reduce((sum, member) => sum + (member.x - sx) * T + 16, 0) / members.length,
+      y: Math.min(...members.map((member) => (member.y - sy) * T - 18)),
+      lines: history,
+    }];
+  });
+}
+
 function draw(ctx: CanvasRenderingContext2D, state: WorldSave, ambient: AmbientWorld, playerAmbient: AmbientPlayerState) {
   const pos = state.position,
     map = getOriginalMap(pos.mapId),
@@ -4393,7 +4426,7 @@ function draw(ctx: CanvasRenderingContext2D, state: WorldSave, ambient: AmbientW
         visual.label,
         near,
       );
-      if (roaming?.bubble) ambientBubbles.push({
+      if (roaming?.bubble && !conversationSessionKey(roaming, playerAmbient)) ambientBubbles.push({
         x: (eventX - sx) * T + 16,
         y: (eventY - sy) * T - 13,
         text: roaming.bubble,
@@ -4457,7 +4490,10 @@ function draw(ctx: CanvasRenderingContext2D, state: WorldSave, ambient: AmbientW
     { sheet: 0, row: state.actor.gender ? 1 : 0 },
     pos.direction,
   );
-  if (playerAmbient.bubble) ambientBubbles.push({
+  const conversationCards = collectConversationCards(ambient, playerAmbient, sx, sy),
+    playerGrouped = conversationCards.length > 0 && playerAmbient.npcIds.length > 0;
+  conversationCards.forEach((card) => drawConversationCard(ctx, card));
+  if (playerAmbient.bubble && !playerGrouped) ambientBubbles.push({
     x: (pos.x - sx) * T + 16,
     y: (pos.y - sy) * T - 13,
     text: playerAmbient.bubble,
