@@ -2234,7 +2234,7 @@ export default function OriginalWorld() {
               changeCheatStat(menu.index, 1);
             else if (confirm && menu.sub === 3)
               changeCheatSkill(menu.index, 1);
-            else if (cancel || ["k", "m"].includes(k)) setMenu(null);
+            else if (cancel || k === "m") setMenu(null);
             return;
           }
           if (k === "arrowup" || k === "w")
@@ -2319,7 +2319,6 @@ export default function OriginalWorld() {
           return;
         }
         if (confirm) interact();
-        else if (k === "k") setMenu({ tab: 3, index: 0, sub: 0 });
         else if (["c", "m"].includes(k)) setMenu({ tab: 0, index: 0, sub: 0 });
         else if (["1", "2", "3", "4"].includes(k))
           setMenu({ tab: Number(k) - 1, index: 0, sub: 0 });
@@ -3481,7 +3480,7 @@ ${mode}输出必须符合古代武侠世界，不推动正式任务，不改变�
             功夫 <kbd>3</kbd>
           </button>
           <button onClick={() => setMenu({ tab: 3, index: 0, sub: 0 })}>
-            秘技 <kbd>K</kbd>
+            秘技 <kbd>4</kbd>
           </button>
           <button onClick={() => setCultivation(0)}>
             修炼 <kbd>R</kbd>
@@ -3504,7 +3503,7 @@ ${mode}输出必须符合古代武侠世界，不推动正式任务，不改变�
         移动 <kbd>WASD</kbd>
         <kbd>方向键</kbd> · 互动 <kbd>E</kbd>
         <kbd>Enter</kbd> · 菜单 <kbd>C</kbd> · 行囊 <kbd>1</kbd> · 状态{" "}
-        <kbd>2</kbd> · 功夫 <kbd>3</kbd> · 秘技 <kbd>K</kbd> · 修炼 <kbd>R</kbd> ·
+        <kbd>2</kbd> · 功夫 <kbd>3</kbd> · 秘技 <kbd>4</kbd> · 修炼 <kbd>R</kbd> ·
         轻功 <kbd>H</kbd> · 任务 <kbd>T</kbd> · 保存（右上角） · 返回{" "}
         <kbd>Esc</kbd>
       </footer>
