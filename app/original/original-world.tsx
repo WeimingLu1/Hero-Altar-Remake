@@ -338,8 +338,12 @@ const allCheatSkills = originalTables.kungfus
   .sort(
     (a, b) => kungfuSchoolId(a.id) - kungfuSchoolId(b.id) || a.id - b.id,
   );
-// 秘技「物品装备」的完整目录：按类别分组，展示属性加成与描述。
-const cheatCatalogGroups = (kind: CheatInventoryKind) => {
+// 秘技「物品装备」的完整目录：按类别分组，展示属性加成与描述；
+// 已装备的武器/防具前置为独立「已装备」分组。
+const cheatCatalogGroups = (
+  kind: CheatInventoryKind,
+  equippedIds: number[],
+) => {
   const table =
       kind === 1
         ? originalTables.items
@@ -348,9 +352,16 @@ const cheatCatalogGroups = (kind: CheatInventoryKind) => {
           : originalTables.armors,
     weaponKinds = ["剑器", "刀兵", "杖棍", "鞭索"],
     armorKinds = ["衣装", "内甲", "饰品", "鞋履", "腰带", "披风", "工具"],
+    equipped = new Set(equippedIds),
     groups = new Map<
       string,
-      Array<{ id: number; name: string; bonus: string; description: string }>
+      Array<{
+        id: number;
+        name: string;
+        bonus: string;
+        description: string;
+        equipped: boolean;
+      }>
     >();
   table.forEach((record, id) => {
     if (!record) return;
@@ -407,10 +418,35 @@ const cheatCatalogGroups = (kind: CheatInventoryKind) => {
           : `防具 · ${armorKinds[Number(record.kind || 0)] || "其他"}`;
     }
     const list = groups.get(group) || [];
-    list.push({ id, name, bonus, description });
+    list.push({ id, name, bonus, description, equipped: equipped.has(id) });
     groups.set(group, list);
   });
-  return [...groups.entries()].map(([name, items]) => ({ name, items }));
+  const result = [...groups.entries()].map(([name, items]) => ({
+    name,
+    items,
+  }));
+  if (equippedIds.length) {
+    const worn = equippedIds
+      .map((id) => {
+        const record = table[id];
+        if (!record) return null;
+        const found = result
+          .flatMap((group) => group.items)
+          .find((entry) => entry.id === id);
+        return (
+          found || {
+            id,
+            name: String(record.name || id),
+            bonus: "已装备",
+            description: String(record.description || ""),
+            equipped: true,
+          }
+        );
+      })
+      .filter((entry): entry is NonNullable<typeof entry> => Boolean(entry));
+    if (worn.length) result.unshift({ name: "已装备", items: worn });
+  }
+  return result;
 };
 type WorldSave = {
   format: "rmxp-hero-original-world-save";
@@ -4366,8 +4402,20 @@ function CheatInner({
               </button>
             </section>
             <div className="cheat-catalog">
-              {cheatCatalogGroups(inventoryKind).map((group) => (
-                <div className="cheat-catalog-group" key={group.name}>
+              {cheatCatalogGroups(
+                inventoryKind,
+                inventoryKind === 2
+                  ? actor.weaponId
+                    ? [actor.weaponId]
+                    : []
+                  : inventoryKind === 3
+                    ? actor.armorIds
+                    : [],
+              ).map((group) => (
+                <div
+                  className={`cheat-catalog-group${group.name === "已装备" ? " equipped-group" : ""}`}
+                  key={group.name}
+                >
                   <header className="cheat-group-header">
                     <b>{group.name}</b>
                     <small>{group.items.length} 件</small>
@@ -4375,13 +4423,14 @@ function CheatInner({
                   {group.items.map((entry) => (
                     <button
                       key={entry.id}
-                      className={inventoryId === entry.id ? "active" : ""}
+                      className={`${inventoryId === entry.id ? "active" : ""}${entry.equipped ? " is-equipped" : ""}`}
                       onClick={() => setInventoryId(entry.id)}
                     >
                       <span>
                         <b>
                           {entry.name}
                           <small>ID {entry.id}</small>
+                          {entry.equipped && <i>已装备</i>}
                         </b>
                         <em>{entry.bonus}</em>
                       </span>

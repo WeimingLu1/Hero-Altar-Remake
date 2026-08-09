@@ -484,38 +484,35 @@
 }
 /* 秘技「物品装备」完整目录：按类别分组展示属性与描述 */
 .cheat-catalog {
-  display: grid;
-  grid-template-columns: 1fr;
-  gap: 6px;
-  max-height: 320px;
+  display: block;
+  max-height: 340px;
   overflow: auto;
   margin-bottom: 10px;
 }
-.cheat-catalog-group {
-  display: contents;
-}
-.cheat-catalog-group .cheat-group-header {
-  grid-column: 1/-1;
+.cheat-catalog-group + .cheat-catalog-group {
+  margin-top: 4px;
 }
 .cheat-catalog-group > button {
-  display: grid;
-  gap: 5px;
+  display: block;
   width: 100%;
-  padding: 8px 10px;
+  padding: 10px 12px;
+  margin: 0;
   color: #e9dff0;
-  border: 1px solid #ffffff10;
-  border-bottom-color: #ffffff12;
-  background: #ffffff04;
+  border: 1px solid transparent;
+  border-bottom-color: #ffffff14;
+  background: transparent;
   text-align: left;
-  min-height: 0;
+  line-height: 1.5;
 }
 .cheat-catalog-group > button.active {
   border-color: #ce80f3;
   background: #a957d326;
 }
 .cheat-catalog-group > button > span {
-  display: grid;
-  gap: 3px;
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 12px;
 }
 .cheat-catalog-group > button b {
   color: #f0e2c8;
@@ -526,15 +523,31 @@
   color: #8e7f95;
   font-size: 9px;
 }
+.cheat-catalog-group > button b i {
+  margin-left: 6px;
+  font-style: normal;
+  padding: 1px 5px;
+  color: #8fe0f2;
+  border: 1px solid #4fb3c955;
+  background: #2f5f7445;
+  font-size: 9px;
+}
 .cheat-catalog-group > button em {
   color: #8fe0f2;
   font-style: normal;
   font-size: 10px;
+  white-space: nowrap;
 }
 .cheat-catalog-desc {
+  display: block;
+  margin-top: 4px;
   color: #a394ad;
   font-size: 9px;
   line-height: 1.4;
+}
+.cheat-catalog-group > button.is-equipped {
+  border-color: #4fb3c9;
+  background: #2f5f7438;
 }
 .cheat-list {
   overflow: auto;
