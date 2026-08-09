@@ -96,17 +96,33 @@ export function bagEntries(actor: SceneActorState): BagEntry[] {
 function record(entry: BagEntry): OriginalRecord {
   return table(entry.kind)[entry.id] || {};
 }
-const weaponKinds = ["剑器", "刀兵", "杖棍", "鞭索"];
-const armorKinds = ["衣装", "内甲", "饰品", "鞋履", "腰带", "披风", "工具"];
-function entryCategory(kind: number, item: OriginalRecord) {
+export const weaponKinds = ["剑器", "刀兵", "杖棍", "鞭索"];
+// 原作 armor.kind 实际是互斥装备槽：同 kind 只能装备一件，不同 kind 可同时装备。
+// kind=6 的钓竿是功能工具，不是防具，只是借用 Armor 数据结构实现装备状态。
+export const armorSlotNames = [
+  "外衣槽",
+  "护甲槽",
+  "饰物槽",
+  "鞋履槽",
+  "腰带槽",
+  "披风槽",
+  "工具槽",
+];
+export function equipmentCategory(kind: number, item: OriginalRecord) {
   if (kind === 1) return item.is_book ? "武学秘籍" : "消耗与杂物";
   if (kind === 2) return `武器 · ${weaponKinds[Number(item.type || 0)] || "奇门"}`;
-  return `防具 · ${armorKinds[Number(item.kind || 0)] || "其他"}`;
+  const slot = Number(item.kind || 0);
+  return slot === 6
+    ? "工具槽 · 钓具"
+    : armorSlotNames[slot] || "其他装备槽";
+}
+function entryCategory(kind: number, item: OriginalRecord) {
+  return equipmentCategory(kind, item);
 }
 function entrySlot(kind: number, item: OriginalRecord) {
   if (kind === 1) return item.is_book ? "研读" : "使用";
   if (kind === 2) return "主手武器";
-  return armorKinds[Number(item.kind || 0)] || "防具";
+  return armorSlotNames[Number(item.kind || 0)] || "装备槽";
 }
 function entryBonuses(item: OriginalRecord) {
   const labels: Array<[string, string]> = [

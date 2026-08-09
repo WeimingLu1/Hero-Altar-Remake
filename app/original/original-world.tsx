@@ -79,6 +79,7 @@ import {
   activateEntry,
   activateBattleEntry,
   battleConsumableEntries,
+  equipmentCategory,
   type BagEntry,
 } from "../game-core/inventory-system";
 import {
@@ -338,8 +339,8 @@ const allCheatSkills = originalTables.kungfus
   .sort(
     (a, b) => kungfuSchoolId(a.id) - kungfuSchoolId(b.id) || a.id - b.id,
   );
-// 秘技「物品装备」的完整目录：按类别分组，展示属性加成与描述；
-// 已装备的武器/防具前置为独立「已装备」分组。
+// 秘技「物品装备」的完整目录：防具按原作互斥装备槽分组，
+// 行内标记装备状态，不再复制一份“已装备”分组。
 const cheatCatalogGroups = (
   kind: CheatInventoryKind,
   equippedIds: number[],
@@ -350,8 +351,6 @@ const cheatCatalogGroups = (
         : kind === 2
           ? originalTables.weapons
           : originalTables.armors,
-    weaponKinds = ["剑器", "刀兵", "杖棍", "鞭索"],
-    armorKinds = ["衣装", "内甲", "饰品", "鞋履", "腰带", "披风", "工具"],
     equipped = new Set(equippedIds),
     groups = new Map<
       string,
@@ -413,40 +412,16 @@ const cheatCatalogGroups = (
       }
       bonus = stats.length ? stats.join(" · ") : "无常驻属性";
       group =
-        kind === 2
-          ? `武器 · ${weaponKinds[Number(record.type || 0)] || "奇门"}`
-          : `防具 · ${armorKinds[Number(record.kind || 0)] || "其他"}`;
+        equipmentCategory(kind, record);
     }
     const list = groups.get(group) || [];
     list.push({ id, name, bonus, description, equipped: equipped.has(id) });
     groups.set(group, list);
   });
-  const result = [...groups.entries()].map(([name, items]) => ({
+  return [...groups.entries()].map(([name, items]) => ({
     name,
     items,
   }));
-  if (equippedIds.length) {
-    const worn = equippedIds
-      .map((id) => {
-        const record = table[id];
-        if (!record) return null;
-        const found = result
-          .flatMap((group) => group.items)
-          .find((entry) => entry.id === id);
-        return (
-          found || {
-            id,
-            name: String(record.name || id),
-            bonus: "已装备",
-            description: String(record.description || ""),
-            equipped: true,
-          }
-        );
-      })
-      .filter((entry): entry is NonNullable<typeof entry> => Boolean(entry));
-    if (worn.length) result.unshift({ name: "已装备", items: worn });
-  }
-  return result;
 };
 type WorldSave = {
   format: "rmxp-hero-original-world-save";
@@ -4073,6 +4048,7 @@ function GameMenu({
                   <header className="equipment-category">
                     <span>{entry.category}</span>
                     <small>
+                      {entry.kind === 3 ? "同槽择一 · " : ""}
                       {entries.filter((item) => item.category === entry.category).length} 件
                     </small>
                   </header>
@@ -4389,7 +4365,7 @@ function CheatInner({
                 ["book", "秘籍"],
                 ["misc", "杂物"],
                 ["weapon", "武器"],
-                ["armor", "防具"],
+                ["armor", "防具/工具"],
                 ["owned", "已有"],
               ] as const).map(([kind, label]) => (
                 <button
@@ -4479,7 +4455,10 @@ function CheatInner({
                   >
                     <header className="cheat-group-header">
                       <b>{group.name}</b>
-                      <small>{group.items.length} 件</small>
+                      <small>
+                        {inventoryKind === 3 ? "同槽择一 · " : ""}
+                        {group.items.length} 件
+                      </small>
                     </header>
                     {group.items.map((entry) => {
                       const amountKey = `${inventoryKind}:${entry.id}`,

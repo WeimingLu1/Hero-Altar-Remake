@@ -140,8 +140,29 @@ test("行囊条目公开现代装备界面所需的门类、槽位与属性摘�
   assert.equal(sword.category, "武器 · 剑器");
   assert.equal(sword.slot, "主手武器");
   assert.match(sword.bonuses, /攻击\+65/);
-  assert.equal(armor.category, "防具 · 内甲");
+  assert.equal(armor.category, "护甲槽");
   assert.match(armor.bonuses, /防御\+60/);
+});
+
+test("防具按互斥槽分组且钓竿明确归入独立工具槽", () => {
+  const a = actor();
+  a.inventory["3:4"] = 1; // 外衣
+  a.inventory["3:5"] = 1; // 外衣
+  a.inventory["3:24"] = 1; // 护甲
+  a.inventory["3:31"] = 1; // 钓竿工具
+  const entries = bagEntries(a),
+    cloth = entries.find((entry) => entry.key === "3:4")!,
+    armor = entries.find((entry) => entry.key === "3:24")!,
+    rod = entries.find((entry) => entry.key === "3:31")!;
+  assert.equal(cloth.category, "外衣槽");
+  assert.equal(armor.category, "护甲槽");
+  assert.equal(rod.category, "工具槽 · 钓具");
+  activateEntry(a, cloth);
+  activateEntry(a, armor);
+  activateEntry(a, rod);
+  assert.deepEqual(a.armorIds, [4, 24, 31], "不同装备槽应可同时装备");
+  activateEntry(a, entries.find((entry) => entry.key === "3:5")!);
+  assert.deepEqual(a.armorIds, [24, 31, 5], "同一装备槽只能保留一件");
 });
 
 test("原版石板来源记录在行囊合并显示为关键物品", () => {
