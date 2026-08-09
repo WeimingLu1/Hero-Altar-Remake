@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { resolveAmbientBubbleLayout } from "../app/game-core/ambient-bubble-layout";
+import { layoutConversationCard, resolveAmbientBubbleLayout } from "../app/game-core/ambient-bubble-layout";
 
 const mockCtx = (): CanvasRenderingContext2D => {
   const ctx = {
@@ -43,6 +43,16 @@ test("玩家与 NPC 气泡也互相错开", () => {
   ]);
   assert.equal(placed.length, 2);
   assert.equal(overlaps(placed[0], placed[1]), false);
+});
+
+test("动作气泡避开多人对话卡", () => {
+  const ctx = mockCtx();
+  const card = layoutConversationCard(ctx, { x: 120, y: 150, lines: ["甲 to 乙：第一句", "乙 to 甲：第二句"] });
+  const [bubble] = resolveAmbientBubbleLayout(ctx, [
+    { x: 120, y: 120, text: "正在观察四周", kind: "action", shownAt: 1 },
+  ], [card]);
+  assert.equal(overlaps(bubble, card), false);
+  assert.ok(card.height >= 70, "卡片高度应容纳全部行");
 });
 
 test("多人气泡都保持在画布内且两两不重叠", () => {

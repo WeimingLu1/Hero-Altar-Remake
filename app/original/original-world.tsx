@@ -27,6 +27,7 @@ import {
 import {
   drawAmbientBubble,
   drawConversationCard,
+  layoutConversationCard,
   resolveAmbientBubbleLayout,
 } from "../game-core/ambient-bubble-layout";
 import {
@@ -499,7 +500,7 @@ const cleanAmbientSpeech = (raw: string, forbiddenNames: string[] = []) => {
       .replace(/[“”]/g, "")
       .replace(/\s+/g, " ")
       .trim(),
-    narration = /(?:风|雨|雪|月光|阳光|雾|云|竹林|树影|花瓣|衣袖|发丝|眼眸|目光|嘴角|声音|回声).{0,14}(?:吹|掠|穿|落|摇|映|响|传|动|起|泛|垂|飘)|(?:微微|轻轻|缓缓|悄然).{0,10}(?:动|笑|抬|垂|转|望|看|吹|走|摇|点|皱)|(?:站|坐|走|立|倚)在.{0,14}(?:上|下|旁|边|前|后|中)/,
+    narration = /(?:风|雨|雪|月光|阳光|雾|云|竹林|树影|花瓣|衣袖|发丝|眼眸|目光|嘴角|声音|回声).{0,14}(?:吹|掠|穿|落|摇|映|响|传|动|起|泛|垂|飘)|(?:微微|轻轻|缓缓|悄然).{0,10}(?:动|笑|抬|垂|转|望|看|吹|走|摇|点|皱)|(?:她|他|其).{0,12}(?:指尖|手指|抬眼|扫过|滑入|缩回|蹭了蹭|盯着|看向|望向|点了点)|(?:站|坐|走|立|倚)在.{0,14}(?:上|下|旁|边|前|后|中)/,
     spokenClauses = withoutDirections.split(/(?<=[，。！？；])/).filter((clause) => !narration.test(clause)).join("").trim();
   return spokenClauses && !/^(?:to|谁|某某|格式|接收者|发言者)+$/i.test(spokenClauses) ? spokenClauses : "……";
 };
@@ -4357,6 +4358,8 @@ function conversationSessionKey(npc: AmbientNpc, player: AmbientPlayerState) {
   if (npc.partnerId) return `pair:${Math.min(npc.eventId, npc.partnerId)}:${Math.max(npc.eventId, npc.partnerId)}`;
   if (player.npcIds.includes(npc.eventId) && npc.speechTargetName)
     return `player:${[...player.npcIds].sort((a, b) => a - b).join(":")}`;
+  const routed = npc.bubble.match(/^(?:群聊\s*·\s*)?(.+?)\s+to\s+(.+?)：/);
+  if (routed) return `route:${[routed[1], routed[2]].sort().join(":")}`;
   return "";
 }
 
@@ -4490,9 +4493,8 @@ function draw(ctx: CanvasRenderingContext2D, state: WorldSave, ambient: AmbientW
     { sheet: 0, row: state.actor.gender ? 1 : 0 },
     pos.direction,
   );
-  const conversationCards = collectConversationCards(ambient, playerAmbient, sx, sy),
+  const conversationCards = collectConversationCards(ambient, playerAmbient, sx, sy).map((card) => layoutConversationCard(ctx, card)),
     playerGrouped = conversationCards.length > 0 && playerAmbient.npcIds.length > 0;
-  conversationCards.forEach((card) => drawConversationCard(ctx, card));
   if (playerAmbient.bubble && !playerGrouped) ambientBubbles.push({
     x: (pos.x - sx) * T + 16,
     y: (pos.y - sy) * T - 13,
@@ -4510,7 +4512,9 @@ function draw(ctx: CanvasRenderingContext2D, state: WorldSave, ambient: AmbientW
           ? -1
           : first.shownAt - second.shownAt,
     ),
+    conversationCards,
   );
+  conversationCards.forEach((card) => drawConversationCard(ctx, card));
   placedBubbles.forEach((bubble) => drawAmbientBubble(ctx, bubble));
   const shade = ctx.createRadialGradient(W / 2, H / 2, 120, W / 2, H / 2, 430);
   shade.addColorStop(0, "rgba(0,0,0,0)");

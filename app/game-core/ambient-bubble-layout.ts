@@ -25,6 +25,16 @@ export type ConversationCardInput = {
   lines: string[];
 };
 
+export type ConversationCardBox = ConversationCardInput & {
+  left: number;
+  top: number;
+  width: number;
+  height: number;
+  entries: Array<{ route: string; lines: string[] }>;
+};
+
+type LayoutObstacle = { left: number; top: number; width: number; height: number };
+
 const W = 640;
 const H = 480;
 
@@ -64,6 +74,7 @@ export function measureAmbientBubble(
 export function resolveAmbientBubbleLayout(
   ctx: CanvasRenderingContext2D,
   bubbles: AmbientBubbleInput[],
+  obstacles: LayoutObstacle[] = [],
 ): AmbientBubbleBox[] {
   const measured = bubbles.map((bubble) => {
     const m = measureAmbientBubble(ctx, bubble.text, bubble.kind);
@@ -101,7 +112,7 @@ export function resolveAmbientBubbleLayout(
         width: box.width,
         height: box.height,
       };
-      return !placed.some((p) => overlap(sized, p));
+      return !placed.some((p) => overlap(sized, p)) && !obstacles.some((p) => overlap(sized, p as AmbientBubbleBox));
     };
     const candidates: Array<{ left: number; top: number }> = [];
     for (let i = 0; i < 12; i++)
@@ -166,34 +177,39 @@ function conversationParts(value: string) {
   return solo ? { route: solo[1], text: solo[2] } : { route: "交谈", text: clean };
 }
 
-export function drawConversationCard(ctx: CanvasRenderingContext2D, card: ConversationCardInput) {
-  const width = 244,
+export function layoutConversationCard(ctx: CanvasRenderingContext2D, card: ConversationCardInput): ConversationCardBox {
+  const width = 218,
     entries = card.lines.slice(-3).map(conversationParts),
     wrapped = entries.map((entry) => {
       const lines: string[] = []; let line = "";
-      ctx.save(); ctx.font = "11px sans-serif";
+      ctx.save(); ctx.font = "9px sans-serif";
       for (const character of entry.text) {
         const next = line + character;
-        if (line && ctx.measureText(next).width > width - 24) { lines.push(line); line = character; }
+        if (line && ctx.measureText(next).width > width - 20) { lines.push(line); line = character; }
         else line = next;
       }
       if (line) lines.push(line);
       ctx.restore();
       return { ...entry, lines: lines.slice(0, 2) };
     }),
-    height = 12 + wrapped.reduce((sum, entry) => sum + 15 + entry.lines.length * 14, 0),
+    height = 14 + wrapped.reduce((sum, entry) => sum + 13 + entry.lines.length * 12 + 3, 0),
     left = Math.max(5, Math.min(W - width - 5, card.x - width / 2)),
     top = Math.max(5, Math.min(H - height - 5, card.y - height));
+  return { ...card, left, top, width, height, entries: wrapped };
+}
+
+export function drawConversationCard(ctx: CanvasRenderingContext2D, card: ConversationCardBox) {
+  const { left, top, width, height, entries } = card;
   ctx.save();
   ctx.fillStyle = "rgba(5,12,10,.95)"; ctx.fillRect(left, top, width, height);
   ctx.strokeStyle = "rgba(207,177,95,.88)"; ctx.lineWidth = 1.5; ctx.strokeRect(left + .75, top + .75, width - 1.5, height - 1.5);
-  let cursor = top + 17;
-  wrapped.forEach((entry, index) => {
-    ctx.textAlign = "left"; ctx.font = "bold 10px sans-serif"; ctx.fillStyle = index === wrapped.length - 1 ? "#f2d67f" : "#9eb7aa";
-    ctx.fillText(entry.route, left + 10, cursor); cursor += 14;
-    ctx.font = "11px sans-serif"; ctx.fillStyle = "#e8eadf";
-    entry.lines.forEach((line) => { ctx.fillText(line, left + 12, cursor); cursor += 14; });
-    cursor += 2;
+  let cursor = top + 14;
+  entries.forEach((entry, index) => {
+    ctx.textAlign = "left"; ctx.font = "bold 9px sans-serif"; ctx.fillStyle = index === entries.length - 1 ? "#f2d67f" : "#9eb7aa";
+    ctx.fillText(entry.route, left + 9, cursor); cursor += 13;
+    ctx.font = "9px sans-serif"; ctx.fillStyle = "#e8eadf";
+    entry.lines.forEach((line) => { ctx.fillText(line, left + 10, cursor); cursor += 12; });
+    cursor += 3;
   });
   ctx.restore();
 }
