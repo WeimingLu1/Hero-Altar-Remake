@@ -23,6 +23,8 @@ export type ConversationCardInput = {
   x: number;
   y: number;
   lines: string[];
+  playerInvolved?: boolean;
+  playerName?: string;
 };
 
 export type ConversationCardBox = ConversationCardInput & {
@@ -190,22 +192,23 @@ export function layoutConversationCard(ctx: CanvasRenderingContext2D, card: Conv
       }
       if (line) lines.push(line);
       ctx.restore();
-      return { ...entry, lines: lines.slice(0, 2) };
+      return { ...entry, lines };
     }),
     height = 14 + wrapped.reduce((sum, entry) => sum + 13 + entry.lines.length * 12 + 3, 0),
     left = Math.max(5, Math.min(W - width - 5, card.x - width / 2)),
-    top = Math.max(5, Math.min(H - height - 5, card.y - height));
+    top = card.playerInvolved ? 5 : Math.max(5, Math.min(H - height - 5, card.y - height));
   return { ...card, left, top, width, height, entries: wrapped };
 }
 
 export function drawConversationCard(ctx: CanvasRenderingContext2D, card: ConversationCardBox) {
   const { left, top, width, height, entries } = card;
   ctx.save();
-  ctx.fillStyle = "rgba(5,12,10,.95)"; ctx.fillRect(left, top, width, height);
-  ctx.strokeStyle = "rgba(207,177,95,.88)"; ctx.lineWidth = 1.5; ctx.strokeRect(left + .75, top + .75, width - 1.5, height - 1.5);
+  ctx.fillStyle = card.playerInvolved ? "rgba(5,13,20,.97)" : "rgba(5,12,10,.95)"; ctx.fillRect(left, top, width, height);
+  ctx.strokeStyle = card.playerInvolved ? "rgba(91,166,224,.98)" : "rgba(207,177,95,.88)"; ctx.lineWidth = card.playerInvolved ? 2 : 1.5; ctx.strokeRect(left + .75, top + .75, width - 1.5, height - 1.5);
   let cursor = top + 14;
   entries.forEach((entry, index) => {
-    ctx.textAlign = "left"; ctx.font = "bold 9px sans-serif"; ctx.fillStyle = index === entries.length - 1 ? "#f2d67f" : "#9eb7aa";
+    const playerRoute = card.playerName && entry.route.split(" → ").includes(card.playerName);
+    ctx.textAlign = "left"; ctx.font = "bold 9px sans-serif"; ctx.fillStyle = playerRoute ? "#8ecbff" : index === entries.length - 1 ? "#f2d67f" : "#9eb7aa";
     ctx.fillText(entry.route, left + 9, cursor); cursor += 13;
     ctx.font = "9px sans-serif"; ctx.fillStyle = "#e8eadf";
     entry.lines.forEach((line) => { ctx.fillText(line, left + 10, cursor); cursor += 12; });

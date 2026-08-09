@@ -4363,7 +4363,7 @@ function conversationSessionKey(npc: AmbientNpc, player: AmbientPlayerState) {
   return "";
 }
 
-function collectConversationCards(ambient: AmbientWorld, player: AmbientPlayerState, sx: number, sy: number) {
+function collectConversationCards(ambient: AmbientWorld, player: AmbientPlayerState, sx: number, sy: number, playerName: string) {
   const sessions = new Map<string, AmbientNpc[]>();
   for (const npc of ambient.npcs) {
     const key = conversationSessionKey(npc, player);
@@ -4382,6 +4382,8 @@ function collectConversationCards(ambient: AmbientWorld, player: AmbientPlayerSt
       x: members.reduce((sum, member) => sum + (member.x - sx) * T + 16, 0) / members.length,
       y: Math.min(...members.map((member) => (member.y - sy) * T - 18)),
       lines: history,
+      playerInvolved: includesPlayer || history.some((line) => line.includes(`${playerName} to `) || line.includes(`to ${playerName}：`)),
+      playerName,
     }];
   });
 }
@@ -4493,7 +4495,7 @@ function draw(ctx: CanvasRenderingContext2D, state: WorldSave, ambient: AmbientW
     { sheet: 0, row: state.actor.gender ? 1 : 0 },
     pos.direction,
   );
-  const conversationCards = collectConversationCards(ambient, playerAmbient, sx, sy).map((card) => layoutConversationCard(ctx, card)),
+  const conversationCards = collectConversationCards(ambient, playerAmbient, sx, sy, state.actor.name).map((card) => layoutConversationCard(ctx, card)),
     playerGrouped = conversationCards.length > 0 && playerAmbient.npcIds.length > 0;
   if (playerAmbient.bubble && !playerGrouped) ambientBubbles.push({
     x: (pos.x - sx) * T + 16,
@@ -4514,8 +4516,10 @@ function draw(ctx: CanvasRenderingContext2D, state: WorldSave, ambient: AmbientW
     ),
     conversationCards,
   );
-  conversationCards.forEach((card) => drawConversationCard(ctx, card));
+  conversationCards.filter((card) => !card.playerInvolved).forEach((card) => drawConversationCard(ctx, card));
   placedBubbles.forEach((bubble) => drawAmbientBubble(ctx, bubble));
+  // 主角参与的会话固定在屏幕顶部，并最后绘制，避免被任何环境气泡遮挡。
+  conversationCards.filter((card) => card.playerInvolved).forEach((card) => drawConversationCard(ctx, card));
   const shade = ctx.createRadialGradient(W / 2, H / 2, 120, W / 2, H / 2, 430);
   shade.addColorStop(0, "rgba(0,0,0,0)");
   shade.addColorStop(1, "rgba(2,7,4,.34)");
