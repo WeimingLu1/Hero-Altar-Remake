@@ -172,6 +172,7 @@ import {
   npcVisibleWithInventory,
   tokenGateState,
 } from "../game-core/hidden-npc";
+import { canObtainCaihua } from "../game-core/actor-conditions";
 import "./world.css";
 import "./choice.css";
 import "./battle.css";
@@ -688,7 +689,7 @@ export default function OriginalWorld() {
         tanId: s.actor.tanId,
         freeWork: s.tasks.freeWork,
         canGetItem: true,
-        canGetCaihua: true,
+        canGetCaihua: canObtainCaihua(s.actor),
       });
       if (sceneCall && !automatic) {
         if (sceneCall.type === 0 && sceneCall.id !== undefined) {
@@ -4648,7 +4649,7 @@ function eventVisual(event: MapEvent, state: WorldSave): EventVisual {
       tanId: state.actor.tanId,
       freeWork: state.tasks.freeWork,
       canGetItem: true,
-      canGetCaihua: true,
+      canGetCaihua: canObtainCaihua(state.actor),
     }),
     graphic = String(page.graphic?.character_name || ""),
     cleanName = friendlyEventName(event.name, result.transfer?.mapId);
