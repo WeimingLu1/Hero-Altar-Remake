@@ -277,6 +277,19 @@
   border-color: #b39b58;
   background: #82663338;
 }
+/* 运用的武功用蓝色高亮，招架用红色高亮 */
+.kungfu-list button.equipped {
+  border-color: #4fb3c9;
+  background: #2f5f7438;
+}
+.kungfu-list button.parrying {
+  border-color: #c96a4f;
+  background: #74322f38;
+}
+.kungfu-list button.parrying.equipped {
+  border-color: #e0a04f;
+  background: linear-gradient(90deg, #74322f38, #2f5f7438);
+}
 .kungfu-list span,
 .kungfu-list em {
   color: #aca58e;
@@ -311,6 +324,16 @@
   border: 1px solid #b9924355;
   background: #8d69252e;
   font: 8px monospace;
+}
+.skill-tags span.tag-equipped {
+  color: #8fe0f2;
+  border-color: #4fb3c955;
+  background: #2f5f7445;
+}
+.skill-tags span.tag-parrying {
+  color: #f2a58f;
+  border-color: #c96a4f55;
+  background: #74322f45;
 }
 .game-menu > footer {
   grid-area: help;

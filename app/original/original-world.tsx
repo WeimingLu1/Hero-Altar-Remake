@@ -4437,7 +4437,7 @@ function SkillRows({
               </header>
             )}
           <button
-            className={index === i ? "active" : ""}
+            className={`${index === i ? "active" : ""}${skill.equipped ? " equipped" : ""}${skill.parrying ? " parrying" : ""}`}
             onMouseEnter={() => setMenu({ tab: 2, index: i, sub: 0 })}
             onClick={() => activate(skill.id)}
           >
@@ -4451,8 +4451,8 @@ function SkillRows({
               {skill.points} 点 · {skill.school}
             </em>
             <i className="skill-tags">
-              {skill.equipped && <span>当前运用</span>}
-              {skill.parrying && <span>用于招架</span>}
+              {skill.equipped && <span className="tag-equipped">当前运用</span>}
+              {skill.parrying && <span className="tag-parrying">用于招架</span>}
               {!skill.equipped && !skill.parrying && <span>已习得</span>}
             </i>
           </button>
