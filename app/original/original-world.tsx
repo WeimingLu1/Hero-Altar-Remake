@@ -1137,7 +1137,14 @@ export default function OriginalWorld() {
         loading: false,
       } : active);
     } catch (error) {
-      if (controller.signal.aborted) return;
+      if (controller.signal.aborted) {
+        updateEntry((item) => ({
+          ...item,
+          text: item.text || item.facts.join("\n"),
+          loading: false,
+        }));
+        return;
+      }
       const detail = error instanceof Error ? error.message : "连接失败";
       setNpcChat((active) => active?.id === id ? { ...active, loading: false, auto: false, error: `${detail}。自动对话已停止。` } : active);
     } finally {
@@ -1217,7 +1224,7 @@ export default function OriginalWorld() {
     }
   }, []);
   const fight = useCallback(() => {
-    if (!battle || battle.finished || battleNarrativesRef.current.some((item) => item.loading)) return;
+    if (!battle || battle.finished) return;
     const playerHpBefore = stateRef.current.actor.hp,
       enemyHpBefore = battle.enemyHp,
       logLength = battle.log.length,
@@ -1236,7 +1243,7 @@ export default function OriginalWorld() {
   }, [battle, narrateBattleRound, sync]);
   const fightSpecial = useCallback(
     (id?: number) => {
-      if (!battle || !id || battleNarrativesRef.current.some((item) => item.loading)) return;
+      if (!battle || !id) return;
       const playerHpBefore = stateRef.current.actor.hp,
         enemyHpBefore = battle.enemyHp,
         logLength = battle.log.length,
@@ -2096,10 +2103,6 @@ export default function OriginalWorld() {
               setBattleItem((battleItem + 1) % Math.max(1, combatItems.length));
             else if (confirm) consumeBattleItem(combatItems[battleItem]);
             else if (cancel || k === "i") setBattleItem(null);
-            return;
-          }
-          if (battleNarrativesRef.current.some((item) => item.loading)) {
-            if (k === "i") setBattleItem(0);
             return;
           }
           if (specialMenu !== null) {
@@ -3697,8 +3700,6 @@ function BattleView({
       behavior: latestNarrative?.loading ? "auto" : "smooth",
     });
   }, [battle.log.length, latestNarrative?.loading, latestNarrative?.text.length]);
-  const generating = Boolean(latestNarrative?.loading);
-
   return (
     <div className="battle">
       <div className="battle-stage">
@@ -3757,10 +3758,10 @@ function BattleView({
         <div className="battle-log-anchor" aria-hidden="true" />
       </div>
       <nav>
-        <button onClick={battle.finished ? leave : fight} disabled={generating}>
-          {generating ? "战报演绎中…" : battle.finished ? "处理战果" : "普通攻击"} <kbd>E</kbd>
+        <button onClick={battle.finished ? leave : fight}>
+          {battle.finished ? "处理战果" : "普通攻击"} <kbd>E</kbd>
         </button>
-        <button onClick={openSpecial} disabled={Boolean(battle.finished) || generating}>
+        <button onClick={openSpecial} disabled={Boolean(battle.finished)}>
           绝招 <kbd>Q</kbd>
         </button>
         <button onClick={openItem} disabled={Boolean(battle.finished)}>
@@ -3768,7 +3769,7 @@ function BattleView({
         </button>
         <button
           onClick={battle.mode === "spar" ? leave : flee}
-          disabled={Boolean(battle.finished) || generating}
+          disabled={Boolean(battle.finished)}
         >
           {battle.mode === "spar" ? "退出" : "逃跑"}{" "}
           <kbd>{battle.mode === "spar" ? "X" : "G"}</kbd>

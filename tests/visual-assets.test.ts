@@ -125,6 +125,18 @@ test("战报生成期间仍可打开战斗药品且中止战报不会永久锁�
   assert.match(source, /openItem} disabled=\{Boolean\(battle\.finished\)\}/);
 });
 
+test("战报生成不能锁住普通攻击绝招或退出操作", () => {
+  assert.doesNotMatch(
+    source,
+    /if \(!battle \|\| battle\.finished \|\| battleNarrativesRef\.current\.some/,
+  );
+  assert.doesNotMatch(
+    source,
+    /if \(!battle \|\| !id \|\| battleNarrativesRef\.current\.some/,
+  );
+  assert.doesNotMatch(source, /disabled=\{Boolean\(battle\.finished\) \|\| generating\}/);
+});
+
 test("ambient conversations open on a self-raised matter and demand depth", () => {
   assert.match(source, /isOpening = sessionContext\.length === 0/);
   assert.match(source, /自然地提起一件具体的/);
