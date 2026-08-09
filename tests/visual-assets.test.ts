@@ -215,6 +215,18 @@ test("maps render a clean base before sparse transparent overlays", () => {
   assert.match(source, /seed % \(faction \? 37 : 31\)/);
   assert.match(source, /drawCleanBaseTile\(ctx, theme, road, faction, pingan/);
   assert.match(source, /drawOverlayCell\(ctx, decoration/);
+  assert.match(source, /"grassland" \| "forest" \| "desert"/);
+  assert.match(source, /时空的尽头.*"scifi"/);
+  assert.match(source, /vegetationBorder/);
+  assert.match(source, /besideRoad/);
+});
+
+test("indoor furnishing follows repeatable scene-specific patterns", () => {
+  assert.match(source, /tableSet =/);
+  assert.match(source, /for \(let y = 5; y < map\.height - 4; y \+= 4\)/);
+  assert.match(source, /row\(3, 3, map\.width - 4, 3, 19\)/);
+  assert.match(source, /\/杂货店\|豆腐店\|当铺\//);
+  assert.match(source, /add\(x \+ 2, map\.height - 3, .*\? 8 : 10\)/);
 });
 
 test("factions and Pingan districts use full-map authored plans", () => {

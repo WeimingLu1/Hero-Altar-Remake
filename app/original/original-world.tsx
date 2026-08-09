@@ -4533,18 +4533,22 @@ function eventVisual(event: MapEvent, state: WorldSave): EventVisual {
     };
   return { kind: "none", label: "" };
 }
-type MapTheme = "town" | "indoor" | "mountain" | "snow" | "water" | "altar" | "mystic";
+type MapTheme = "town" | "indoor" | "grassland" | "forest" | "desert" | "mountain" | "snow" | "water" | "altar" | "mystic" | "scifi";
 const roadCache = new Map<number, Set<string>>();
 const eventCellCache = new Map<number, Set<string>>();
 const furnitureCache = new Map<number, Map<string, number>>();
 
 function mapTheme(map: OriginalMap): MapTheme {
   if (/家中|家$|店|当铺|武馆|衙门|大厅|二楼|客房|西厢$|东厢$|房屋|室内|客栈|兵器行/.test(map.name)) return "indoor";
+  if (/时空的尽头/.test(map.name)) return "scifi";
+  if (/失落的世界|铸剑谷/.test(map.name)) return "desert";
+  if (/桃花源|花园/.test(map.name)) return "forest";
   if (/大雪山|长白山|冰火岛/.test(map.name)) return "snow";
   if (/东海|南海|渡口|岛$/.test(map.name)) return "water";
   if (/坛$/.test(map.name)) return "altar";
   if (/时空|失落|桃花源|铸剑谷/.test(map.name)) return "mystic";
-  if (/山|峰|郊|盆地|谷/.test(map.name)) return "mountain";
+  if (/山|峰|谷/.test(map.name)) return "mountain";
+  if (/郊|盆地/.test(map.name)) return "grassland";
   return "town";
 }
 
@@ -4600,6 +4604,10 @@ function drawCleanBaseTile(
     : theme === "indoor" ? "#896746"
     : theme === "water" ? "#39747c"
     : theme === "snow" ? "#cbd4d2"
+    : theme === "forest" ? "#4f7448"
+    : theme === "grassland" ? "#799553"
+    : theme === "desert" ? "#b89a63"
+    : theme === "scifi" ? "#303d4d"
     : theme === "mountain" || theme === "mystic" ? "#87755b"
     : stone ? "#7d817b"
     : "#718852";
@@ -4624,6 +4632,13 @@ function drawCleanBaseTile(
     ctx.moveTo(x + 5, y + 10); ctx.lineTo(x + 19, y + 10);
     ctx.moveTo(x + 13, y + 23); ctx.lineTo(x + 28, y + 23);
     ctx.stroke();
+  } else if (theme === "scifi") {
+    ctx.strokeStyle = "rgba(91,205,220,.22)";
+    ctx.strokeRect(x + 2.5, y + 2.5, T - 5, T - 5);
+    if ((mx + my) % 4 === 0) { ctx.fillStyle = "rgba(111,226,232,.18)"; ctx.fillRect(x + 6, y + 6, 3, 3); }
+  } else if (theme === "desert") {
+    ctx.strokeStyle = "rgba(105,77,42,.13)";
+    ctx.beginPath(); ctx.moveTo(x + 4, y + 22); ctx.quadraticCurveTo(x + 16, y + 17, x + 29, y + 21); ctx.stroke();
   } else if (stone || road) {
     ctx.strokeStyle = "rgba(38,40,37,.16)";
     ctx.strokeRect(x + .5, y + .5, T - 1, T - 1);
@@ -4669,6 +4684,17 @@ function drawAuthoredTerrain(
   }
   if (road || eventCells(map).has(`${mx},${my}`)) return;
   const seed = (Math.imul(map.id + 17, 73856093) ^ Math.imul(mx + 11, 19349663) ^ Math.imul(my + 7, 83492791)) >>> 0;
+  const besideRoad = roads.has(`${mx - 1},${my}`) || roads.has(`${mx + 1},${my}`) || roads.has(`${mx},${my - 1}`) || roads.has(`${mx},${my + 1}`),
+    vegetationBorder = theme !== "water" && theme !== "desert" && theme !== "scifi" &&
+      (mx === 2 || my === 2 || mx === map.width - 3 || my === map.height - 3);
+  if (besideRoad && (mx + my + map.id) % 4 === 0) {
+    drawOverlayCell(ctx, theme === "snow" ? 5 : theme === "forest" ? 2 : [3, 4, 8, 9, 10][seed % 5], x, y);
+    return;
+  }
+  if (vegetationBorder && (mx * 3 + my + map.id) % 4 === 0) {
+    drawOverlayCell(ctx, theme === "forest" ? [0, 2, 3][seed % 3] : [2, 3, 4][seed % 3], x, y);
+    return;
+  }
   const landscapedEdge = faction && (mx < 3 || my < 3 || mx >= map.width - 3 || my >= map.height - 3);
   if (landscapedEdge && seed % 11 === 0) {
     const factionDecoration = map.id === 23 ? 4 : map.id === 25 ? 9 : map.id === 36 || map.id === 42 || map.id === 54 ? 5 : [3, 4, 12, 13][seed % 4];
@@ -4678,7 +4704,9 @@ function drawAuthoredTerrain(
   if (seed % (faction ? 37 : 31) !== 0) return;
   const decoration =
     theme === "water" ? 6 :
-    theme === "altar" ? 13 :
+    theme === "altar" || theme === "scifi" ? 13 :
+    theme === "desert" ? [12, 13, 15][seed % 3] :
+    theme === "forest" ? [0, 2, 3, 4, 5, 6][seed % 6] :
     theme === "mountain" || theme === "snow" ? [5, 12, 13, 14, 15][seed % 5] :
     [0, 2, 3, 4, 8, 9, 10][seed % 7];
   drawOverlayCell(ctx, decoration, x, y);
@@ -4694,36 +4722,48 @@ function indoorFurniture(map: OriginalMap) {
         cells.set(`${x},${y}`, source);
     },
     cx = Math.floor(map.width / 2),
-    cy = Math.floor(map.height / 2);
+    cy = Math.floor(map.height / 2),
+    row = (y: number, start: number, end: number, step: number, source: number) => {
+      for (let x = start; x <= end; x += step) add(x, y, source);
+    },
+    tableSet = (x: number, y: number) => {
+      add(x, y, 16); add(x - 1, y, 17); add(x + 1, y, 17);
+    };
   if (/客房|家中|家$|房屋|西厢|东厢/.test(map.name)) {
-    add(3, 3, 18); add(map.width - 4, 3, 19);
-    add(cx, cy, 16); add(cx - 1, cy + 1, 17);
-    add(map.width - 4, map.height - 4, 22);
+    add(3, 3, 18); add(map.width - 4, 3, 19); add(map.width - 4, 6, 23);
+    tableSet(cx, cy); add(3, map.height - 4, 24); add(map.width - 4, map.height - 4, 22);
   } else if (/药店/.test(map.name)) {
-    for (const x of [4, map.width - 5]) add(x, 3, 19);
-    add(cx, 5, 20); add(map.width - 4, map.height - 3, 23);
+    row(3, 3, map.width - 4, 3, 19);
+    row(6, 4, map.width - 5, 4, 26);
+    add(cx, 8, 20); add(cx - 2, 8, 23); add(cx + 2, 8, 23);
   } else if (/裁缝店/.test(map.name)) {
-    add(4, 3, 25); add(cx, 5, 20); add(map.width - 4, 3, 19); add(4, map.height - 3, 16);
+    row(3, 3, map.width - 4, 4, 25);
+    row(6, 4, map.width - 5, 5, 19);
+    add(cx, 8, 20); tableSet(5, map.height - 4);
   } else if (/杂货店|豆腐店|当铺/.test(map.name)) {
-    add(4, 3, 19); add(map.width - 5, 3, 21);
-    add(cx, 5, 20); add(cx - 3, 7, 26); add(cx + 3, 7, 27);
-    add(3, map.height - 3, 24);
+    row(3, 3, map.width - 4, 3, 19);
+    row(6, 4, map.width - 5, 4, /当铺/.test(map.name) ? 21 : /豆腐/.test(map.name) ? 27 : 26);
+    add(cx, 9, 20); add(cx - 3, 9, 24); add(cx + 3, 9, 23);
   } else if (/兵器行|武馆/.test(map.name)) {
-    add(4, 3, 19); add(map.width - 5, 3, 30); add(cx, cy, 16); add(cx - 2, cy + 2, 17);
+    row(3, 3, map.width - 4, 4, 30);
+    row(6, 4, map.width - 5, 5, 21);
+    tableSet(cx, cy + 2);
   } else if (/客栈/.test(map.name)) {
-    for (const dx of [-4, 0, 4]) { add(cx + dx, cy, 16); add(cx + dx - 1, cy + 1, 17); }
-    add(3, 3, 24); add(map.width - 4, 3, 22);
+    for (let y = 5; y < map.height - 4; y += 4)
+      for (let x = 4; x < map.width - 3; x += 5) tableSet(x, y);
+    row(3, 3, map.width - 4, 5, 24); add(map.width - 4, 3, 22);
   } else if (/衙门|大厅|二楼/.test(map.name)) {
-    add(cx, 3, 20); add(cx - 2, 5, 17); add(cx + 2, 5, 17);
-    add(3, 3, 29); add(map.width - 4, 3, 22);
+    row(3, 3, map.width - 4, 5, 29);
+    add(cx, 5, 20); add(cx - 2, 7, 17); add(cx + 2, 7, 17);
+    add(3, map.height - 4, 22); add(map.width - 4, map.height - 4, 22);
   } else {
     add(3, 3, 19); add(map.width - 4, 3, 21); add(cx, cy, 16); add(cx - 1, cy + 1, 17);
   }
   // A restrained repeated furnishing rhythm makes every room feel occupied
   // without returning to random clutter or embedding props in the floor.
-  for (let x = 3; x < map.width - 3; x += 5) {
-    add(x, 3, (x + map.id) % 2 ? 19 : 23);
-    if (map.height > 12) add(x + 2, map.height - 3, (x + map.id) % 3 ? 22 : 24);
+  for (let x = 3; x < map.width - 3; x += 6) {
+    add(x, map.height - 3, (x + map.id) % 3 ? 23 : 22);
+    add(x + 2, map.height - 3, (x + map.id) % 2 ? 8 : 10);
   }
   furnitureCache.set(map.id, cells);
   return cells;
