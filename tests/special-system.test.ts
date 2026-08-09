@@ -164,6 +164,7 @@ test("变熊术 combines inner power and knowledge bonuses", () => {
   a.skills["48"] = { level: 120, points: 0 };
   a.skillUse[0] = 0;
   a.skillUse[3] = 47;
+  a.skillUse[6] = 48; // 学识槽装备灵通心诀
   const battle = specialRound(beginOriginalBattle(1, 29), a, 28);
   assert.equal(battle.buff.str, 39);
   assert.equal(battle.buff.pdef, 240);
@@ -172,6 +173,18 @@ test("变熊术 combines inner power and knowledge bonuses", () => {
     battleSpecials(a, { "27": 2 }).find((x) => x.id === 28)?.enabled,
     false,
   );
+});
+
+test("变熊术未装备灵通心诀时不享受学识加成", () => {
+  const a = actor();
+  a.maxFp = a.fp = 600;
+  a.skills["47"] = { level: 180, points: 0 };
+  a.skills["48"] = { level: 120, points: 0 };
+  a.skillUse[3] = 47; // 学识槽为空
+  const battle = specialRound(beginOriginalBattle(1, 29), a, 28);
+  assert.equal(battle.buff.str, 24); // 龙象240/10 + 灵通0
+  assert.equal(battle.buff.pdef, 120); // 龙象240/2 + 灵通0
+  assert.equal(battle.cooldowns["28"], 13); // 龙象240/20 + 0 + 1
 });
 test("法术消耗包含原作的法力加成值", () => {
   const a = mage();

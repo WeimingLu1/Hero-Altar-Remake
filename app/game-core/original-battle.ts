@@ -211,6 +211,17 @@ function resultText(result: ReturnType<typeof attackEffect>, target: string) {
 function numericDamage(result: ReturnType<typeof attackEffect>) {
   return typeof result.damage === "number" ? Math.max(0, result.damage) : 0;
 }
+// 吸血大法(56)：需在学识槽装备，普通攻击命中后按等级吸血(等级/100 × 伤害)。
+function applyVampiric(actor: SceneActorState, battle: OriginalBattle, damage: number) {
+  if (actor.skillUse[6] !== 56) return;
+  const xiLv = skillLevel(actor, 56),
+    heal = Math.floor((xiLv * damage) / 100);
+  if (heal <= 0) return;
+  const before = actor.hp;
+  actor.hp = Math.min(actor.maxHp, actor.hp + heal);
+  if (actor.hp > before)
+    battle.log.push(`吸血大法吸回 ${actor.hp - before} 点气血。`);
+}
 function enemyAttackId(record: OriginalRecord) {
   const uses = (record.skill_use as number[]) || [];
   return n(record, "weapon_id") > 0 ? uses[1] || 1 : uses[0] || 2;
@@ -670,6 +681,7 @@ export function battleRound(source: OriginalBattle, actor: SceneActorState) {
   actor.fp = pc.fp;
   battle.enemyHp = Math.max(0, battle.enemyHp - numericDamage(dealt));
   battle.enemyMaxHp = Math.max(battle.enemyHp, battle.enemyMaxHp - dealt.hurt);
+  applyVampiric(actor, battle, numericDamage(dealt));
   battle.log.push(resultText(dealt, battle.enemyName));
   if (battle.enemyHp <= victoryAt) {
     battle.finished = "win";
@@ -1046,7 +1058,8 @@ export function specialRound(
     battle.cooldowns["27"] = turns;
   } else if (specialId === 28) {
     const dragon = effectiveLevel(actor, 47),
-      knowledge = skillLevel(actor, 48),
+      // 灵通心诀需在学识槽装备(第7槽)才强化变熊术。
+      knowledge = actor.skillUse[6] === 48 ? skillLevel(actor, 48) : 0,
       turns = Math.floor(dragon / 20) + Math.floor(knowledge / 15) + 1,
       additionStr = Math.floor(dragon / 10) + Math.floor(knowledge / 8),
       additionDef = Math.floor(dragon / 2) + knowledge;

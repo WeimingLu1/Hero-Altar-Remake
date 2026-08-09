@@ -1,7 +1,7 @@
 import { derivedStats, maxFood, maxWater } from "./inventory-system";
 import { originalSystem, originalTables } from "./original-data";
 import type { SceneActorState } from "./scene-event";
-import { combatSkillProfile } from "./skill-system";
+import { combatSkillProfile, effectiveFace } from "./skill-system";
 
 const levels = (originalSystem.levels as string[]) || [];
 const attackLevels = (originalSystem.attack_lv as string[]) || [];
@@ -24,7 +24,10 @@ export function actorStatusProfile(actor: SceneActorState) {
       5,
       Math.floor(attackValue / 20),
     ),
-    faceIndex = Math.min(7, Math.max(0, Math.floor((actor.face - 10) / 3))),
+    faceIndex = Math.min(
+      7,
+      Math.max(0, Math.floor((effectiveFace(actor) - 10) / 3)),
+    ),
     faces =
       actor.gender === 1
         ? (originalSystem.girl_face as string[])

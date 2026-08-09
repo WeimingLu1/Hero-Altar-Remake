@@ -36,7 +36,9 @@ export const maxWater = (actor: SceneActorState) => (actor.baseStr + 4) * 15;
 export function fullHp(actor: SceneActorState) {
   let value =
     100 + Math.floor(actor.maxFp / 4) + (Math.min(actor.age, 29) - 14) * 20;
+  // 红莲教义：需在学识槽装备(第7槽)且满足原版条件才生效。
   if (
+    actor.skillUse[6] === 27 &&
     actor.classId === 3 &&
     (actor.skills["27"]?.level || 0) >= 80 &&
     actor.age >= 20
