@@ -173,6 +173,10 @@ import {
   tokenGateState,
 } from "../game-core/hidden-npc";
 import { canObtainCaihua } from "../game-core/actor-conditions";
+import {
+  kungfuSchoolId,
+  kungfuSchoolName,
+} from "../game-core/kungfu-school";
 import "./world.css";
 import "./choice.css";
 import "./battle.css";
@@ -325,9 +329,15 @@ const organizedBagEntries = (actor: SceneActorState) =>
   );
 const organizedSkills = (actor: SceneActorState) =>
   learnedSkills(actor).sort((a, b) => a.type - b.type || a.id - b.id);
-const allCheatSkills = originalTables.kungfus.flatMap((skill, id) =>
-  skill ? [{ id, name: String(skill.name || id), type: Number(skill.type || 0) }] : [],
-);
+const allCheatSkills = originalTables.kungfus
+  .flatMap((skill, id) =>
+    skill
+      ? [{ id, name: String(skill.name || id), type: Number(skill.type || 0) }]
+      : [],
+  )
+  .sort(
+    (a, b) => kungfuSchoolId(a.id) - kungfuSchoolId(b.id) || a.id - b.id,
+  );
 type WorldSave = {
   format: "rmxp-hero-original-world-save";
   version: 1;
@@ -4285,29 +4295,45 @@ function CheatInner({
         {sub === 3 &&
           (allCheatSkills.length ? (
             allCheatSkills.map((skill, index) => {
-              const learned = actor.skills[String(skill.id)];
+              const learned = actor.skills[String(skill.id)],
+                schoolId = kungfuSchoolId(skill.id),
+                showHeader =
+                  index === 0 ||
+                  kungfuSchoolId(allCheatSkills[index - 1].id) !== schoolId;
               return (
-              <div
-                key={skill.id}
-                className={cursor === index ? "active" : ""}
-                onMouseEnter={() => setMenu({ tab: 3, sub: 3, index })}
-              >
-                <span>
-                  <b>{skill.name}</b>
-                  <small>{learned ? "已习得" : "未习得"} · 可修改范围 1–255 · 类型 {skill.type}</small>
-                </span>
-                <input className="cheat-number" type="number" min={1} max={255}
-                  disabled={!learned} defaultValue={learned?.level || 1}
-                  key={`${skill.id}:${learned?.level || 0}`}
-                  onBlur={(event) => learned && mutate((draft) => setCheatSkill(draft.actor, skill.id, Number(event.target.value)))}
-                  onKeyDown={(event) => { if (event.key === "Enter") event.currentTarget.blur(); }} />
-                <div>
-                  {learned ? <>
-                    <button onClick={() => changeSkill(index, -1)}>−</button>
-                    <button onClick={() => changeSkill(index, 1)}>＋</button>
-                    <button className="max" onClick={() => maxSkill(index)}>MAX</button>
-                    <button className="remove" onClick={() => mutate((draft) => removeCheatSkill(draft.actor, skill.id))}>移除</button>
-                  </> : <button className="add" onClick={() => mutate((draft) => setCheatSkill(draft.actor, skill.id, 1))}>习得</button>}
+              <div className="cheat-skill-wrap" key={skill.id}>
+                {showHeader && (
+                  <div className="cheat-group-header">
+                    <b>{kungfuSchoolName(skill.id)}</b>
+                    <small>
+                      {allCheatSkills.filter(
+                        (item) => kungfuSchoolId(item.id) === schoolId,
+                      ).length}{" "}
+                      门
+                    </small>
+                  </div>
+                )}
+                <div
+                  className={`cheat-skill-row ${cursor === index ? "active" : ""}`}
+                  onMouseEnter={() => setMenu({ tab: 3, sub: 3, index })}
+                >
+                  <span>
+                    <b>{skill.name}</b>
+                    <small>{learned ? "已习得" : "未习得"} · 可修改范围 1–255 · 类型 {skill.type}</small>
+                  </span>
+                  <input className="cheat-number" type="number" min={1} max={255}
+                    disabled={!learned} defaultValue={learned?.level || 1}
+                    key={`${skill.id}:${learned?.level || 0}`}
+                    onBlur={(event) => learned && mutate((draft) => setCheatSkill(draft.actor, skill.id, Number(event.target.value)))}
+                    onKeyDown={(event) => { if (event.key === "Enter") event.currentTarget.blur(); }} />
+                  <div>
+                    {learned ? <>
+                      <button onClick={() => changeSkill(index, -1)}>−</button>
+                      <button onClick={() => changeSkill(index, 1)}>＋</button>
+                      <button className="max" onClick={() => maxSkill(index)}>MAX</button>
+                      <button className="remove" onClick={() => mutate((draft) => removeCheatSkill(draft.actor, skill.id))}>移除</button>
+                    </> : <button className="add" onClick={() => mutate((draft) => setCheatSkill(draft.actor, skill.id, 1))}>习得</button>}
+                  </div>
                 </div>
               </div>
               );
@@ -4422,7 +4448,7 @@ function SkillRows({
             <span>{skill.level} 级</span>
             <em>
               {levelTitle(skill.level)} · 第 {levelTier(skill.level)}/50 阶 ·{" "}
-              {skill.points} 点
+              {skill.points} 点 · {skill.school}
             </em>
             <i className="skill-tags">
               {skill.equipped && <span>当前运用</span>}

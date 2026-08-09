@@ -1,11 +1,12 @@
 import { originalTables } from "./original-data";
 import type { SceneActorState } from "./scene-event";
-export type LearnedSkill={id:number;name:string;level:number;points:number;type:number;slot:number|null;equipped:boolean;parrying:boolean;category:string};
+import { kungfuSchoolName } from "./kungfu-school";
+export type LearnedSkill={id:number;name:string;level:number;points:number;type:number;slot:number|null;equipped:boolean;parrying:boolean;category:string;school:string};
 export const skillLevel=(actor:SceneActorState,id:number)=>actor.skills[String(id)]?.level||0;
 export const skillType=(id:number)=>Number(originalTables.kungfus[id]?.type||0);
 export function naturalSlot(id:number){const type=skillType(id);if(type===2)return 0;if(type>=3&&type<=7)return 1;if(type===9)return 2;if(type===1)return 3;if(type===8)return 5;return null;}
 const skillCategories=["未知","内功心法","拳脚武学","剑术","刀法","杖法","鞭法","棍法","术法","轻功身法","招架根基","学识秘术"];
-export function learnedSkills(actor:SceneActorState):LearnedSkill[]{return Object.entries(actor.skills).filter(([,s])=>s.level>0).map(([raw,s])=>{const id=Number(raw),type=skillType(id),slot=naturalSlot(id);return{id,name:String(originalTables.kungfus[id]?.name||id),level:s.level,points:s.points,type,slot,equipped:slot!==null&&actor.skillUse[slot]===id,parrying:actor.skillUse[4]===id,category:skillCategories[type]||"奇门武学"};});}
+export function learnedSkills(actor:SceneActorState):LearnedSkill[]{return Object.entries(actor.skills).filter(([,s])=>s.level>0).map(([raw,s])=>{const id=Number(raw),type=skillType(id),slot=naturalSlot(id);return{id,name:String(originalTables.kungfus[id]?.name||id),level:s.level,points:s.points,type,slot,equipped:slot!==null&&actor.skillUse[slot]===id,parrying:actor.skillUse[4]===id,category:skillCategories[type]||"奇门武学",school:kungfuSchoolName(id)};});}
 export function equipSkill(actor:SceneActorState,id:number){if(id<12)return {ok:false,text:"基本功夫无需装备。"};const slot=naturalSlot(id);if(slot===null)return {ok:false,text:"知识类功夫无需装备。"};actor.skillUse[slot]=actor.skillUse[slot]===id?0:id;if(actor.skillUse[slot]===0&&actor.skillUse[4]===id)actor.skillUse[4]=0;return {ok:true,text:`${originalTables.kungfus[id]?.name}${actor.skillUse[slot]===id?"已装备":"已卸下"}。`};}
 export function toggleParry(actor:SceneActorState,id:number){const valid=id===10||(id>11&&(id===actor.skillUse[0]||id===actor.skillUse[1]));if(!valid)return {ok:false,text:"只有基本招架或当前拳脚、兵刃功夫可以用于招架。"};actor.skillUse[4]=actor.skillUse[4]===id?0:id;return {ok:true,text:`${originalTables.kungfus[id]?.name}${actor.skillUse[4]===id?"设为招架":"取消招架"}。`};}
 export function weaponBasicId(weaponId:number){return Number(originalTables.weapons[weaponId]?.type||0)+3;}

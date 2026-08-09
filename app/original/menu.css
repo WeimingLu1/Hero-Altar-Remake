@@ -415,6 +415,45 @@
   overflow: auto;
   padding: 10px 16px;
 }
+/* 秘技「全部武功」按门派分组 */
+.cheat-list > .cheat-skill-wrap {
+  display: block;
+}
+.cheat-skill-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto auto;
+  align-items: center;
+  gap: 12px;
+  width: 100%;
+  min-height: 48px;
+  padding: 8px 10px;
+  color: #e9dff0;
+  border: 1px solid transparent;
+  border-bottom-color: #ffffff12;
+  background: #ffffff04;
+}
+.cheat-skill-row.active {
+  background: #a957d326;
+  border: 1px solid #ce80f380;
+}
+.cheat-group-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin: 12px 0 4px;
+  padding: 7px 11px;
+  color: #d9bd72;
+  border-left: 3px solid #c49d4f;
+  background: linear-gradient(90deg, #9d763327, transparent 72%);
+  letter-spacing: 0.16em;
+}
+.cheat-group-header b {
+  color: #f0d9a0;
+}
+.cheat-group-header small {
+  color: #b9a877;
+  font-size: 10px;
+}
 .cheat-list {
   overflow: auto;
   padding: 10px 16px;
