@@ -39,10 +39,13 @@
       "purpose": "room-specific beds, tables, seating, storage, counters, screens, lighting, weapons, kitchen, and decorative props"
     },
     "overlays": {
-      "src": "/game-assets/redrawn/overlay-atlas-v2.png",
-      "columns": 8,
-      "rows": 8,
-      "purpose": "integer-aligned transparent vegetation, furniture and interactive props layered over clean base terrain"
+      "src": [
+        "/game-assets/redrawn/overlay-nature-v3.png",
+        "/game-assets/redrawn/overlay-interior-v3.png"
+      ],
+      "columns": 4,
+      "rows": 4,
+      "purpose": "two small, integer-aligned atlases with one complete prop and verified transparent padding in every cell"
     }
   }
 }

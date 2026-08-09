@@ -200,7 +200,10 @@ test("indoor rooms receive type-specific furniture away from events", () => {
 });
 
 test("maps render a clean base before sparse transparent overlays", () => {
-  assert.match(source, /overlay-atlas-v2\.png/);
+  assert.match(source, /overlay-nature-v3\.png/);
+  assert.match(source, /overlay-interior-v3\.png/);
+  assert.match(source, /atlasSource = interior \? source - 16 : source/);
+  assert.match(source, /atlas\.naturalWidth \/ 4/);
   assert.match(source, /function drawOverlayCell/);
   assert.match(source, /function drawCleanBaseTile/);
   assert.match(source, /theme === "indoor" \? "#896746"/);

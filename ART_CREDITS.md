@@ -33,10 +33,11 @@ OpenAI Image Generation and then prepared locally for use as sprite atlases:
   distinct directional Flower School women matching named portraits.
 - `public/game-assets/generated/wuxia-indoor-furniture-v1.png`: 8 × 8 modular
   ancient Chinese furniture and interior-prop atlas.
-- `public/game-assets/redrawn/overlay-atlas-v2.png`: 8 × 8 transparent
-  vegetation, furniture and functional-prop overlay atlas. Generated on a flat
-  chroma-key background, converted locally to alpha transparency, then normalized
-  to exact 128 × 128 cells so individual objects cannot be sliced fractionally.
+- `public/game-assets/redrawn/overlay-nature-v3.png` and
+  `public/game-assets/redrawn/overlay-interior-v3.png`: two 4 × 4 transparent
+  prop atlases. Each cell contains one complete object with verified transparent
+  padding on every edge; nature and interior props are kept in separate images
+  so no object crosses a crop boundary.
 
 Each character atlas is 4 × 4. Its flat chroma-key background was removed
 locally; the columns are front, screen-facing right, screen-facing left, and

@@ -171,13 +171,15 @@ const W = 640,
 type WuxiaArt = {
   environment: HTMLImageElement | null;
   characters: Array<HTMLImageElement | null>;
-  overlays: HTMLImageElement | null;
+  natureOverlays: HTMLImageElement | null;
+  interiorOverlays: HTMLImageElement | null;
 };
 type CharacterSprite = { sheet: number; row: number; portrait?: number };
 const wuxiaArt: WuxiaArt = {
   environment: null,
   characters: [null, null, null, null, null, null, null],
-  overlays: null,
+  natureOverlays: null,
+  interiorOverlays: null,
 };
 
 function loadWuxiaArt() {
@@ -203,8 +205,11 @@ function loadWuxiaArt() {
       wuxiaArt.characters[index] = image;
     }),
   );
-  load("/game-assets/redrawn/overlay-atlas-v2.png", (image) => {
-    wuxiaArt.overlays = image;
+  load("/game-assets/redrawn/overlay-nature-v3.png", (image) => {
+    wuxiaArt.natureOverlays = image;
+  });
+  load("/game-assets/redrawn/overlay-interior-v3.png", (image) => {
+    wuxiaArt.interiorOverlays = image;
   });
 }
 
@@ -4731,18 +4736,20 @@ function drawOverlayCell(
   x: number,
   y: number,
 ) {
-  const atlas = wuxiaArt.overlays;
+  const interior = source >= 16,
+    atlas = interior ? wuxiaArt.interiorOverlays : wuxiaArt.natureOverlays,
+    atlasSource = interior ? source - 16 : source;
   if (!atlas?.complete || !atlas.naturalWidth) return;
-  const cellWidth = atlas.naturalWidth / 8,
-    cellHeight = atlas.naturalHeight / 8,
+  const cellWidth = atlas.naturalWidth / 4,
+    cellHeight = atlas.naturalHeight / 4,
     tree = source <= 5,
     size = tree ? 44 : 36,
     offsetX = (T - size) / 2,
     offsetY = tree ? T - size : (T - size) / 2;
   ctx.drawImage(
     atlas,
-    (source % 8) * cellWidth,
-    Math.floor(source / 8) * cellHeight,
+    (atlasSource % 4) * cellWidth,
+    Math.floor(atlasSource / 4) * cellHeight,
     cellWidth,
     cellHeight,
     x + offsetX,
