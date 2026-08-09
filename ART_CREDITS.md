@@ -43,12 +43,11 @@ files as image inputs or visual references.
 
 ## Documentation screenshots
 
-The files under `docs/screenshots/` are project gameplay captures supplied by
-the repository owner. They show the actual browser build, including the title
-screen, ambient NPC simulation, player proximity dialogue, free dialogue, and
-battle narration. The current README images were resized and JPEG-compressed
-locally from the 2026-08-08 captures; no third-party artwork was added during
-that documentation pass.
+The files under `docs/screenshots/` are direct full-game browser captures from
+the current production build. The 2026-08-09 documentation set shows the clean
+layered maps, high-resolution characters and props, ordered shared conversation
+cards, independent action bubbles, and the blue player-conversation highlight.
+No third-party artwork was added during the screenshot pass.
 
 ## Future third-party assets
 
