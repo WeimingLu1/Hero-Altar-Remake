@@ -44,10 +44,13 @@ files as image inputs or visual references.
 ## Documentation screenshots
 
 The files under `docs/screenshots/` are direct full-game browser captures from
-the current production build. The 2026-08-09 documentation set shows the clean
-layered maps, high-resolution characters and props, ordered shared conversation
-cards, independent action bubbles, and the blue player-conversation highlight.
-No third-party artwork was added during the screenshot pass.
+the current production build. The 2026-08-09 documentation set includes the
+title and creation flow, town and home scenes, seven faction or regional maps,
+the special space-time map, environmental and free dialogue, combat, inventory,
+status, training, tasks, kung-fu configuration, and the developer cheat panel.
+The virtual actor and sample dialogue used for documentation were loaded through
+the normal JSON interface and are not part of the shipped game state. No
+third-party artwork was added during the screenshot pass.
 
 ## Future third-party assets
 
