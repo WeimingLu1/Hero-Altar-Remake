@@ -49,3 +49,6 @@ CLAUDE.md
 
 # Local duplicate produced by filesystem conflict resolution
 /README 2.md
+
+# Third-party original RMXP project clone (see AGENTS.md) — local reference only
+/reference/
