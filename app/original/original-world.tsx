@@ -168,6 +168,10 @@ import {
 import { MAX_PLAYER_EXP } from "../game-core/progression-limits";
 import { isCurrentKillTarget } from "../game-core/kill-target";
 import { altarOwnMap } from "../game-core/altar-map";
+import {
+  npcVisibleWithInventory,
+  tokenGateState,
+} from "../game-core/hidden-npc";
 import "./world.css";
 import "./choice.css";
 import "./battle.css";
@@ -2449,7 +2453,7 @@ export default function OriginalWorld() {
     const id = window.setInterval(() => studySelected(), 1000 / 120);
     return () => window.clearInterval(id);
   }, [study, studyActive, studySelected]);
-  const ambientPopulationKey = `${state.position.mapId}:${(state.actor.killList || []).join(",")}`,
+  const ambientPopulationKey = `${state.position.mapId}:${(state.actor.killList || []).join(",")}:${tokenGateState(state.actor.inventory)}`,
     ambientShouldPause = screen !== "play" || Boolean(eventText || npcMenu || npcChat || shop || study || battle || menu || cheatMenu || cultivation !== null || arcade || life);
   useEffect(() => {
     ambientPaused.current = ambientShouldPause;
@@ -4649,6 +4653,9 @@ function eventVisual(event: MapEvent, state: WorldSave): EventVisual {
     graphic = String(page.graphic?.character_name || ""),
     cleanName = friendlyEventName(event.name, result.transfer?.mapId);
   if (scene?.type === 0 && scene.id !== undefined) {
+    // 原版：无对应令牌不生成娜可露(132)/茅盈(144)。
+    if (!npcVisibleWithInventory(scene.id, state.actor.inventory))
+      return { kind: "none", label: "" };
     if ((state.actor.killList || []).includes(scene.id))
       return scene.id >= 173 && scene.id <= 194
         ? { kind: "none", label: "" }
