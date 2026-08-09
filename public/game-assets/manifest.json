@@ -37,6 +37,12 @@
       "columns": 8,
       "rows": 8,
       "purpose": "room-specific beds, tables, seating, storage, counters, screens, lighting, weapons, kitchen, and decorative props"
+    },
+    "overlays": {
+      "src": "/game-assets/redrawn/overlay-atlas-v1.png",
+      "columns": 8,
+      "rows": 8,
+      "purpose": "transparent vegetation, furniture and interactive props layered over clean base terrain"
     }
   }
 }

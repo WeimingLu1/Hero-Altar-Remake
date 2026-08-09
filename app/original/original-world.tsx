@@ -172,12 +172,14 @@ type WuxiaArt = {
   environment: HTMLImageElement | null;
   characters: Array<HTMLImageElement | null>;
   furniture: HTMLImageElement | null;
+  overlays: HTMLImageElement | null;
 };
 type CharacterSprite = { sheet: number; row: number; portrait?: number };
 const wuxiaArt: WuxiaArt = {
   environment: null,
   characters: [null, null, null, null, null, null, null],
   furniture: null,
+  overlays: null,
 };
 
 function loadWuxiaArt() {
@@ -205,6 +207,9 @@ function loadWuxiaArt() {
   );
   load("/game-assets/generated/wuxia-indoor-furniture-v1.png", (image) => {
     wuxiaArt.furniture = image;
+  });
+  load("/game-assets/redrawn/overlay-atlas-v1.png", (image) => {
+    wuxiaArt.overlays = image;
   });
 }
 
@@ -4626,18 +4631,18 @@ function drawAuthoredTerrain(
   if (road || eventCells(map).has(`${mx},${my}`)) return;
   const seed = (Math.imul(map.id + 17, 73856093) ^ Math.imul(mx + 11, 19349663) ^ Math.imul(my + 7, 83492791)) >>> 0;
   const landscapedEdge = faction && (mx < 3 || my < 3 || mx >= map.width - 3 || my >= map.height - 3);
-  if (landscapedEdge && seed % 4 === 0) {
-    const factionDecoration = map.id === 23 ? 53 : map.id === 25 ? 50 : map.id === 36 || map.id === 42 || map.id === 54 ? 51 : [48, 49, 54, 55][seed % 4];
-    drawEnvironmentCell(ctx, factionDecoration, x, y);
+  if (landscapedEdge && seed % 11 === 0) {
+    const factionDecoration = map.id === 23 ? 4 : map.id === 25 ? 9 : map.id === 36 || map.id === 42 || map.id === 54 ? 5 : [3, 4, 12, 13][seed % 4];
+    drawOverlayCell(ctx, factionDecoration, x, y);
     return;
   }
-  if (seed % (faction ? 37 : 23) !== 0) return;
+  if (seed % (faction ? 53 : 41) !== 0) return;
   const decoration =
-    theme === "water" ? 54 :
-    theme === "altar" ? 55 :
-    theme === "mountain" || theme === "snow" ? [48, 49, 50, 51, 53][seed % 5] :
-    [48, 49, 53, 54, 55][seed % 5];
-  drawEnvironmentCell(ctx, decoration, x, y);
+    theme === "water" ? 6 :
+    theme === "altar" ? 13 :
+    theme === "mountain" || theme === "snow" ? [5, 12, 13, 14, 15][seed % 5] :
+    [0, 2, 3, 4, 8, 9, 10][seed % 7];
+  drawOverlayCell(ctx, decoration, x, y);
 }
 
 function indoorFurniture(map: OriginalMap) {
@@ -4652,29 +4657,28 @@ function indoorFurniture(map: OriginalMap) {
     cx = Math.floor(map.width / 2),
     cy = Math.floor(map.height / 2);
   if (/客房|家中|家$|房屋|西厢|东厢/.test(map.name)) {
-    add(3, 3, map.id % 2 ? 0 : 1); add(4, 3, 7); add(map.width - 4, 3, 15);
-    add(cx, cy, 9); add(cx - 1, cy + 1, 11); add(cx + 1, cy + 1, 12);
-    add(map.width - 4, map.height - 4, 25); add(3, map.height - 3, 55);
+    add(3, 3, 18); add(map.width - 4, 3, 19);
+    add(cx, cy, 16); add(cx - 1, cy + 1, 17);
+    add(map.width - 4, map.height - 4, 22);
   } else if (/药店/.test(map.name)) {
-    for (let x = 3; x < map.width - 3; x += 3) add(x, 3, x % 2 ? 18 : 19);
-    add(cx, cy, 20); add(cx - 2, cy, 44); add(map.width - 4, map.height - 3, 46);
+    for (const x of [4, map.width - 5]) add(x, 3, 19);
+    add(cx, 5, 20); add(map.width - 4, map.height - 3, 23);
   } else if (/裁缝店/.test(map.name)) {
-    add(3, 3, 21); add(6, 3, 21); add(cx, cy, 20); add(map.width - 4, 3, 25); add(3, map.height - 3, 49);
+    add(4, 3, 25); add(cx, 5, 20); add(map.width - 4, 3, 19); add(4, map.height - 3, 16);
   } else if (/杂货店|豆腐店|当铺/.test(map.name)) {
-    for (let x = 3; x < map.width - 3; x += 3) { add(x, 3, x % 2 ? 17 : 18); add(x, 5, x % 2 ? 39 : 46); }
-    for (let x = cx - 4; x <= cx + 4; x += 2) add(x, cy, 20);
-    add(cx - 3, cy + 2, 34); add(cx + 3, cy + 2, 36); add(3, map.height - 3, 46); add(map.width - 4, map.height - 3, 35);
+    add(4, 3, 19); add(map.width - 5, 3, 21);
+    add(cx, 5, 20); add(cx - 3, 7, 26); add(cx + 3, 7, 27);
+    add(3, map.height - 3, 24);
   } else if (/兵器行|武馆/.test(map.name)) {
-    add(3, 3, 22); add(6, 3, 23); add(map.width - 4, 3, 24); add(cx, cy, 8); add(cx - 2, cy + 2, 11);
+    add(4, 3, 19); add(map.width - 5, 3, 30); add(cx, cy, 16); add(cx - 2, cy + 2, 17);
   } else if (/客栈/.test(map.name)) {
-    for (const dx of [-4, 0, 4]) { add(cx + dx, cy, 9); add(cx + dx - 1, cy + 1, 11); add(cx + dx + 1, cy + 1, 12); }
-    add(3, 3, 35); add(map.width - 4, 3, 39);
+    for (const dx of [-4, 0, 4]) { add(cx + dx, cy, 16); add(cx + dx - 1, cy + 1, 17); }
+    add(3, 3, 24); add(map.width - 4, 3, 22);
   } else if (/衙门|大厅|二楼/.test(map.name)) {
-    add(cx, 3, 45); add(cx - 2, 4, 12); add(cx + 2, 4, 13); add(3, 3, 26); add(map.width - 4, 3, 24);
-    add(cx, cy + 2, 32); add(cx - 3, cy + 2, 27); add(cx + 3, cy + 2, 30);
+    add(cx, 3, 20); add(cx - 2, 5, 17); add(cx + 2, 5, 17);
+    add(3, 3, 29); add(map.width - 4, 3, 22);
   } else {
-    add(3, 3, 15); add(map.width - 4, 3, 17); add(cx, cy, 8); add(cx - 1, cy + 1, 11); add(cx + 1, cy + 1, 12);
-    add(3, map.height - 3, 55); add(map.width - 4, map.height - 3, 50);
+    add(3, 3, 19); add(map.width - 4, 3, 21); add(cx, cy, 16); add(cx - 1, cy + 1, 17);
   }
   furnitureCache.set(map.id, cells);
   return cells;
@@ -4686,6 +4690,10 @@ function drawFurnitureCell(
   x: number,
   y: number,
 ) {
+  if (wuxiaArt.overlays?.complete) {
+    drawOverlayCell(ctx, source, x, y);
+    return;
+  }
   const atlas = wuxiaArt.furniture;
   if (!atlas?.complete || !atlas.naturalWidth) return;
   const cellWidth = atlas.naturalWidth / 8,
@@ -4700,6 +4708,33 @@ function drawFurnitureCell(
     y - 5,
     T + 4,
     T + 5,
+  );
+}
+
+function drawOverlayCell(
+  ctx: CanvasRenderingContext2D,
+  source: number,
+  x: number,
+  y: number,
+) {
+  const atlas = wuxiaArt.overlays;
+  if (!atlas?.complete || !atlas.naturalWidth) return;
+  const cellWidth = atlas.naturalWidth / 8,
+    cellHeight = atlas.naturalHeight / 8,
+    tree = source <= 5,
+    size = tree ? 44 : 36,
+    offsetX = (T - size) / 2,
+    offsetY = tree ? T - size : (T - size) / 2;
+  ctx.drawImage(
+    atlas,
+    (source % 8) * cellWidth,
+    Math.floor(source / 8) * cellHeight,
+    cellWidth,
+    cellHeight,
+    x + offsetX,
+    y + offsetY,
+    size,
+    size,
   );
 }
 

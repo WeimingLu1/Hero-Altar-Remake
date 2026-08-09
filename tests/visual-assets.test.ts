@@ -199,6 +199,14 @@ test("indoor rooms receive type-specific furniture away from events", () => {
   assert.match(source, /if \(mapTheme\(map\) === "indoor"\) return;/);
 });
 
+test("maps render a clean base before sparse transparent overlays", () => {
+  assert.match(source, /overlay-atlas-v1\.png/);
+  assert.match(source, /function drawOverlayCell/);
+  assert.match(source, /seed % \(faction \? 53 : 41\)/);
+  assert.match(source, /drawEnvironmentCell\(ctx, road \? roadCell : base/);
+  assert.match(source, /drawOverlayCell\(ctx, decoration/);
+});
+
 test("factions and Pingan districts use full-map authored plans", () => {
   assert.match(source, /const factionMapIds = new Set/);
   assert.match(source, /const pinganUrbanMapIds = new Set\(\[2, 3, 5, 15\]\)/);
