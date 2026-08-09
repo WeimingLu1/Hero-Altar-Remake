@@ -2798,7 +2798,7 @@ ${mode}输出必须符合古代武侠世界，不推动正式任务，不改变�
       observer.disconnect();
       cancelAnimationFrame(raf);
     };
-  }, []);
+  }, [screen]);
   const exportJson = () => {
     save();
     const a = document.createElement("a");

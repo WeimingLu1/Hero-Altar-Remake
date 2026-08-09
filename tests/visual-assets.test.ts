@@ -231,6 +231,7 @@ test("world canvas renders characters props bubbles and text at high resolution"
   assert.match(source, /ctx\.setTransform\(width \/ W, 0, 0, height \/ H/);
   assert.match(source, /ctx\.imageSmoothingEnabled = true/);
   assert.match(source, /ctx\.imageSmoothingQuality = "high"/);
+  assert.match(source, /observer\.disconnect\(\);[\s\S]*cancelAnimationFrame\(raf\);[\s\S]*\}, \[screen\]\);/);
   assert.doesNotMatch(worldCss, /image-rendering:\s*pixelated/);
 });
 
