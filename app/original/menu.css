@@ -511,7 +511,7 @@
 }
 .cheat-catalog-row {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) 72px auto;
+  grid-template-columns: minmax(0, 1fr) auto 72px auto;
   align-items: center;
   gap: 10px;
   width: 100%;
@@ -575,6 +575,12 @@
   border: 1px solid #ce80f380;
   background: #a957d326;
   white-space: nowrap;
+}
+.cheat-owned-count {
+  min-width: 70px;
+  color: #b8a9c0;
+  text-align: right;
+  font: 600 10px monospace;
 }
 .cheat-list {
   overflow: auto;
@@ -743,6 +749,39 @@
   color: #b9a7c2;
   text-align: center;
 }
+/* 物品目录是单列资料表。以下规则必须晚于通用秘技行规则，避免分组、按钮和
+   资料区被旧的快捷操作布局强制改成横排。 */
+.cheat-list > .cheat-inventory,
+.cheat-list > .cheat-inventory > .cheat-catalog,
+.cheat-list > .cheat-inventory > .cheat-owned-list,
+.cheat-list > .cheat-inventory .cheat-catalog-group {
+  display: block;
+  width: 100%;
+}
+.cheat-list > .cheat-inventory > .cheat-kind-buttons {
+  display: grid;
+  grid-template-columns: repeat(7, minmax(72px, 1fr));
+  gap: 6px;
+}
+.cheat-list > .cheat-inventory .cheat-kind-buttons > button,
+.cheat-list > .cheat-inventory .cheat-obtain,
+.cheat-list > .cheat-inventory .cheat-owned-row > button {
+  width: auto;
+  height: auto;
+  font-size: 11px;
+}
+.cheat-list > .cheat-inventory > .cheat-catalog {
+  max-height: none;
+  overflow: visible;
+}
+.cheat-list > .cheat-inventory .cheat-catalog-row {
+  display: grid;
+}
+.cheat-empty {
+  padding: 28px;
+  color: #9f91a8;
+  text-align: center;
+}
 .cheat-menu > footer {
   padding: 9px 12px;
   color: #a997b3;
@@ -784,4 +823,10 @@
   .identity-editor,
   .cheat-toggle-grid { grid-template-columns: 1fr; }
   .cheat-number { width: 90px; }
+  .cheat-list > .cheat-inventory > .cheat-kind-buttons {
+    grid-template-columns: repeat(4, minmax(64px, 1fr));
+  }
+  .cheat-list > .cheat-inventory .cheat-catalog-row {
+    grid-template-columns: minmax(0, 1fr) auto 64px auto;
+  }
 }

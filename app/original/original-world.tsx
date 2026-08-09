@@ -4309,9 +4309,10 @@ function CheatInner({
   mutate: (mutation: (draft: WorldSave) => string) => void;
 }) {
   const tabs = ["快捷", "人物数值", "物品装备", "全部武功", "身份师承", "世界进度"],
-    [inventoryKind, setInventoryKind] = useState<CheatInventoryKind>(1),
-    [showOwned, setShowOwned] = useState(false),
-    [amounts, setAmounts] = useState<Record<number, number>>({}),
+    [inventoryTab, setInventoryTab] = useState<
+      "food" | "medicine" | "book" | "misc" | "weapon" | "armor" | "owned"
+    >("food"),
+    [amounts, setAmounts] = useState<Record<string, number>>({}),
     killed = (actor.killList || []).filter((id) => originalTables.enemies[id]);
   const commitNumber = (valueIndex: number, value: string) =>
     mutate((draft) => setCheatStat(draft.actor, valueIndex, Number(value)));
@@ -4382,32 +4383,27 @@ function CheatInner({
           <div className="cheat-editor-stack cheat-inventory">
             <nav className="cheat-kind-buttons">
               {([
-                [1, "物品"],
-                [2, "武器"],
-                [3, "防具"],
+                ["food", "食物"],
+                ["medicine", "丹药"],
+                ["book", "秘籍"],
+                ["misc", "杂物"],
+                ["weapon", "武器"],
+                ["armor", "防具"],
+                ["owned", "已有"],
               ] as const).map(([kind, label]) => (
                 <button
                   key={kind}
-                  className={!showOwned && inventoryKind === kind ? "active" : ""}
-                  onClick={() => {
-                    setShowOwned(false);
-                    setInventoryKind(kind);
-                  }}
+                  className={inventoryTab === kind ? "active" : ""}
+                  onClick={() => setInventoryTab(kind)}
                 >
                   {label}
                 </button>
               ))}
-              <button
-                className={showOwned ? "active" : ""}
-                onClick={() => setShowOwned(true)}
-              >
-                已有
-              </button>
             </nav>
-            {showOwned ? (
+            {inventoryTab === "owned" ? (
               <div className="cheat-owned-list">
                 <p className="cheat-capacity">
-                  当前 {Object.keys(actor.inventory).length} 种，无种类上限；数量填 0 即移除，移除已装备条目会自动卸下。
+                  当前持有 {Object.keys(actor.inventory).length} 种物品。移除已装备的武器或防具时会自动卸下。
                 </p>
                 {Object.entries(actor.inventory)
                   .filter(([, amount]) => amount > 0)
@@ -4446,19 +4442,36 @@ function CheatInner({
                       </div>
                     );
                   })}
+                {!Object.values(actor.inventory).some((amount) => amount > 0) && (
+                  <p className="cheat-empty">当前没有物品。</p>
+                )}
               </div>
             ) : (
               <div className="cheat-catalog">
-                {cheatCatalogGroups(
-                  inventoryKind,
-                  inventoryKind === 2
-                    ? actor.weaponId
-                      ? [actor.weaponId]
-                      : []
-                    : inventoryKind === 3
-                      ? actor.armorIds
-                      : [],
-                ).map((group) => (
+                {(() => {
+                  const inventoryKind: CheatInventoryKind =
+                      inventoryTab === "weapon" ? 2 : inventoryTab === "armor" ? 3 : 1,
+                    itemGroup =
+                      inventoryTab === "food"
+                        ? "食物"
+                        : inventoryTab === "medicine"
+                          ? "丹药"
+                          : inventoryTab === "book"
+                            ? "秘籍"
+                            : inventoryTab === "misc"
+                              ? "杂物"
+                              : null,
+                    groups = cheatCatalogGroups(
+                      inventoryKind,
+                      inventoryKind === 2
+                        ? actor.weaponId
+                          ? [actor.weaponId]
+                          : []
+                        : inventoryKind === 3
+                          ? actor.armorIds
+                          : [],
+                    ).filter((group) => !itemGroup || group.name === itemGroup);
+                  return groups.map((group) => (
                   <div
                     className={`cheat-catalog-group${group.name === "已装备" ? " equipped-group" : ""}`}
                     key={group.name}
@@ -4468,7 +4481,9 @@ function CheatInner({
                       <small>{group.items.length} 件</small>
                     </header>
                     {group.items.map((entry) => {
-                      const value = amounts[entry.id] ?? 1;
+                      const amountKey = `${inventoryKind}:${entry.id}`,
+                        value = amounts[amountKey] ?? 1,
+                        owned = actor.inventory[amountKey] || 0;
                       return (
                         <div
                           key={entry.id}
@@ -4487,6 +4502,7 @@ function CheatInner({
                               {entry.description}
                             </small>
                           </div>
+                          <strong className="cheat-owned-count">已有 × {owned}</strong>
                           <input
                             className="cheat-number cheat-amount"
                             type="number"
@@ -4496,7 +4512,7 @@ function CheatInner({
                             onChange={(event) =>
                               setAmounts({
                                 ...amounts,
-                                [entry.id]: Number(event.target.value),
+                                [amountKey]: Number(event.target.value),
                               })
                             }
                           />
@@ -4519,7 +4535,8 @@ function CheatInner({
                       );
                     })}
                   </div>
-                ))}
+                  ));
+                })()}
               </div>
             )}
           </div>
