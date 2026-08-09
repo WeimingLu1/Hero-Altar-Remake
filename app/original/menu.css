@@ -485,8 +485,8 @@
 /* 秘技「物品装备」完整目录：按类别分组展示属性与描述 */
 .cheat-catalog {
   display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 6px 14px;
+  grid-template-columns: 1fr;
+  gap: 6px;
   max-height: 320px;
   overflow: auto;
   margin-bottom: 10px;
@@ -535,11 +535,6 @@
   color: #a394ad;
   font-size: 9px;
   line-height: 1.4;
-}
-@media (max-width: 720px) {
-  .cheat-catalog {
-    grid-template-columns: 1fr;
-  }
 }
 .cheat-list {
   overflow: auto;
