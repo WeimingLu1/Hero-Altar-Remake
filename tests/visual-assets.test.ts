@@ -190,6 +190,9 @@ test("Flower School named women use distinct directional sprites", () => {
 test("indoor rooms receive type-specific furniture away from events", () => {
   assert.match(source, /function indoorFurniture/);
   assert.match(source, /wuxia-indoor-furniture-v1\.png/);
+  assert.match(source, /家中\|家\$\|店\|当铺/);
+  assert.match(source, /客房\|家中\|家\$\|房屋/);
+  assert.match(source, /杂货店\|豆腐店\|当铺/);
   assert.match(source, /!occupied\.has/);
   assert.match(source, /兵器行\|武馆/);
   assert.match(source, /客栈/);

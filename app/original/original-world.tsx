@@ -4539,7 +4539,7 @@ const eventCellCache = new Map<number, Set<string>>();
 const furnitureCache = new Map<number, Map<string, number>>();
 
 function mapTheme(map: OriginalMap): MapTheme {
-  if (/家中|店|武馆|衙门|大厅|二楼|客房|西厢$|东厢$|房屋|室内|客栈|兵器行/.test(map.name)) return "indoor";
+  if (/家中|家$|店|当铺|武馆|衙门|大厅|二楼|客房|西厢$|东厢$|房屋|室内|客栈|兵器行/.test(map.name)) return "indoor";
   if (/大雪山|长白山|冰火岛/.test(map.name)) return "snow";
   if (/东海|南海|渡口|岛$/.test(map.name)) return "water";
   if (/坛$/.test(map.name)) return "altar";
@@ -4651,7 +4651,7 @@ function indoorFurniture(map: OriginalMap) {
     },
     cx = Math.floor(map.width / 2),
     cy = Math.floor(map.height / 2);
-  if (/客房|家中|老婆婆家|房屋|西厢|东厢/.test(map.name)) {
+  if (/客房|家中|家$|房屋|西厢|东厢/.test(map.name)) {
     add(3, 3, map.id % 2 ? 0 : 1); add(4, 3, 7); add(map.width - 4, 3, 15);
     add(cx, cy, 9); add(cx - 1, cy + 1, 11); add(cx + 1, cy + 1, 12);
     add(map.width - 4, map.height - 4, 25); add(3, map.height - 3, 55);
@@ -4660,7 +4660,7 @@ function indoorFurniture(map: OriginalMap) {
     add(cx, cy, 20); add(cx - 2, cy, 44); add(map.width - 4, map.height - 3, 46);
   } else if (/裁缝店/.test(map.name)) {
     add(3, 3, 21); add(6, 3, 21); add(cx, cy, 20); add(map.width - 4, 3, 25); add(3, map.height - 3, 49);
-  } else if (/杂货店|豆腐店/.test(map.name)) {
+  } else if (/杂货店|豆腐店|当铺/.test(map.name)) {
     for (let x = 3; x < map.width - 3; x += 3) { add(x, 3, x % 2 ? 17 : 18); add(x, 5, x % 2 ? 39 : 46); }
     for (let x = cx - 4; x <= cx + 4; x += 2) add(x, cy, 20);
     add(cx - 3, cy + 2, 34); add(cx + 3, cy + 2, 36); add(3, map.height - 3, 46); add(map.width - 4, map.height - 3, 35);
