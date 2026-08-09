@@ -288,6 +288,12 @@ export function setCheatInventory(actor: SceneActorState, kind: CheatInventoryKi
   return `${table[id]?.name || id}数量调整为 ${amount}（允许范围 0–${kind === 1 ? 255 : 1}）。`;
 }
 
+export function addCheatInventory(actor: SceneActorState, kind: CheatInventoryKind, id: number, raw: number) {
+  const amount = cap(raw, kind === 1 ? 255 : 1, 1),
+    current = actor.inventory[`${kind}:${id}`] || 0;
+  return setCheatInventory(actor, kind, id, kind === 1 ? current + amount : 1);
+}
+
 export const cheatSchools = (originalSystem.school as string[]) || [];
 export const cheatTeachers = originalTables.enemies.flatMap((npc, id) =>
   npc && (Number(npc.type || 0) > 0 || id === 7 || id === 31)

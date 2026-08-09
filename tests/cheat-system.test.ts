@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import type { SceneActorState } from "../app/game-core/scene-event";
 import {
+  addCheatInventory,
   adjustCheatSkill,
   adjustCheatStat,
   applyCheatQuick,
@@ -129,6 +130,15 @@ test("修改器可添加移除物品并自动卸下装备", () => {
   setCheatInventory(a, 2, 1, 0);
   assert.equal(a.weaponId, 0);
   assert.equal(a.inventory["2:1"], undefined);
+});
+
+test("修改器的获得数量会累加而不是覆盖现有库存", () => {
+  const a = actor();
+  a.inventory["1:8"] = 2;
+  addCheatInventory(a, 1, 8, 1);
+  assert.equal(a.inventory["1:8"], 3);
+  addCheatInventory(a, 1, 8, 999);
+  assert.equal(a.inventory["1:8"], 255);
 });
 
 test("修改器可习得移除武功并清理运用槽", () => {

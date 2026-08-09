@@ -131,6 +131,7 @@ import { settleVictoryLoot } from "../game-core/battle-settlement";
 import {
   adjustCheatSkill,
   adjustCheatStat,
+  addCheatInventory,
   applyCheatQuick,
   cheatQuickOptions,
   cheatSchools,
@@ -4503,34 +4504,46 @@ function CheatInner({
                             </small>
                           </div>
                           <strong className="cheat-owned-count">已有 × {owned}</strong>
-                          <input
-                            className="cheat-number cheat-amount"
-                            type="number"
-                            min={0}
-                            max={inventoryKind === 1 ? 255 : 1}
-                            value={value}
-                            onChange={(event) =>
-                              setAmounts({
-                                ...amounts,
-                                [amountKey]: Number(event.target.value),
-                              })
-                            }
-                          />
-                          <button
-                            className="cheat-obtain"
-                            onClick={() =>
-                              mutate((draft) =>
-                                setCheatInventory(
-                                  draft.actor,
-                                  inventoryKind,
-                                  entry.id,
-                                  value,
-                                ),
-                              )
-                            }
-                          >
-                            获得
-                          </button>
+                          <div className="cheat-acquire-controls">
+                            <label>
+                              <span>数量</span>
+                              <input
+                                className="cheat-number cheat-amount"
+                                aria-label={`${entry.name}获得数量`}
+                                type="number"
+                                min={1}
+                                max={inventoryKind === 1 ? 255 : 1}
+                                value={value}
+                                onChange={(event) =>
+                                  setAmounts({
+                                    ...amounts,
+                                    [amountKey]: Math.max(
+                                      1,
+                                      Math.min(
+                                        inventoryKind === 1 ? 255 : 1,
+                                        Number(event.target.value) || 1,
+                                      ),
+                                    ),
+                                  })
+                                }
+                              />
+                            </label>
+                            <button
+                              className="cheat-obtain"
+                              onClick={() =>
+                                mutate((draft) =>
+                                  addCheatInventory(
+                                    draft.actor,
+                                    inventoryKind,
+                                    entry.id,
+                                    value,
+                                  ),
+                                )
+                              }
+                            >
+                              获得
+                            </button>
+                          </div>
                         </div>
                       );
                     })}
