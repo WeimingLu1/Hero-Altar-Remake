@@ -171,14 +171,12 @@ const W = 640,
 type WuxiaArt = {
   environment: HTMLImageElement | null;
   characters: Array<HTMLImageElement | null>;
-  furniture: HTMLImageElement | null;
   overlays: HTMLImageElement | null;
 };
 type CharacterSprite = { sheet: number; row: number; portrait?: number };
 const wuxiaArt: WuxiaArt = {
   environment: null,
   characters: [null, null, null, null, null, null, null],
-  furniture: null,
   overlays: null,
 };
 
@@ -205,10 +203,7 @@ function loadWuxiaArt() {
       wuxiaArt.characters[index] = image;
     }),
   );
-  load("/game-assets/generated/wuxia-indoor-furniture-v1.png", (image) => {
-    wuxiaArt.furniture = image;
-  });
-  load("/game-assets/redrawn/overlay-atlas-v1.png", (image) => {
+  load("/game-assets/redrawn/overlay-atlas-v2.png", (image) => {
     wuxiaArt.overlays = image;
   });
 }
@@ -4588,6 +4583,59 @@ function eventCells(map: OriginalMap) {
 const factionMapIds = new Set([23, 25, 27, 36, 42, 52, 54, 59, 60, 61, 62, 63, 64, 65, 66]);
 const pinganUrbanMapIds = new Set([2, 3, 5, 15]);
 
+function drawCleanBaseTile(
+  ctx: CanvasRenderingContext2D,
+  theme: ReturnType<typeof mapTheme>,
+  road: boolean,
+  faction: boolean,
+  pingan: boolean,
+  mx: number,
+  my: number,
+  x: number,
+  y: number,
+) {
+  const stone = faction || pingan || theme === "altar";
+  const color = road
+    ? stone ? "#77776f" : "#8b7859"
+    : theme === "indoor" ? "#896746"
+    : theme === "water" ? "#39747c"
+    : theme === "snow" ? "#cbd4d2"
+    : theme === "mountain" || theme === "mystic" ? "#87755b"
+    : stone ? "#7d817b"
+    : "#718852";
+  ctx.fillStyle = color;
+  ctx.fillRect(x, y, T, T);
+  ctx.lineWidth = 1;
+  if (theme === "indoor") {
+    ctx.strokeStyle = "rgba(55,35,22,.23)";
+    ctx.beginPath();
+    ctx.moveTo(x, y + T - .5);
+    ctx.lineTo(x + T, y + T - .5);
+    if ((my & 1) === 0) {
+      ctx.moveTo(x + T / 2, y);
+      ctx.lineTo(x + T / 2, y + T);
+    }
+    ctx.stroke();
+    ctx.fillStyle = (mx + my) % 3 === 0 ? "rgba(255,235,190,.025)" : "rgba(30,18,10,.018)";
+    ctx.fillRect(x, y, T, T);
+  } else if (theme === "water" && !road) {
+    ctx.strokeStyle = "rgba(197,230,225,.18)";
+    ctx.beginPath();
+    ctx.moveTo(x + 5, y + 10); ctx.lineTo(x + 19, y + 10);
+    ctx.moveTo(x + 13, y + 23); ctx.lineTo(x + 28, y + 23);
+    ctx.stroke();
+  } else if (stone || road) {
+    ctx.strokeStyle = "rgba(38,40,37,.16)";
+    ctx.strokeRect(x + .5, y + .5, T - 1, T - 1);
+    if ((my & 1) === 0) {
+      ctx.beginPath(); ctx.moveTo(x + T / 2, y); ctx.lineTo(x + T / 2, y + T); ctx.stroke();
+    }
+  } else {
+    ctx.fillStyle = (mx * 3 + my * 5) % 7 === 0 ? "rgba(213,224,151,.035)" : "rgba(27,48,24,.025)";
+    ctx.fillRect(x, y, T, T);
+  }
+}
+
 function drawAuthoredTerrain(
   ctx: CanvasRenderingContext2D,
   map: OriginalMap,
@@ -4600,15 +4648,8 @@ function drawAuthoredTerrain(
     roads = authoredRoads(map),
     road = roads.has(`${mx},${my}`),
     faction = factionMapIds.has(map.id),
-    pingan = pinganUrbanMapIds.has(map.id),
-    base = theme === "indoor" ? (map.id % 2 ? 46 : 47) : faction || map.id === 2 || map.id === 15 ? 15 : pingan ? 7 : theme === "altar" ? 15 : theme === "water" ? 24 : theme === "mystic" ? 7 : 0,
-    roadCell = faction || pingan ? 8 : theme === "mountain" || theme === "snow" || theme === "mystic" ? 16 : 8;
-  if (!wuxiaArt.environment?.complete) {
-    ctx.fillStyle = road ? "#777363" : theme === "water" ? "#315f65" : theme === "indoor" ? "#5d4936" : "#60784a";
-    ctx.fillRect(x, y, T, T);
-    return;
-  }
-  drawEnvironmentCell(ctx, road ? roadCell : base, x, y);
+    pingan = pinganUrbanMapIds.has(map.id);
+  drawCleanBaseTile(ctx, theme, road, faction, pingan, mx, my, x, y);
   if (road && theme !== "indoor") {
     ctx.strokeStyle = theme === "mountain" ? "rgba(83,59,35,.42)" : "rgba(38,49,39,.35)";
     ctx.lineWidth = 1;
@@ -4625,7 +4666,7 @@ function drawAuthoredTerrain(
     if (mx === 0 || my === 0 || mx === map.width - 1 || my === map.height - 1)
       drawEnvironmentCell(ctx, mx === 0 ? 40 : mx === map.width - 1 ? 42 : 41, x, y);
     const furniture = indoorFurniture(map).get(`${mx},${my}`);
-    if (furniture !== undefined) drawFurnitureCell(ctx, furniture, x, y);
+    if (furniture !== undefined) drawOverlayCell(ctx, furniture, x, y);
     return;
   }
   if (road || eventCells(map).has(`${mx},${my}`)) return;
@@ -4682,33 +4723,6 @@ function indoorFurniture(map: OriginalMap) {
   }
   furnitureCache.set(map.id, cells);
   return cells;
-}
-
-function drawFurnitureCell(
-  ctx: CanvasRenderingContext2D,
-  source: number,
-  x: number,
-  y: number,
-) {
-  if (wuxiaArt.overlays?.complete) {
-    drawOverlayCell(ctx, source, x, y);
-    return;
-  }
-  const atlas = wuxiaArt.furniture;
-  if (!atlas?.complete || !atlas.naturalWidth) return;
-  const cellWidth = atlas.naturalWidth / 8,
-    cellHeight = atlas.naturalHeight / 8;
-  ctx.drawImage(
-    atlas,
-    (source % 8) * cellWidth,
-    Math.floor(source / 8) * cellHeight,
-    cellWidth,
-    cellHeight,
-    x - 2,
-    y - 5,
-    T + 4,
-    T + 5,
-  );
 }
 
 function drawOverlayCell(

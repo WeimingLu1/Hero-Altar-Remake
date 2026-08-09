@@ -189,7 +189,7 @@ test("Flower School named women use distinct directional sprites", () => {
 
 test("indoor rooms receive type-specific furniture away from events", () => {
   assert.match(source, /function indoorFurniture/);
-  assert.match(source, /wuxia-indoor-furniture-v1\.png/);
+  assert.match(source, /if \(furniture !== undefined\) drawOverlayCell/);
   assert.match(source, /家中\|家\$\|店\|当铺/);
   assert.match(source, /客房\|家中\|家\$\|房屋/);
   assert.match(source, /杂货店\|豆腐店\|当铺/);
@@ -200,10 +200,12 @@ test("indoor rooms receive type-specific furniture away from events", () => {
 });
 
 test("maps render a clean base before sparse transparent overlays", () => {
-  assert.match(source, /overlay-atlas-v1\.png/);
+  assert.match(source, /overlay-atlas-v2\.png/);
   assert.match(source, /function drawOverlayCell/);
+  assert.match(source, /function drawCleanBaseTile/);
+  assert.match(source, /theme === "indoor" \? "#896746"/);
   assert.match(source, /seed % \(faction \? 53 : 41\)/);
-  assert.match(source, /drawEnvironmentCell\(ctx, road \? roadCell : base/);
+  assert.match(source, /drawCleanBaseTile\(ctx, theme, road, faction, pingan/);
   assert.match(source, /drawOverlayCell\(ctx, decoration/);
 });
 
