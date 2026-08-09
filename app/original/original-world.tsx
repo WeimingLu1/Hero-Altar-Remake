@@ -1529,6 +1529,15 @@ export default function OriginalWorld() {
     },
     [sync],
   );
+  // 武器/防具直接装备或卸下，不弹确认；消耗品与秘籍保留确认/研读流程。
+  const openBagEntry = useCallback(
+    (entry?: BagEntry) => {
+      if (!entry) return;
+      if (entry.kind === 2 || entry.kind === 3) activateBagEntry(entry);
+      else setItemConfirm({ entry, index: 0 });
+    },
+    [activateBagEntry],
+  );
   const activateSkill = useCallback(
     (id?: number, parry = false) => {
       if (!id) return;
@@ -2260,8 +2269,7 @@ export default function OriginalWorld() {
           else if (k === "arrowright" || k === "d")
             setMenu({ ...menu, index: gridRight(menu.index) });
           else if (confirm && menu.tab === 0) {
-            if (entries[menu.index])
-              setItemConfirm({ entry: entries[menu.index], index: 0 });
+            openBagEntry(entries[menu.index]);
           }
           else if (confirm && menu.tab === 2)
             activateSkill(skills[menu.index]?.id);
@@ -2383,6 +2391,7 @@ export default function OriginalWorld() {
     npcMenu,
     npcChat,
     closeNpcChat,
+    openBagEntry,
     openFlyMenu,
     save,
     shop,
@@ -3316,7 +3325,7 @@ ${mode}输出必须符合古代武侠世界，不推动正式任务，不改变�
             tasks={state.tasks}
             menu={menu}
             setMenu={setMenu}
-            activate={(entry) => setItemConfirm({ entry, index: 0 })}
+            activate={openBagEntry}
             activateKf={activateSkill}
             quickAction={applyCheatAction}
             changeStat={changeCheatStat}
@@ -3959,7 +3968,7 @@ function GameMenu({
                   </header>
                 )}
               <button
-                className={menu.index === i ? "active" : ""}
+                className={`${menu.index === i ? "active" : ""}${entry.equipped ? " equipped" : ""}`}
                 onMouseEnter={() => setMenu({ tab: 0, index: i, sub: 0 })}
                 onClick={() => activate(entry)}
               >

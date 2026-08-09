@@ -91,6 +91,11 @@
   border-color: #b39b58;
   background: #82663338;
 }
+/* 已装备的武器/防具高亮 */
+.bag-list button.equipped {
+  border-color: #4fb3c9;
+  background: #2f5f7438;
+}
 .bag-list span {
   display: grid;
   min-width: 0;
