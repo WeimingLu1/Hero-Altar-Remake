@@ -8,11 +8,6 @@ RPG Maker XP project.
 The following assets were generated specifically for this Web adaptation with
 OpenAI Image Generation and then prepared locally for use as sprite atlases:
 
-- `public/game-assets/generated/wuxia-environment-atlas-v1.png`: 8 × 8 ancient
-  Chinese wuxia environment atlas.
-- `public/game-assets/generated/wuxia-map-modules-v2.png`: second-generation
-  8 × 8 seamless terrain, road-edge, water-bank, modular building, boundary,
-  vegetation, landmark, and prop atlas.
 - `public/game-assets/generated/wuxia-characters-v1.png`: player and general
   wandering-character directions.
 - `public/game-assets/generated/wuxia-characters-ages-v1.png`: children and

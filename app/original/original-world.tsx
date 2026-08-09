@@ -169,14 +169,12 @@ const W = 640,
   T = 32;
 
 type WuxiaArt = {
-  environment: HTMLImageElement | null;
   characters: Array<HTMLImageElement | null>;
   natureOverlays: HTMLImageElement | null;
   interiorOverlays: HTMLImageElement | null;
 };
 type CharacterSprite = { sheet: number; row: number; portrait?: number };
 const wuxiaArt: WuxiaArt = {
-  environment: null,
   characters: [null, null, null, null, null, null, null],
   natureOverlays: null,
   interiorOverlays: null,
@@ -189,9 +187,6 @@ function loadWuxiaArt() {
     image.onload = () => ready(image);
     image.src = src;
   };
-  load("/game-assets/generated/wuxia-map-modules-v2.png", (image) => {
-    wuxiaArt.environment = image;
-  });
   [
     "wuxia-characters-v1.png",
     "wuxia-characters-ages-v1.png",
@@ -4668,8 +4663,6 @@ function drawAuthoredTerrain(
     ctx.fillRect(x, y, T, T);
   }
   if (theme === "indoor") {
-    if (mx === 0 || my === 0 || mx === map.width - 1 || my === map.height - 1)
-      drawEnvironmentCell(ctx, mx === 0 ? 40 : mx === map.width - 1 ? 42 : 41, x, y);
     const furniture = indoorFurniture(map).get(`${mx},${my}`);
     if (furniture !== undefined) drawOverlayCell(ctx, furniture, x, y);
     return;
@@ -4682,7 +4675,7 @@ function drawAuthoredTerrain(
     drawOverlayCell(ctx, factionDecoration, x, y);
     return;
   }
-  if (seed % (faction ? 53 : 41) !== 0) return;
+  if (seed % (faction ? 37 : 31) !== 0) return;
   const decoration =
     theme === "water" ? 6 :
     theme === "altar" ? 13 :
@@ -4697,7 +4690,7 @@ function indoorFurniture(map: OriginalMap) {
   const cells = new Map<string, number>(),
     occupied = eventCells(map),
     add = (x: number, y: number, source: number) => {
-      if (x > 0 && y > 0 && x < map.width - 1 && y < map.height - 1 && !occupied.has(`${x},${y}`))
+      if (x > 0 && y > 0 && x < map.width - 1 && y < map.height - 1 && !occupied.has(`${x},${y}`) && !cells.has(`${x},${y}`))
         cells.set(`${x},${y}`, source);
     },
     cx = Math.floor(map.width / 2),
@@ -4725,6 +4718,12 @@ function indoorFurniture(map: OriginalMap) {
     add(3, 3, 29); add(map.width - 4, 3, 22);
   } else {
     add(3, 3, 19); add(map.width - 4, 3, 21); add(cx, cy, 16); add(cx - 1, cy + 1, 17);
+  }
+  // A restrained repeated furnishing rhythm makes every room feel occupied
+  // without returning to random clutter or embedding props in the floor.
+  for (let x = 3; x < map.width - 3; x += 5) {
+    add(x, 3, (x + map.id) % 2 ? 19 : 23);
+    if (map.height > 12) add(x + 2, map.height - 3, (x + map.id) % 3 ? 22 : 24);
   }
   furnitureCache.set(map.id, cells);
   return cells;
@@ -4759,30 +4758,6 @@ function drawOverlayCell(
   );
 }
 
-function drawEnvironmentCell(
-  ctx: CanvasRenderingContext2D,
-  source: number,
-  x: number,
-  y: number,
-  width = T,
-  height = T,
-) {
-  const atlas = wuxiaArt.environment;
-  if (!atlas?.complete || !atlas.naturalWidth) return;
-  const cell = atlas.naturalWidth / 8;
-  ctx.drawImage(
-    atlas,
-    (source % 8) * cell + 2,
-    Math.floor(source / 8) * cell + 2,
-    cell - 4,
-    cell - 4,
-    x,
-    y,
-    width,
-    height,
-  );
-}
-
 function drawMapStructures(
   ctx: CanvasRenderingContext2D,
   map: OriginalMap,
@@ -4799,10 +4774,10 @@ function drawMapStructures(
     const visual = eventVisual(event, state);
     if (visual.kind !== "door") continue;
     if (outdoorWords.test(visual.label)) {
-      const px = (event.x - sx) * T,
-        py = (event.y - sy - 1) * T,
-        landmark = /洞|谷|山|峰/.test(visual.label) ? 52 : /海|岛|渡口/.test(visual.label) ? 30 : 39;
-      drawEnvironmentCell(ctx, landmark, px, py, T, T * 2);
+      // Outdoor transfers keep the same clean terrain. A symmetric flower pair
+      // signals the entrance without replacing its base tile with a cave/rock.
+      drawOverlayCell(ctx, hashIndex(visual.label, 2) ? 9 : 10, (event.x - sx - 1) * T, (event.y - sy) * T);
+      drawOverlayCell(ctx, hashIndex(visual.label, 2) ? 10 : 9, (event.x - sx + 1) * T, (event.y - sy) * T);
       continue;
     }
     if (event.x < sx - 3 || event.x >= sx + 23 || event.y < sy || event.y >= sy + 16)
@@ -4812,27 +4787,37 @@ function drawMapStructures(
     occupied.push({ x: event.x, y: event.y });
     const widthTiles = hashIndex(visual.label, 2) ? 5 : 4,
       leftTile = event.x - Math.floor(widthTiles / 2),
-      topTile = event.y - 3,
-      doorColumn = event.x - leftTile;
-    for (let row = 0; row < 3; row++) {
-      for (let column = 0; column < widthTiles; column++) {
-        const px = (leftTile + column - sx) * T,
-          py = (topTile + row - sy) * T;
-        if (px <= -T || py <= -T || px >= W || py >= H) continue;
-        let source = row === 0 ? (column === 0 ? 32 : column === widthTiles - 1 ? 34 : 33) : 36;
-        if (row === 1 && column === Math.max(0, doorColumn - 1)) source = 37;
-        if (row === 2 && column === doorColumn) source = 38;
-        drawEnvironmentCell(ctx, source, px, py);
-      }
-    }
-    // Deep eaves and a stone threshold bind the separate tiles into one facade.
-    const left = (leftTile - sx) * T,
-      top = (topTile - sy) * T;
-    ctx.fillStyle = "rgba(15,18,15,.48)";
-    ctx.fillRect(left, top + T - 4, widthTiles * T, 6);
-    ctx.fillStyle = "rgba(80,62,41,.55)";
-    ctx.fillRect((event.x - sx) * T + 4, (event.y - sy + 1) * T - 5, T - 8, 5);
+      topTile = event.y - 3;
+    drawCleanBuilding(ctx, (leftTile - sx) * T, (topTile - sy) * T, widthTiles, event.x - leftTile, hashIndex(visual.label, 3));
   }
+}
+
+function drawCleanBuilding(ctx: CanvasRenderingContext2D, x: number, y: number, widthTiles: number, doorColumn: number, style: number) {
+  const width = widthTiles * T,
+    roof = style === 1 ? "#354650" : style === 2 ? "#59413a" : "#343936",
+    wall = style === 1 ? "#bdc7c3" : style === 2 ? "#c6aa82" : "#d2c7aa",
+    timber = style === 2 ? "#58372c" : "#4b4540";
+  ctx.fillStyle = "rgba(25,28,25,.24)"; ctx.fillRect(x + 4, y + T * 3 - 2, width - 8, 5);
+  ctx.fillStyle = wall; ctx.fillRect(x + 5, y + T, width - 10, T * 2);
+  ctx.fillStyle = roof; ctx.fillRect(x, y + 5, width, T - 6);
+  ctx.fillStyle = "rgba(235,240,226,.14)"; ctx.fillRect(x + 6, y + 9, width - 12, 3);
+  ctx.fillStyle = timber;
+  for (let column = 0; column <= widthTiles; column++) ctx.fillRect(x + column * T - 2, y + T, 4, T * 2);
+  ctx.fillRect(x + 3, y + T, width - 6, 5); ctx.fillRect(x + 3, y + T * 2 - 3, width - 6, 5);
+  for (let column = 0; column < widthTiles; column++) {
+    if (column === doorColumn) continue;
+    ctx.fillStyle = "#51483e"; ctx.fillRect(x + column * T + 10, y + T + 10, 12, 10);
+    ctx.fillStyle = "#9dbea8"; ctx.fillRect(x + column * T + 12, y + T + 12, 8, 6);
+  }
+  ctx.fillStyle = "#492e25"; ctx.fillRect(x + doorColumn * T + 7, y + T * 2 - 1, 18, T + 1);
+  ctx.fillStyle = "#c89b55"; ctx.fillRect(x + doorColumn * T + 22, y + T * 2 + 13, 2, 2);
+}
+
+function drawStoneFoundation(ctx: CanvasRenderingContext2D, x: number, y: number, widthTiles: number, heightTiles: number) {
+  ctx.fillStyle = "#929b9b"; ctx.fillRect(x, y, widthTiles * T, heightTiles * T);
+  ctx.strokeStyle = "rgba(50,58,60,.25)"; ctx.lineWidth = 1;
+  for (let row = 0; row <= heightTiles; row++) { ctx.beginPath(); ctx.moveTo(x, y + row * T); ctx.lineTo(x + widthTiles * T, y + row * T); ctx.stroke(); }
+  for (let column = 0; column <= widthTiles; column++) { ctx.beginPath(); ctx.moveTo(x + column * T, y); ctx.lineTo(x + column * T, y + heightTiles * T); ctx.stroke(); }
 }
 
 function drawFactionLandmarks(
@@ -4842,33 +4827,19 @@ function drawFactionLandmarks(
   sy: number,
 ) {
   if (!factionMapIds.has(map.id)) return;
-  const width = map.id >= 59 ? 9 : Math.min(13, map.width - 2),
+  const width = map.id >= 59 ? 9 : Math.min(11, map.width - 2),
     left = Math.max(1, Math.floor(map.width / 2 - width / 2)),
     top = Math.max(1, Math.min(4, Math.floor(map.height * 0.16))),
-    accent = map.id === 23 ? "rgba(225,118,164,.5)" : map.id === 25 ? "rgba(180,38,31,.55)" : map.id === 27 || map.id === 52 ? "rgba(65,112,166,.5)" : map.id === 36 || map.id === 42 || map.id === 54 ? "rgba(180,218,232,.48)" : "rgba(176,137,55,.45)";
-  for (let row = 0; row < 5; row++) {
-    for (let column = 0; column < width; column++) {
-      const mx = left + column,
-        my = top + row,
-        x = (mx - sx) * T,
-        y = (my - sy) * T;
-      if (x <= -T || y <= -T || x >= W || y >= H) continue;
-      let source = 15;
-      if (row === 0) source = column === 0 ? 32 : column === width - 1 ? 34 : 33;
-      else if (row === 1) source = column % 3 === 1 ? 37 : 36;
-      else if (row === 2) source = column === Math.floor(width / 2) ? 39 : 41;
-      else if (row === 3) source = column === 0 ? 40 : column === width - 1 ? 42 : 15;
-      else source = column === Math.floor(width / 2) ? 45 : 15;
-      drawEnvironmentCell(ctx, source, x, y);
-      if ((row === 1 || row === 2) && (column === 0 || column === width - 1)) {
-        ctx.fillStyle = accent;
-        ctx.fillRect(x + 5, y + 3, T - 10, T - 6);
-      }
-    }
+    x = (left - sx) * T,
+    y = (top - sy) * T;
+  if (mapTheme(map) === "snow") {
+    drawStoneFoundation(ctx, x, y + T, width, 3);
+  } else {
+    drawStoneFoundation(ctx, x, y + T * 3, width, 2);
+    drawCleanBuilding(ctx, x, y, width, Math.floor(width / 2), map.id % 3);
   }
-  const ornaments = map.id === 23 ? [53, 53] : map.id === 36 ? [50, 51] : map.id >= 59 ? [61, 61] : [48, 49];
-  drawEnvironmentCell(ctx, ornaments[0], (left - 1 - sx) * T, (top + 2 - sy) * T);
-  drawEnvironmentCell(ctx, ornaments[1], (left + width - sx) * T, (top + 2 - sy) * T);
+  drawOverlayCell(ctx, map.id === 23 ? 3 : 4, x - T, y + T * 3);
+  drawOverlayCell(ctx, map.id === 23 ? 3 : 4, x + width * T, y + T * 3);
 }
 
 function drawPinganTownPlan(
@@ -4883,24 +4854,15 @@ function drawPinganTownPlan(
       if (occupied.has(`${mx},${my}`)) return;
       const x = (mx - sx) * T, y = (my - sy) * T;
       if (x <= -T || y <= -T || x >= W || y >= H) return;
-      drawEnvironmentCell(ctx, source, x, y);
+      drawOverlayCell(ctx, source, x, y);
     };
-  // A continuous town edge gives the formerly empty canvas an intentional
-  // street plan, while corner planting and markets distinguish each district.
-  for (let x = 1; x < map.width - 1; x++) {
-    if (x % 2 === 0) { draw(x, 1, 55); draw(x, map.height - 2, 55); }
-  }
-  for (let y = 3; y < map.height - 3; y += 3) {
-    draw(1, y, 54); draw(map.width - 2, y, 54);
-  }
-  const inset = 3;
-  draw(inset, inset, 53); draw(map.width - 1 - inset, inset, 53);
-  draw(inset, map.height - 1 - inset, 48); draw(map.width - 1 - inset, map.height - 1 - inset, 49);
-  if (map.id === 2) draw(Math.floor(map.width / 2), Math.floor(map.height / 2), 56);
+  // Repeated planting is an overlay, never part of the terrain base.
+  for (let x = 2; x < map.width - 2; x += 5) { draw(x, 2, 2); draw(x, map.height - 3, 3); }
+  for (let y = 5; y < map.height - 5; y += 5) { draw(2, y, 4); draw(map.width - 3, y, 4); }
   if (map.id === 15) {
     for (let x = 4; x < map.width - 4; x += 5) {
-      draw(x, 4, 63); draw(x + 2, 4, 57);
-      draw(x, map.height - 5, 63); draw(x + 2, map.height - 5, 57);
+      draw(x, 4, 8); draw(x + 2, 4, 10);
+      draw(x, map.height - 5, 8); draw(x + 2, map.height - 5, 10);
     }
   }
 }

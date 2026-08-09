@@ -2,12 +2,6 @@
   "version": 1,
   "logicalTileSize": 32,
   "assets": {
-    "environment": {
-      "src": "/game-assets/generated/wuxia-map-modules-v2.png",
-      "columns": 8,
-      "rows": 8,
-      "purpose": "seamless terrain, modular multi-tile architecture, boundaries, and props"
-    },
     "characters": {
       "src": [
         "/game-assets/generated/wuxia-characters-v1.png",

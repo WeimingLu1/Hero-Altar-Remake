@@ -34,6 +34,10 @@ test("environment art uses authored themes and entrance road networks", () => {
   assert.match(source, /function authoredRoads/);
   assert.match(source, /function drawAuthoredTerrain/);
   assert.match(source, /executeMapCommands\(activePage\(event\)\.commands\)\.transfer/);
+  assert.doesNotMatch(source, /wuxia-map-modules-v2\.png/);
+  assert.doesNotMatch(source, /function drawEnvironmentCell/);
+  assert.match(source, /function drawCleanBuilding/);
+  assert.match(source, /function drawStoneFoundation/);
 });
 
 test("NPC marker stays above the character face", () => {
@@ -165,7 +169,8 @@ test("LLM sessions use a player-first bounded priority queue", () => {
 test("map entrances anchor coherent multi-tile buildings", () => {
   assert.match(source, /function drawMapStructures/);
   assert.match(source, /widthTiles = hashIndex/);
-  assert.match(source, /row === 2 && column === doorColumn/);
+  assert.match(source, /drawCleanBuilding\(ctx/);
+  assert.match(source, /column === doorColumn/);
 });
 
 test("named adult women remain distinct after strict child and elder guards", () => {
@@ -207,7 +212,7 @@ test("maps render a clean base before sparse transparent overlays", () => {
   assert.match(source, /function drawOverlayCell/);
   assert.match(source, /function drawCleanBaseTile/);
   assert.match(source, /theme === "indoor" \? "#896746"/);
-  assert.match(source, /seed % \(faction \? 53 : 41\)/);
+  assert.match(source, /seed % \(faction \? 37 : 31\)/);
   assert.match(source, /drawCleanBaseTile\(ctx, theme, road, faction, pingan/);
   assert.match(source, /drawOverlayCell\(ctx, decoration/);
 });
