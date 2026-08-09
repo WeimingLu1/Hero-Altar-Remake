@@ -1,9 +1,9 @@
 # frozen_string_literal: true
 # Converts the RPG Maker XP map graph into browser-readable JSON without
-# modifying the original project. Run from the repository root:
-# ruby scripts/extract_rxdata.rb
+# modifying the original project. Run from web/: ruby scripts/extract_rxdata.rb
 require "json"
 require "fileutils"
+require "shellwords"
 require "time"
 
 module RPG
@@ -64,9 +64,8 @@ def json_value(value)
   end
 end
 
-repo_root = File.expand_path("..", __dir__)
-source_root = File.join(repo_root, "reference", "rpgmaker")
-data_dir = File.join(source_root, "Data")
+root = File.expand_path("../..", __dir__)
+data_dir = File.join(root, "Data")
 out_dir = File.join(__dir__, "..", "game-data")
 FileUtils.mkdir_p(out_dir)
 infos = Marshal.load(File.binread(File.join(data_dir, "MapInfos.rxdata")))
@@ -101,8 +100,7 @@ maps = infos.keys.sort.map do |id|
 end
 
 manifest = {
-  format: "rmxp-hero-map-export", version: 1,
-  source_commit: File.read(File.join(source_root, "SOURCE_COMMIT")).strip,
+  format: "rmxp-hero-map-export", version: 1, source_commit: `git -C #{root.shellescape} rev-parse HEAD`.strip,
   generated_at: Time.now.utc.iso8601, map_count: maps.length, maps: maps
 }
 

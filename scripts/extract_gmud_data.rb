@@ -77,8 +77,8 @@ def read_raw_stream(path)
   end
 end
 
-repo_root = File.expand_path("..", __dir__)
-source = File.join(repo_root, "reference", "rpgmaker", "Data")
+root = File.expand_path("../..", __dir__)
+source = File.join(root, "Data")
 output = File.expand_path("../game-data", __dir__)
 FileUtils.mkdir_p(output)
 

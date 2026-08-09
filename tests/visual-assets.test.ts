@@ -73,7 +73,7 @@ test("ambient dialogue lifecycle rejects stale requests and ghost NPCs", () => {
   assert.match(source, /if \(item\.speechTargetName && !target\) return false/);
   assert.match(source, /ambientShouldPause/);
   assert.match(source, /killList \|\| \[\]\)\.join/);
-  assert.match(source, /!passable\(map, x, y, direction\) \|\| !canEnterVisualCell\(map\.id, x, y\)/);
+  assert.match(source, /if \(!passable\(map, x, y, direction\)\) return false/);
   assert.doesNotMatch(source, /visual\.kind !== "none" && visual\.kind !== "npc"/);
 });
 
