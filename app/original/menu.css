@@ -482,7 +482,24 @@
   color: #b9a877;
   font-size: 10px;
 }
-/* 秘技「物品装备」完整目录：按类别分组展示属性与描述 */
+/* 秘技「物品装备」：类目按钮 + 每行数量直接获得 */
+.cheat-kind-buttons {
+  display: flex;
+  gap: 6px;
+  margin-bottom: 8px;
+}
+.cheat-kind-buttons button {
+  flex: 1;
+  padding: 8px;
+  color: #a994b5;
+  border: 1px solid #ffffff14;
+  background: transparent;
+}
+.cheat-kind-buttons button.active {
+  color: #f1ceff;
+  background: #a957d326;
+  border-color: #ce80f3;
+}
 .cheat-catalog {
   display: block;
   max-height: 340px;
@@ -492,38 +509,42 @@
 .cheat-catalog-group + .cheat-catalog-group {
   margin-top: 4px;
 }
-.cheat-catalog-group > button {
-  display: block;
+.cheat-catalog-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 72px auto;
+  align-items: center;
+  gap: 10px;
   width: 100%;
-  padding: 10px 12px;
-  margin: 0;
+  padding: 8px 10px;
   color: #e9dff0;
   border: 1px solid transparent;
   border-bottom-color: #ffffff14;
   background: transparent;
   text-align: left;
-  line-height: 1.5;
 }
-.cheat-catalog-group > button.active {
-  border-color: #ce80f3;
-  background: #a957d326;
+.cheat-catalog-row.is-equipped {
+  border-color: #4fb3c9;
+  background: #2f5f7438;
 }
-.cheat-catalog-group > button > span {
+.cheat-catalog-info {
+  min-width: 0;
+}
+.cheat-catalog-info > span {
   display: flex;
   align-items: baseline;
   justify-content: space-between;
   gap: 12px;
 }
-.cheat-catalog-group > button b {
+.cheat-catalog-info b {
   color: #f0e2c8;
   font-size: 12px;
 }
-.cheat-catalog-group > button b small {
+.cheat-catalog-info b small {
   margin-left: 6px;
   color: #8e7f95;
   font-size: 9px;
 }
-.cheat-catalog-group > button b i {
+.cheat-catalog-info b i {
   margin-left: 6px;
   font-style: normal;
   padding: 1px 5px;
@@ -532,7 +553,7 @@
   background: #2f5f7445;
   font-size: 9px;
 }
-.cheat-catalog-group > button em {
+.cheat-catalog-info em {
   color: #8fe0f2;
   font-style: normal;
   font-size: 10px;
@@ -545,9 +566,15 @@
   font-size: 9px;
   line-height: 1.4;
 }
-.cheat-catalog-group > button.is-equipped {
-  border-color: #4fb3c9;
-  background: #2f5f7438;
+.cheat-amount {
+  width: 72px;
+}
+.cheat-obtain {
+  padding: 7px 10px;
+  color: #f1ceff;
+  border: 1px solid #ce80f380;
+  background: #a957d326;
+  white-space: nowrap;
 }
 .cheat-list {
   overflow: auto;
