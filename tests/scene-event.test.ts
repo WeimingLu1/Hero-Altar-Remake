@@ -99,6 +99,12 @@ test("坛入口按事件第三参数选择原作坐标分支", () => {
   assert.deepEqual(result.transfer, { mapId: 62, x: 17, y: 12 });
 });
 
+test("坛入口文案是踏入坛中，不误用村长赠送地图的 tan_start", () => {
+  const result = resolveSceneEvent({ type: 13, id: 59, extra: 0 }, actor());
+  assert.deepEqual(result.lines, ["你踏入坛中。"]);
+  assert.doesNotMatch(result.lines[0], /老夫|地图|为民除害/);
+});
+
 test("桃花源房间入口按房屋等级进入对应原作地图", () => {
   const a = actor();
   a.roomLevel = 2;

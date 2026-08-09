@@ -25,7 +25,13 @@ export function settleVictoryLoot(
       }
       continue;
     }
-    if (kind === 1 && id >= 21 && id <= 28 && actor.tanId + 20 !== id) continue;
+    if (kind === 1 && id >= 21 && id <= 28) {
+      // 坛地图只由「当前坛主」掉落：163–170 中与坛进度匹配(enemyId-162===tanId)
+      // 的那一坛。每位坛主掉落机械顺序的下一坛地图；青龙坛地图(21)由村长直接赠送，
+      // 其余来源(普通敌人、已推进后的旧坛主)一律不产出坛地图，避免误导与重复掉落。
+      if (!(enemyId >= 163 && enemyId <= 170 && enemyId - 162 === actor.tanId))
+        continue;
+    }
     const key = `${kind}:${id}`;
     actor.inventory[key] = (actor.inventory[key] || 0) + 1;
     const table =

@@ -263,7 +263,8 @@ export function resolveSceneEvent(
       xy = routes?.[Math.max(0, call.extra || 0)];
     if (xy)
       return {
-        lines: [String(originalText.tan_start || "你踏入坛中。")],
+        // 坛入口显示进入坛的提示；tan_start 是村长赠送地图的文案，不能在此复用。
+        lines: ["你踏入坛中。"],
         transfer: { mapId: id, x: Number(xy[0]), y: Number(xy[1]) },
         tag: `tan:${id}`,
       };

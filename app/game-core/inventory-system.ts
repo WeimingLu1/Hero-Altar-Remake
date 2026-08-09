@@ -1,5 +1,6 @@
 import { originalTables, type OriginalRecord } from "./original-data";
 import type { SceneActorState } from "./scene-event";
+import { altarEntranceHint } from "./altar-map";
 
 export type BagEntry = {
   key: string;
@@ -228,6 +229,9 @@ function activateItemEntry(
   }
   if (item.is_book)
     return { ok: false, text: "翻开秘籍准备研读。", bookId: entry.id };
+  // 坛地图是导航物品：使用后提示入口位置，不消耗、不进入普通物品结算。
+  const altarHint = altarEntranceHint(entry.id);
+  if (altarHint) return { ok: true, text: altarHint };
   const occasion = Number(item.occasion || 0);
   if (occasion !== 0 && occasion !== (inBattle ? 1 : 2))
     return { ok: false, text: "此物只能在战斗中使用。" };

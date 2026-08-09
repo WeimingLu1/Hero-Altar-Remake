@@ -13,6 +13,7 @@ import {
 } from "../app/game-core/scene-event";
 import {
   executeMapCommands,
+  parseSceneGate,
   selectSceneEvent,
   supportedEventCodes,
 } from "../app/game-core/rmxp-events";
@@ -96,6 +97,41 @@ test("transfer and Scene_Event hooks retain exact arguments", () => {
     fade: 0,
   });
   assert.deepEqual(result.sceneEvent, { type: 13, id: 64, extra: 0 });
+});
+
+test("parseSceneGate 解析被物品门槛锁住的坛入口，与条件是否满足无关", () => {
+  const source =
+    "if $game_actor.item_number(1,21)>0 or \n$game_actor.tan_id>1\n $scene=Scene_Event.new(13,59,0)\nend";
+  const gate = parseSceneGate(source);
+  assert.deepEqual(gate?.scene, { type: 13, id: 59, extra: 0 });
+  assert.equal(gate?.itemId, 21);
+  assert.equal(gate?.itemOp, ">");
+  assert.equal(gate?.tanId, 1);
+  // 缺少地图时 selectSceneEvent 不返回场景，但 parseSceneGate 仍能识别入口。
+  assert.equal(
+    selectSceneEvent(source, { inventory: {}, tanId: 0, freeWork: 0 }),
+    undefined,
+  );
+});
+
+test("parseSceneGate 解析时空尽头石板门(需六块三角石板)", () => {
+  const gate = parseSceneGate(
+    "if $game_actor.item_number(1,19)==6\n $scene=Scene_Event.new(8)\nend",
+  );
+  assert.deepEqual(gate?.scene, { type: 8, id: undefined, extra: undefined });
+  assert.equal(gate?.scene?.type, 8);
+  assert.equal(gate?.itemId, 19);
+  assert.equal(gate?.itemOp, "==");
+  assert.equal(gate?.itemCount, 6);
+});
+
+test("parseSceneGate 对无场景脚本与无条件入口都能正确处理", () => {
+  assert.equal(parseSceneGate("if $game_actor.tan_id>1"), undefined);
+  assert.equal(parseSceneGate(""), undefined);
+  const plain = parseSceneGate("$scene=Scene_Event.new(13,66,0)");
+  assert.deepEqual(plain?.scene, { type: 13, id: 66, extra: 0 });
+  assert.equal(plain?.itemId, undefined);
+  assert.equal(plain?.tanId, undefined);
 });
 
 test("internal transfer event names resolve to their destination map", () => {

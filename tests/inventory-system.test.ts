@@ -153,3 +153,14 @@ test("原版石板来源记录在行囊合并显示为关键物品", () => {
   assert.equal(stone.slot, "关键物品");
   assert.equal(stone.bonuses, "已收集 2/6");
 });
+
+test("使用坛地图提示入口位置且不消耗物品", () => {
+  const a = actor();
+  a.inventory = { "1:28": 1 };
+  const result = activateEntry(a, bagEntries(a)[0]);
+  assert.equal(result.ok, true);
+  assert.match(result.text, /白虎坛/);
+  assert.match(result.text, /东海/);
+  assert.match(result.text, /\(7, 2\)/);
+  assert.equal(a.inventory["1:28"], 1, "坛地图使用后不应被消耗");
+});

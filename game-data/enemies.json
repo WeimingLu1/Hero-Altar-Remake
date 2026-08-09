@@ -26308,7 +26308,7 @@
       "base_str": 34,
       "item1": [
         1,
-        -22
+        -28
       ],
       "maxsp": 11130,
       "treasure_prob": 100,
@@ -26414,8 +26414,8 @@
     {
       "$type": "RPG::Enemy",
       "item2": [
-        0,
-        0
+        1,
+        -23
       ],
       "str": 38,
       "eva": 0,
@@ -26672,7 +26672,7 @@
       "base_str": 40,
       "item1": [
         1,
-        -24
+        -25
       ],
       "maxsp": 19696,
       "treasure_prob": 100,
@@ -26848,7 +26848,7 @@
       "base_str": 27,
       "item1": [
         1,
-        -26
+        -27
       ],
       "maxsp": 32400,
       "treasure_prob": 100,
@@ -27032,7 +27032,7 @@
       "base_str": 36,
       "item1": [
         1,
-        -28
+        -26
       ],
       "maxsp": 45000,
       "treasure_prob": 100,
@@ -27208,7 +27208,7 @@
       "base_str": 43,
       "item1": [
         1,
-        -27
+        -24
       ],
       "maxsp": 38250,
       "treasure_prob": 100,
@@ -27392,7 +27392,7 @@
       "base_str": 41,
       "item1": [
         1,
-        -25
+        -22
       ],
       "maxsp": 23939,
       "treasure_prob": 100,
@@ -27555,8 +27555,8 @@
       "base_fac": 24,
       "base_str": 25,
       "item1": [
-        1,
-        -23
+        0,
+        0
       ],
       "maxsp": 17365,
       "treasure_prob": 100,

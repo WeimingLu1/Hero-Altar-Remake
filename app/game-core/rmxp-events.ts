@@ -27,6 +27,38 @@ export function selectSceneEvent(source:string,context:EventContext){
   return selected;
 }
 
+export type SceneGate = {
+  scene?: EventResult["sceneEvent"];
+  itemId?: number;
+  itemOp?: ">" | "==";
+  itemCount?: number;
+  tanId?: number;
+};
+
+// 解析脚本中受条件控制的入口事件，无论当前条件是否满足：
+// 用于把被物品/进度门槛锁住的入口依然标记在地图上，并在交互时提示缺少什么。
+export function parseSceneGate(source: string): SceneGate | undefined {
+  const sceneMatch = source.match(
+    /Scene_Event\.new\(\s*(-?\d+)(?:\s*,\s*(-?\d+))?(?:\s*,\s*(-?\d+))?/,
+  );
+  if (!sceneMatch) return undefined;
+  const item = source.match(
+    /item_number\(\s*\d+\s*,\s*(\d+)\s*\)\s*(>|==)\s*(\d+)/,
+  );
+  const tan = source.match(/tan_id\s*>\s*(\d+)/);
+  return {
+    scene: {
+      type: Number(sceneMatch[1]),
+      id: sceneMatch[2] === undefined ? undefined : Number(sceneMatch[2]),
+      extra: sceneMatch[3] === undefined ? undefined : Number(sceneMatch[3]),
+    },
+    itemId: item ? Number(item[1]) : undefined,
+    itemOp: item ? (item[2] as ">" | "==") : undefined,
+    itemCount: item ? Number(item[3]) : undefined,
+    tanId: tan ? Number(tan[1]) : undefined,
+  };
+}
+
 export function executeMapCommands(commands: RmxpCommand[]): EventResult {
   const result: EventResult = { sounds: [], source: "" };
   let script = "";

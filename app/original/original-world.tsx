@@ -35,7 +35,11 @@ import {
   resolveSceneEvent,
   type SceneActorState,
 } from "../game-core/scene-event";
-import { executeMapCommands, selectSceneEvent } from "../game-core/rmxp-events";
+import {
+  executeMapCommands,
+  parseSceneGate,
+  selectSceneEvent,
+} from "../game-core/rmxp-events";
 import {
   originalSystem,
   originalTables,
@@ -162,6 +166,8 @@ import {
   type ChatMessage,
 } from "../game-core/lm-studio";
 import { MAX_PLAYER_EXP } from "../game-core/progression-limits";
+import { isCurrentKillTarget } from "../game-core/kill-target";
+import { altarOwnMap } from "../game-core/altar-map";
 import "./world.css";
 import "./choice.css";
 import "./battle.css";
@@ -768,7 +774,21 @@ export default function OriginalWorld() {
         return true;
       }
       if (!automatic && result.source && !sceneCall) {
-        setNotice("尚未满足该事件的原版触发条件");
+        const gate = parseSceneGate(result.source);
+        if (
+          gate?.itemId !== undefined &&
+          gate.scene &&
+          [8, 13, 15, 16].includes(gate.scene.type)
+        ) {
+          const itemName = String(
+            originalTables.items[gate.itemId]?.name || `物品${gate.itemId}`,
+          );
+          const stoneProgress =
+            gate.itemId === 19
+              ? `，当前 ${s.actor.stoneList?.length || 0}/${gate.itemCount ?? 6}`
+              : "";
+          setNotice(`需要「${itemName}」才能进入${stoneProgress}`);
+        } else setNotice("尚未满足该事件的原版触发条件");
         return true;
       }
       return page.trigger > 0;
@@ -1331,11 +1351,15 @@ export default function OriginalWorld() {
           altarId >= 1 &&
           altarId <= 8
         ) {
-          const mapKey = `1:${20 + altarId}`;
-          if ((next.actor.inventory[mapKey] || 0) > 0) {
-            next.actor.inventory[mapKey]--;
-            if (next.actor.inventory[mapKey] <= 0)
-              delete next.actor.inventory[mapKey];
+          // 消耗本坛地图：村长赠送青龙坛地图(21)，之后每坛地图由上一坛主掉落。
+          const ownMap = altarOwnMap(battle.enemyId);
+          if (ownMap !== undefined) {
+            const mapKey = `1:${ownMap}`;
+            if ((next.actor.inventory[mapKey] || 0) > 0) {
+              next.actor.inventory[mapKey]--;
+              if (next.actor.inventory[mapKey] <= 0)
+                delete next.actor.inventory[mapKey];
+            }
           }
           next.actor.killList = Array.from(
             new Set([...(next.actor.killList || []), battle.enemyId]),
@@ -4455,6 +4479,11 @@ function draw(ctx: CanvasRenderingContext2D, state: WorldSave, ambient: AmbientW
         (eventY - sy) * T + 23,
         visual.label,
         near,
+        // 当前坛主与主任务杀人目标标记红色，让玩家一眼知道该杀谁。
+        isCurrentKillTarget(visual.npcId, {
+          tanId: state.actor.tanId,
+          killId: state.tasks.killId,
+        }),
       );
       if (roaming?.bubble && !conversationSessionKey(roaming, playerAmbient)) ambientBubbles.push({
         x: (eventX - sx) * T + 16,
@@ -4470,6 +4499,7 @@ function draw(ctx: CanvasRenderingContext2D, state: WorldSave, ambient: AmbientW
         (e.y - sy) * T + 21,
         visual.label,
         near,
+        visual.locked,
       );
     else if (visual.kind === "object")
       drawObjectMarker(
@@ -4573,6 +4603,8 @@ type EventVisual = {
   kind: "npc" | "object" | "door" | "corpse" | "none";
   label: string;
   npcId?: number;
+  /** 入口因缺少物品或进度门槛暂时锁住，仍标记在地图上但无法进入 */
+  locked?: boolean;
 };
 const sceneLabels: Record<number, string> = {
   1: "菜花宝典",
@@ -4594,6 +4626,15 @@ const sceneLabels: Record<number, string> = {
 };
 function npcDisplayName(id: number, fallback = "江湖人物") {
   return String(npcRecord(id).name || fallback);
+}
+// 坛入口(type 13)显示目标坛的名称，其余场景入口沿用场景标签。
+function entranceLabel(
+  scene: { type: number; id?: number } | undefined,
+  cleanName: string,
+): string {
+  if (scene?.type === 13 && scene.id !== undefined)
+    return getOriginalMap(scene.id).name || cleanName || sceneLabels[13];
+  return cleanName || (scene ? sceneLabels[scene.type] : "通往别处");
 }
 function eventVisual(event: MapEvent, state: WorldSave): EventVisual {
   const page = activePage(event),
@@ -4623,14 +4664,19 @@ function eventVisual(event: MapEvent, state: WorldSave): EventVisual {
   }
   if (graphic) return { kind: "npc", label: cleanName || "江湖人物" };
   if (result.transfer || (scene && [13, 15, 16].includes(scene.type)))
-    return {
-      kind: "door",
-      label: cleanName || (scene ? sceneLabels[scene.type] : "通往别处"),
-    };
+    return { kind: "door", label: entranceLabel(scene, cleanName) };
   if (scene)
     return {
       kind: "object",
       label: cleanName || sceneLabels[scene.type] || "可互动",
+    };
+  // 条件不满足时，被物品/进度门槛锁住的入口仍然标记在地图上。
+  const gate = parseSceneGate(result.source);
+  if (gate?.scene && [8, 13, 15, 16].includes(gate.scene.type))
+    return {
+      kind: "door",
+      label: entranceLabel(gate.scene, cleanName),
+      locked: true,
     };
   return { kind: "none", label: "" };
 }
@@ -5127,23 +5173,31 @@ function drawDoorMarker(
   y: number,
   name: string,
   near: boolean,
+  locked = false,
 ) {
   const pulse = Math.sin(Date.now() / 250) > 0,
-    accent = "#8ee28f";
-  ctx.fillStyle = "rgba(6,20,12,.84)";
+    accent = locked ? "#d08a5e" : "#8ee28f";
+  ctx.fillStyle = locked ? "rgba(20,12,6,.86)" : "rgba(6,20,12,.84)";
   ctx.fillRect(x - 11, y - 14, 22, 23);
-  ctx.strokeStyle = near ? accent : "rgba(142,226,143,.72)";
+  ctx.strokeStyle = near ? accent : "rgba(208,138,94,.55)";
   ctx.lineWidth = near ? 3 : 2;
   ctx.strokeRect(x - 12, y - 15, 24, 25);
   ctx.fillStyle = accent;
   ctx.fillRect(x - 7, y - 10, 14, 3);
   ctx.fillRect(x - 7, y - 7, 3, 12);
   ctx.fillRect(x + 4, y - 7, 3, 12);
-  ctx.beginPath();
-  ctx.moveTo(x - 4, y - 20 - (pulse ? 1 : 0));
-  ctx.lineTo(x + 4, y - 20 - (pulse ? 1 : 0));
-  ctx.lineTo(x, y - 16 - (pulse ? 1 : 0));
-  ctx.fill();
+  if (locked) {
+    // 锁住的入口在门闩处画一把小锁，提示暂不可进入。
+    ctx.fillStyle = "#f0cfa0";
+    ctx.fillRect(x - 4, y - 6, 8, 6);
+    ctx.fillRect(x - 2, y - 9, 4, 3);
+  } else {
+    ctx.beginPath();
+    ctx.moveTo(x - 4, y - 20 - (pulse ? 1 : 0));
+    ctx.lineTo(x + 4, y - 20 - (pulse ? 1 : 0));
+    ctx.lineTo(x, y - 16 - (pulse ? 1 : 0));
+    ctx.fill();
+  }
   drawMarkerLabel(ctx, x, y - 27, name, accent, near, true);
 }
 function drawMarkerLabel(
