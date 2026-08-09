@@ -384,6 +384,37 @@
   background: #a957d326;
   box-shadow: inset 0 -2px #ce80f3;
 }
+/* 秘技已并入主菜单(game-menu)第 4 个页签，cheat-inner 填满内容区 */
+.game-menu .cheat-inner {
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  height: 100%;
+  overflow: hidden;
+  padding: 0;
+}
+.cheat-inner .cheat-subnav {
+  display: grid;
+  grid-template-columns: repeat(6, minmax(0, 1fr));
+  border-bottom: 1px solid #9f6db74d;
+}
+.cheat-inner .cheat-subnav button {
+  padding: 9px;
+  color: #a994b5;
+  border: 0;
+  background: transparent;
+}
+.cheat-inner .cheat-subnav button.active {
+  color: #f1ceff;
+  background: #a957d326;
+  box-shadow: inset 0 -2px #ce80f3;
+}
+.cheat-inner .cheat-list {
+  flex: 1;
+  min-height: 0;
+  overflow: auto;
+  padding: 10px 16px;
+}
 .cheat-list {
   overflow: auto;
   padding: 10px 16px;
