@@ -338,6 +338,80 @@ const allCheatSkills = originalTables.kungfus
   .sort(
     (a, b) => kungfuSchoolId(a.id) - kungfuSchoolId(b.id) || a.id - b.id,
   );
+// 秘技「物品装备」的完整目录：按类别分组，展示属性加成与描述。
+const cheatCatalogGroups = (kind: CheatInventoryKind) => {
+  const table =
+      kind === 1
+        ? originalTables.items
+        : kind === 2
+          ? originalTables.weapons
+          : originalTables.armors,
+    weaponKinds = ["剑器", "刀兵", "杖棍", "鞭索"],
+    armorKinds = ["衣装", "内甲", "饰品", "鞋履", "腰带", "披风", "工具"],
+    groups = new Map<
+      string,
+      Array<{ id: number; name: string; bonus: string; description: string }>
+    >();
+  table.forEach((record, id) => {
+    if (!record) return;
+    const name = String(record.name || id),
+      description = String(record.description || "");
+    let group: string, bonus: string;
+    if (kind === 1) {
+      const effects: string[] = [];
+      for (const [key, label] of [
+        ["add_food", "食物"],
+        ["add_water", "饮水"],
+        ["add_hp", "气血"],
+        ["add_mhp", "伤限"],
+        ["add_fp", "内力"],
+        ["add_mfp", "内力上限"],
+        ["add_mp", "法力"],
+        ["add_mmp", "法力上限"],
+      ] as const) {
+        const value = (record[key] as [number, number] | undefined)?.[1];
+        if (value) effects.push(`${label}+${value}`);
+      }
+      group = record.is_book
+        ? "秘籍"
+        : record.type === 0
+          ? "食物"
+          : record.type === 1
+            ? "丹药"
+            : "杂物";
+      if (record.is_book) {
+        const teaches = ((record.skill_list as number[][]) || []).map(
+          ([sid, lv]) => `${originalTables.kungfus[sid]?.name || sid}${lv}`,
+        );
+        bonus = teaches.length ? `研读：${teaches.join("、")}` : "无效果";
+      } else bonus = effects.length ? effects.join(" · ") : "无效果";
+    } else {
+      const stats: string[] = [];
+      for (const [key, label] of [
+        ["add_atk", "攻击"],
+        ["add_def", "防御"],
+        ["add_hit", "命中"],
+        ["add_eva", "闪避"],
+        ["add_str", "膂力"],
+        ["add_agi", "敏捷"],
+        ["add_int", "悟性"],
+        ["add_bon", "根骨"],
+      ] as const) {
+        const value = Number(record[key] || 0);
+        if (value) stats.push(`${label}${value > 0 ? "+" : ""}${value}`);
+      }
+      bonus = stats.length ? stats.join(" · ") : "无常驻属性";
+      group =
+        kind === 2
+          ? `武器 · ${weaponKinds[Number(record.type || 0)] || "奇门"}`
+          : `防具 · ${armorKinds[Number(record.kind || 0)] || "其他"}`;
+    }
+    const list = groups.get(group) || [];
+    list.push({ id, name, bonus, description });
+    groups.set(group, list);
+  });
+  return [...groups.entries()].map(([name, items]) => ({ name, items }));
+};
 type WorldSave = {
   format: "rmxp-hero-original-world-save";
   version: 1;
@@ -4271,7 +4345,7 @@ function CheatInner({
             </div>
           ))}
         {sub === 2 && (
-          <div className="cheat-editor-stack">
+          <div className="cheat-editor-stack cheat-inventory">
             <section className="cheat-add-row">
               <label>类别
                 <select value={inventoryKind} onChange={(event) => {
@@ -4283,17 +4357,42 @@ function CheatInner({
                   <option value={1}>物品</option><option value={2}>武器</option><option value={3}>防具</option>
                 </select>
               </label>
-              <label>条目
-                <select value={inventoryId} onChange={(event) => setInventoryId(Number(event.target.value))}>
-                  {catalog.map((entry) => <option key={entry.id} value={entry.id}>{entry.id} · {entry.name}</option>)}
-                </select>
-              </label>
               <label>数量 0–{inventoryKind === 1 ? 255 : 1}
                 <input type="number" min={0} max={inventoryKind === 1 ? 255 : 1} value={inventoryAmount}
                   onChange={(event) => setInventoryAmount(Number(event.target.value))} />
               </label>
-              <button onClick={() => mutate((draft) => setCheatInventory(draft.actor, inventoryKind, inventoryId, inventoryAmount))}>写入行囊</button>
+              <button onClick={() => mutate((draft) => setCheatInventory(draft.actor, inventoryKind, inventoryId, inventoryAmount))}>
+                写入「{catalog.find((entry) => entry.id === inventoryId)?.name || inventoryId}」
+              </button>
             </section>
+            <div className="cheat-catalog">
+              {cheatCatalogGroups(inventoryKind).map((group) => (
+                <div className="cheat-catalog-group" key={group.name}>
+                  <header className="cheat-group-header">
+                    <b>{group.name}</b>
+                    <small>{group.items.length} 件</small>
+                  </header>
+                  {group.items.map((entry) => (
+                    <button
+                      key={entry.id}
+                      className={inventoryId === entry.id ? "active" : ""}
+                      onClick={() => setInventoryId(entry.id)}
+                    >
+                      <span>
+                        <b>
+                          {entry.name}
+                          <small>ID {entry.id}</small>
+                        </b>
+                        <em>{entry.bonus}</em>
+                      </span>
+                      <small className="cheat-catalog-desc">
+                        {entry.description}
+                      </small>
+                    </button>
+                  ))}
+                </div>
+              ))}
+            </div>
             <p className="cheat-capacity">当前 {Object.keys(actor.inventory).length} 种，无种类上限；数量填 0 即移除，移除已装备条目会自动卸下。</p>
             {Object.entries(actor.inventory).filter(([, amount]) => amount > 0).map(([key, amount]) => {
               const [kind, id] = key.split(":").map(Number), table = kind === 1 ? originalTables.items : kind === 2 ? originalTables.weapons : originalTables.armors;
