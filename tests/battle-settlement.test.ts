@@ -94,6 +94,16 @@ test("当前坛主击杀掉落机械顺序的下一坛地图", () => {
   assert.equal(b.inventory["1:23"], 1);
 });
 
+test("手下留情当前坛主不掉落坛地图", () => {
+  const a = actor();
+  a.tanId = 1;
+  settleVictoryLoot(a, 163, false); // 手下留情
+  assert.equal(a.inventory["1:28"], undefined, "不留情不掉下一坛地图");
+  assert.equal(a.inventory["1:22"], undefined);
+  assert.equal(a.killList, undefined, "手下留情不记击杀");
+  assert.equal(a.inventory["2:8"], 1, "一般战利品(钢刀)仍按原版规则获得");
+});
+
 test("全部坛主按机械顺序掉落正确的下一坛地图", () => {
   const expected = {
     163: 28, // 青龙坛主 → 白虎坛地图
