@@ -1,4 +1,4 @@
-# See https://help.github.com/articles/ignoring-files/ for more about ignoring files.
+# Web application dependencies and package-manager state
 
 # dependencies
 /node_modules
@@ -13,14 +13,21 @@
 # testing
 /coverage
 
-# next.js
+# framework and build output
 /.next/
 /.vinext/
 /out/
+/dist/
+/.wrangler/
+/outputs/
+/work/
+*.tsbuildinfo
 
-# misc
+# local OS/editor files and credentials
 .DS_Store
 *.pem
+.idea/
+.vscode/
 
 # debug
 npm-debug.log*
@@ -28,16 +35,12 @@ yarn-debug.log*
 yarn-error.log*
 .pnpm-debug.log*
 
-# env files (can opt-in for committing if needed)
+# environment files (examples may be committed)
 .env*
+!.env.example
 
-# vercel
+# deployment state
 .vercel
-
-/dist/
-/.wrangler/
-/outputs/
-/work/
 
 # Local agent instructions and workspace automation state
 AGENTS.md
@@ -49,3 +52,8 @@ CLAUDE.md
 
 # Local duplicate produced by filesystem conflict resolution
 /README 2.md
+
+# Migration backups kept locally for recovery, not as project source
+/reference/local-artifacts/
+/reference/rpgmaker/root-git-metadata/
+/reference/rpgmaker/RMXP-Hero-history.bundle

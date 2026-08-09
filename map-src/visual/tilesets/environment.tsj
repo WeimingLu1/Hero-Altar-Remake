@@ -1,0 +1,15 @@
+{
+  "type": "tileset",
+  "version": "1.10",
+  "tiledversion": "1.12.2",
+  "name": "wuxia-environment",
+  "tilewidth": 156,
+  "tileheight": 156,
+  "tilecount": 64,
+  "columns": 8,
+  "margin": 3,
+  "spacing": 0,
+  "image": "../../../public/game-assets/generated/wuxia-map-modules-v2.png",
+  "imagewidth": 1254,
+  "imageheight": 1254
+}

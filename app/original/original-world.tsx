@@ -13,6 +13,13 @@ import {
   type WorldPosition,
 } from "../game-core/original-world";
 import {
+  canEnterVisualCell,
+  loadVisualMap,
+  migrateWorldPosition,
+  type VisualCell,
+  type VisualMap,
+} from "../game-core/visual-map";
+import {
   ambientNpcAt,
   ambientCanHear,
   ambientNpcInViewport,
@@ -315,7 +322,7 @@ const allCheatSkills = originalTables.kungfus.flatMap((skill, id) =>
 );
 type WorldSave = {
   format: "rmxp-hero-original-world-save";
-  version: 1;
+  version: 2;
   savedAt: string;
   position: WorldPosition;
   flags: Record<string, boolean>;
@@ -431,7 +438,7 @@ const newActor = (): SceneActorState => ({
 });
 const fresh = (): WorldSave => ({
   format: "rmxp-hero-original-world-save",
-  version: 1,
+  version: 2,
   savedAt: "",
   position: { ...originalStart },
   flags: {},
@@ -441,6 +448,8 @@ const fresh = (): WorldSave => ({
 });
 const normalize = (value: WorldSave): WorldSave => ({
   ...value,
+  version: 2,
+  position: migrateWorldPosition(value.position || originalStart),
   actor: {
     ...newActor(),
     ...(value.actor || {}),
@@ -820,6 +829,7 @@ export default function OriginalWorld() {
       if (
         !ambientBlocking &&
         !wantedBlocking &&
+        canEnterVisualCell(map.id, nx, ny) &&
         canMoveBetween(map, s.position.x, s.position.y, direction)
       ) {
         if (npcChat) {
@@ -2450,7 +2460,7 @@ export default function OriginalWorld() {
         pausedConversationNpcIds: ambientPlayer.current.npcIds,
         canEnter: (moving, x, y) => {
           const direction = x < moving.x ? 4 : x > moving.x ? 6 : y < moving.y ? 8 : 2;
-          if (!passable(map, x, y, direction)) return false;
+          if (!passable(map, x, y, direction) || !canEnterVisualCell(map.id, x, y)) return false;
           return !world.npcs.some((npc) => npc.eventId !== moving.eventId && npc.x === x && npc.y === y);
         },
       });
@@ -4330,22 +4340,26 @@ function SkillRows({
 function draw(ctx: CanvasRenderingContext2D, state: WorldSave, ambient: AmbientWorld, playerAmbient: AmbientPlayerState) {
   const pos = state.position,
     map = getOriginalMap(pos.mapId),
+    visualMap = loadVisualMap(pos.mapId),
     viewport = ambientViewportBounds(map.width, map.height, pos.x, pos.y),
     sx = viewport.left,
     sy = viewport.top,
     ambientBubbles: Array<{ x: number; y: number; text: string; kind: AmbientBubbleKind | "player"; shownAt: number }> = [];
   ctx.fillStyle = "#0c1410";
   ctx.fillRect(0, 0, W, H);
-  for (let y = 0; y < 15; y++)
-    for (let x = 0; x < 20; x++) {
-      const mx = sx + x,
-        my = sy + y;
-      if (mx >= map.width || my >= map.height) continue;
-      drawAuthoredTerrain(ctx, map, mx, my, x * T, y * T);
-    }
-  drawFactionLandmarks(ctx, map, sx, sy);
-  drawPinganTownPlan(ctx, map, sx, sy);
-  drawMapStructures(ctx, map, state, sx, sy);
+  if (visualMap) drawVisualMapBase(ctx, visualMap, sx, sy);
+  else {
+    for (let y = 0; y < 15; y++)
+      for (let x = 0; x < 20; x++) {
+        const mx = sx + x,
+          my = sy + y;
+        if (mx >= map.width || my >= map.height) continue;
+        drawAuthoredTerrain(ctx, map, mx, my, x * T, y * T);
+      }
+    drawFactionLandmarks(ctx, map, sx, sy);
+    drawPinganTownPlan(ctx, map, sx, sy);
+    drawMapStructures(ctx, map, state, sx, sy);
+  }
   for (const e of map.events) {
     const visual = eventVisual(e, state),
       roaming = visual.kind === "npc" ? ambient.npcs.find((npc) => npc.eventId === e.id) : undefined,
@@ -4434,6 +4448,7 @@ function draw(ctx: CanvasRenderingContext2D, state: WorldSave, ambient: AmbientW
     { sheet: 0, row: state.actor.gender ? 1 : 0 },
     pos.direction,
   );
+  if (visualMap) drawVisualLayer(ctx, visualMap.layers.foreground, sx, sy);
   if (playerAmbient.bubble) ambientBubbles.push({
     x: (pos.x - sx) * T + 16,
     y: (pos.y - sy) * T - 13,
@@ -4703,6 +4718,40 @@ function drawFurnitureCell(
   );
 }
 
+function drawVisualLayer(
+  ctx: CanvasRenderingContext2D,
+  cells: readonly VisualCell[],
+  sx: number,
+  sy: number,
+) {
+  for (const item of cells) {
+    if (item.x < sx || item.y < sy || item.x >= sx + 20 || item.y >= sy + 15) continue;
+    const x = (item.x - sx) * T,
+      y = (item.y - sy) * T;
+    if (item.atlas === "furniture") drawFurnitureCell(ctx, item.sprite, x, y);
+    else drawEnvironmentCell(ctx, item.sprite, x, y);
+  }
+}
+
+function drawVisualMapBase(
+  ctx: CanvasRenderingContext2D,
+  visual: VisualMap,
+  sx: number,
+  sy: number,
+) {
+  for (let y = 0; y < 15; y += 1) {
+    for (let x = 0; x < 20; x += 1) {
+      const mx = sx + x,
+        my = sy + y;
+      if (mx >= visual.width || my >= visual.height) continue;
+      drawEnvironmentCell(ctx, visual.baseSprite, x * T, y * T);
+    }
+  }
+  drawVisualLayer(ctx, visual.layers["ground-detail"], sx, sy);
+  drawVisualLayer(ctx, visual.layers["structures-low"], sx, sy);
+  drawVisualLayer(ctx, visual.layers["props-low"], sx, sy);
+}
+
 function drawEnvironmentCell(
   ctx: CanvasRenderingContext2D,
   source: number,
@@ -4931,17 +4980,17 @@ function drawObjectMarker(
   name: string,
   near: boolean,
 ) {
-  const pulse = Math.sin(Date.now() / 220) > 0,
-    accent = "#70e0d0";
-  ctx.fillStyle = "rgba(7,22,20,.85)";
-  ctx.fillRect(x - 10, y - 8, 20, 15);
-  ctx.strokeStyle = near ? accent : "rgba(112,224,208,.72)";
-  ctx.lineWidth = near ? 3 : 2;
-  ctx.strokeRect(x - 11, y - 9, 22, 17);
-  ctx.fillStyle = accent;
-  ctx.fillRect(x - 3, y - 5, 6, 6);
-  ctx.fillRect(x - 1, y - 9 - (pulse ? 2 : 0), 2, 2);
-  drawMarkerLabel(ctx, x, y - 18, name, accent, near);
+  const accent = "#70e0d0";
+  ctx.strokeStyle = near ? accent : "rgba(112,224,208,.34)";
+  ctx.lineWidth = near ? 2 : 1;
+  ctx.beginPath();
+  ctx.ellipse(x, y + 7, near ? 11 : 7, near ? 4 : 2, 0, 0, Math.PI * 2);
+  ctx.stroke();
+  if (near) {
+    ctx.fillStyle = accent;
+    ctx.fillRect(x - 2, y - 13, 4, 4);
+  }
+  drawMarkerLabel(ctx, x, y - 17, name, accent, near);
 }
 function drawCorpseMarker(
   ctx: CanvasRenderingContext2D,
@@ -4969,23 +5018,18 @@ function drawDoorMarker(
   name: string,
   near: boolean,
 ) {
-  const pulse = Math.sin(Date.now() / 250) > 0,
-    accent = "#8ee28f";
-  ctx.fillStyle = "rgba(6,20,12,.84)";
-  ctx.fillRect(x - 11, y - 14, 22, 23);
-  ctx.strokeStyle = near ? accent : "rgba(142,226,143,.72)";
-  ctx.lineWidth = near ? 3 : 2;
-  ctx.strokeRect(x - 12, y - 15, 24, 25);
-  ctx.fillStyle = accent;
-  ctx.fillRect(x - 7, y - 10, 14, 3);
-  ctx.fillRect(x - 7, y - 7, 3, 12);
-  ctx.fillRect(x + 4, y - 7, 3, 12);
+  const accent = "#8ee28f";
+  ctx.strokeStyle = near ? accent : "rgba(142,226,143,.28)";
+  ctx.lineWidth = near ? 2 : 1;
   ctx.beginPath();
-  ctx.moveTo(x - 4, y - 20 - (pulse ? 1 : 0));
-  ctx.lineTo(x + 4, y - 20 - (pulse ? 1 : 0));
-  ctx.lineTo(x, y - 16 - (pulse ? 1 : 0));
-  ctx.fill();
-  drawMarkerLabel(ctx, x, y - 27, name, accent, near, true);
+  ctx.moveTo(x - (near ? 10 : 6), y + 8);
+  ctx.lineTo(x + (near ? 10 : 6), y + 8);
+  ctx.stroke();
+  if (near) {
+    ctx.fillStyle = "rgba(142,226,143,.18)";
+    ctx.fillRect(x - 12, y - 9, 24, 18);
+  }
+  drawMarkerLabel(ctx, x, y - 12, name, accent, near);
 }
 function drawMarkerLabel(
   ctx: CanvasRenderingContext2D,

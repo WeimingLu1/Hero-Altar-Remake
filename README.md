@@ -132,6 +132,21 @@ http://127.0.0.1:1234/v1/chat/completions
 
 本地模型不是硬编码依赖。所有模型请求集中在`app/game-core/lm-studio.ts`和`app/api/lm-studio/route.ts`。如果希望接入OpenAI、Anthropic、Gemini、Ollama或其他LLM API，可以替换服务端代理与传输层，同时保留现有提示词、队列、会话生命周期和游戏状态隔离规则。接入云端API时请自行处理密钥、费用、限流、隐私和内容政策，切勿把API密钥提交到仓库。
 
+## 项目结构
+
+仓库根目录就是可运行、可部署的 Web 主工程，不再需要进入额外的 `web/` 子目录：
+
+- `app/`：页面、游戏运行时与界面。
+- `game-data/`：供浏览器直接使用的原作结构化数据。
+- `public/`：Web 静态资源。
+- `tests/`：逻辑、视觉规则与服务端渲染测试。
+- `scripts/`：数据提取和项目维护脚本。
+- `map-src/visual/`：69 张 Tiled 地图源文件和锁定的原作事件锚点。
+- `docs/`：架构、设计、审计与路线图文档。
+- `reference/rpgmaker/`：只用于规则核对和重新提取数据的 RPG Maker XP 原始参考工程。
+
+依赖、构建输出、本地部署状态、环境变量和迁移备份均由根目录 `.gitignore` 管理。
+
 ## 运行项目
 
 要求Node.js `>=22.13.0`。
@@ -153,6 +168,8 @@ npm run lint     # ESLint检查
 npm test         # 正式构建 + 全量逻辑/视觉/SSR测试
 npm run build    # 生产构建
 npm run start    # 启动生产构建
+npm run maps:import    # 导入 Tiled 地图到浏览器运行时
+npm run maps:validate  # 校验 69 张地图和 400 个锚点
 ```
 
 没有运行LM Studio时，原作地图、任务、战斗、成长和存档仍可使用；依赖LLM的即时演绎会静默取消，不会使用预设文本冒充模型输出。
