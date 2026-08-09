@@ -109,6 +109,22 @@ test("player ambient bubble is always on the highest layer", () => {
   assert.ok(source.indexOf("ambientBubbles.push") < source.indexOf("ambientBubbles.sort"));
 });
 
+test("历史对话不能在主角离开后复活并继续跟随主角", () => {
+  assert.match(source, /const live = members\.some/);
+  assert.match(source, /!live && !\(includesPlayer && player\.bubble\)/);
+  assert.match(source, /playerInvolved: includesPlayer/);
+  assert.doesNotMatch(
+    source,
+    /playerInvolved: includesPlayer \|\| history\.some/,
+  );
+});
+
+test("战报生成期间仍可打开战斗药品且中止战报不会永久锁定", () => {
+  assert.match(source, /if \(k === "i"\) setBattleItem\(0\)/);
+  assert.match(source, /text: item\.text \|\| item\.facts\.join\("\\n"\),\s*loading: false/);
+  assert.match(source, /openItem} disabled=\{Boolean\(battle\.finished\)\}/);
+});
+
 test("ambient conversations open on a self-raised matter and demand depth", () => {
   assert.match(source, /isOpening = sessionContext\.length === 0/);
   assert.match(source, /自然地提起一件具体的/);

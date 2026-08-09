@@ -59,6 +59,7 @@ import {
 } from "../game-core/npc-system";
 import {
   battleRound,
+  battleItemRound,
   beginOriginalBattle,
   endSpar,
   attemptEscape,
@@ -73,6 +74,7 @@ import {
   maxWater,
   activateEntry,
   activateBattleEntry,
+  battleConsumableEntries,
   type BagEntry,
 } from "../game-core/inventory-system";
 import {
@@ -1082,7 +1084,14 @@ export default function OriginalWorld() {
         return { ...chat, messages, loading: false };
       });
     } catch (error) {
-      if (controller.signal.aborted) return;
+      if (controller.signal.aborted) {
+        updateEntry((item) => ({
+          ...item,
+          text: item.text || item.facts.join("\n"),
+          loading: false,
+        }));
+        return;
+      }
       const detail = error instanceof Error ? error.message : "连接失败";
       const corsHint = detail === "Failed to fetch"
         ? "请在 LM Studio 的 Developer → Server Settings 打开 Enable CORS，然后重启服务。"
@@ -1409,14 +1418,32 @@ export default function OriginalWorld() {
   }, [battle, sync]);
   const consumeBattleItem = useCallback(
     (entry?: BagEntry) => {
-      if (!entry) return;
+      if (!entry || !battle) return;
       const next = structuredClone(stateRef.current),
         result = activateBattleEntry(next.actor, entry);
+      if (!result.ok) {
+        setNotice(result.text);
+        return;
+      }
+      const playerHpBefore = stateRef.current.actor.hp,
+        enemyHpBefore = battle.enemyHp,
+        logLength = battle.log.length,
+        round = battleItemRound(battle, next.actor, result.text);
       sync(next);
+      setBattle(round);
       setNotice(result.text);
-      if (result.ok) setBattleItem(null);
+      setBattleItem(null);
+      void narrateBattleRound({
+        battle: round,
+        actor: next.actor,
+        mapName: getOriginalMap(next.position.mapId).name,
+        facts: round.log.slice(logLength),
+        playerHpBefore,
+        enemyHpBefore,
+        playerTechnique: entry.name,
+      });
     },
-    [sync],
+    [battle, narrateBattleRound, sync],
   );
   const activateBagEntry = useCallback(
     (entry?: BagEntry) => {
@@ -2047,20 +2074,11 @@ export default function OriginalWorld() {
           return;
         }
         if (battle) {
-          if (battleNarrativesRef.current.some((item) => item.loading)) return;
           const specials = battleSpecials(
             stateRef.current.actor,
             battle.cooldowns,
           );
-          const combatItems = bagEntries(stateRef.current.actor).filter(
-            (entry) => {
-              if (entry.kind !== 1) return false;
-              const item = originalTables.items[entry.id] || {};
-              return (
-                !item.is_book && [0, 1].includes(Number(item.occasion || 0))
-              );
-            },
-          );
+          const combatItems = battleConsumableEntries(stateRef.current.actor);
           if (battleOutcome !== null) {
             if (["arrowup", "arrowdown", "w", "s"].includes(k))
               setBattleOutcome((battleOutcome + 1) % 2);
@@ -2078,6 +2096,10 @@ export default function OriginalWorld() {
               setBattleItem((battleItem + 1) % Math.max(1, combatItems.length));
             else if (confirm) consumeBattleItem(combatItems[battleItem]);
             else if (cancel || k === "i") setBattleItem(null);
+            return;
+          }
+          if (battleNarrativesRef.current.some((item) => item.loading)) {
+            if (k === "i") setBattleItem(0);
             return;
           }
           if (specialMenu !== null) {
@@ -2836,11 +2858,7 @@ ${mode}输出必须符合古代武侠世界，不推动正式任务，不改变�
   };
   const map = getOriginalMap(state.position.mapId),
     profile = actorStatusProfile(state.actor);
-  const battleConsumables = bagEntries(state.actor).filter((entry) => {
-    if (entry.kind !== 1) return false;
-    const item = originalTables.items[entry.id] || {};
-    return !item.is_book && [0, 1].includes(Number(item.occasion || 0));
-  });
+  const battleConsumables = battleConsumableEntries(state.actor);
   const cultivationInfo = [
     cultivationAvailability(state.actor, "meditate"),
     cultivationAvailability(state.actor, "magic"),
@@ -3745,7 +3763,7 @@ function BattleView({
         <button onClick={openSpecial} disabled={Boolean(battle.finished) || generating}>
           绝招 <kbd>Q</kbd>
         </button>
-        <button onClick={openItem} disabled={Boolean(battle.finished) || generating}>
+        <button onClick={openItem} disabled={Boolean(battle.finished)}>
           物品 <kbd>I</kbd>
         </button>
         <button
@@ -4377,12 +4395,18 @@ function collectConversationCards(ambient: AmbientWorld, player: AmbientPlayerSt
       history = [...(contexts[0] || []), ...active, ...(includesPlayer && player.bubble ? [player.bubble] : [])]
         .filter((line, index, all) => line && all.indexOf(line) === index)
         .slice(-3);
-    if (!history.length) return [];
+    const live = members.some((member) =>
+      Boolean(member.bubble || member.queuedBubble || member.generationPending),
+    );
+    // conversationContext is prompt history, not visible UI state. Once the
+    // live turn has ended (or movement has detached the player), history must
+    // not resurrect a card or keep it anchored above the protagonist.
+    if (!history.length || (!live && !(includesPlayer && player.bubble))) return [];
     return [{
       x: members.reduce((sum, member) => sum + (member.x - sx) * T + 16, 0) / members.length,
       y: Math.min(...members.map((member) => (member.y - sy) * T - 18)),
       lines: history,
-      playerInvolved: includesPlayer || history.some((line) => line.includes(`${playerName} to `) || line.includes(`to ${playerName}：`)),
+      playerInvolved: includesPlayer,
       playerName,
     }];
   });

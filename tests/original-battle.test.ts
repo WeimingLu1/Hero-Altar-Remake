@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import {
   attemptEscape,
+  battleItemRound,
   battleRound,
   beginOriginalBattle,
   burningDamage,
@@ -85,6 +86,19 @@ test("original sparring round is deterministic and changes combat state", () => 
   assert.equal(a.hp, b.hp);
   assert.equal(one.turn, 1);
   assert.ok(one.log.length >= 3);
+});
+
+test("战斗中使用药品会消耗回合并触发敌方行动", () => {
+  const a = actor();
+  a.hp = a.maxHp = 100000;
+  const round = battleItemRound(
+    beginOriginalBattle(1, 42),
+    a,
+    "使用了金创药：气血+15。",
+  );
+  assert.equal(round.turn, 1);
+  assert.equal(round.log.includes("使用了金创药：气血+15。"), true);
+  assert.ok(round.log.length >= 2);
 });
 
 test("battle keeps the full factual history for novelized narration", () => {

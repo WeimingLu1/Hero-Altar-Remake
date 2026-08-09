@@ -596,6 +596,30 @@ export function attemptEscape(source: OriginalBattle, actor: SceneActorState) {
   enemyTurn(battle, actor, record, random, blank);
   return { escaped: false, battle };
 }
+export function battleItemRound(
+  source: OriginalBattle,
+  actor: SceneActorState,
+  itemText: string,
+) {
+  const battle = structuredClone(source);
+  if (battle.finished) return battle;
+  tick(battle, actor);
+  battle.turn++;
+  battle.log.push(itemText);
+  const blank: Move = {
+      text: "",
+      hitType: 0,
+      ap: 0,
+      dp: 0,
+      pp: 0,
+      damage: 0,
+      force: 0,
+    },
+    record = battleEnemyRecord(battle),
+    random = lcg(battle);
+  enemyTurn(battle, actor, record, random, blank);
+  return battle;
+}
 export function battleRound(source: OriginalBattle, actor: SceneActorState) {
   const battle = structuredClone(source);
   if (battle.finished) return battle;

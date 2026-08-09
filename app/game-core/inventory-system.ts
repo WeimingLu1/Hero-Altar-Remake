@@ -29,6 +29,7 @@ const add = (base: number, value: unknown, percentBase: number) => {
     base + (mode === 1 ? Math.floor((percentBase * amount) / 100) : amount)
   );
 };
+const MAX_RESOURCE = 65535;
 export const maxFood = (actor: SceneActorState) => (actor.baseStr + 5) * 15;
 export const maxWater = (actor: SceneActorState) => (actor.baseStr + 4) * 15;
 export function fullHp(actor: SceneActorState) {
@@ -190,6 +191,13 @@ export function activateEntry(actor: SceneActorState, entry: BagEntry) {
 export function activateBattleEntry(actor: SceneActorState, entry: BagEntry) {
   return activateItemEntry(actor, entry, true);
 }
+export function battleConsumableEntries(actor: SceneActorState) {
+  return bagEntries(actor).filter((entry) => {
+    if (entry.kind !== 1 || [10, 30].includes(entry.id)) return false;
+    const item = originalTables.items[entry.id] || {};
+    return !item.is_book && [0, 1].includes(Number(item.occasion || 0));
+  });
+}
 function activateItemEntry(
   actor: SceneActorState,
   entry: BagEntry,
@@ -228,9 +236,12 @@ function activateItemEntry(
     actor.maxHp,
     actor.fp,
     actor.maxFp,
+    actor.mp,
+    actor.maxMp,
     actor.food,
     actor.water,
-  ].join();
+  ];
+  const healthy = fullHp(actor);
   actor.food = Math.min(
     maxFood(actor),
     add(actor.food, item.add_food, maxFood(actor)),
@@ -239,28 +250,63 @@ function activateItemEntry(
     maxWater(actor),
     add(actor.water, item.add_water, maxWater(actor)),
   );
-  actor.hp = Math.min(actor.maxHp, add(actor.hp, item.add_hp, fullHp(actor)));
   actor.maxHp = Math.min(
-    fullHp(actor),
-    add(actor.maxHp, item.add_mhp, fullHp(actor)),
+    healthy,
+    add(actor.maxHp, item.add_mhp, healthy),
   );
-  actor.fp = Math.min(actor.maxFp * 2, add(actor.fp, item.add_fp, actor.maxFp));
-  actor.maxFp = add(actor.maxFp, item.add_mfp, actor.maxFp);
+  const battleHealingRate = entry.id === 8 ? 15 : entry.id === 9 ? 30 : 0;
+  actor.hp = Math.min(
+    actor.maxHp,
+    add(actor.hp, item.add_hp, healthy) +
+      Math.floor((healthy * battleHealingRate) / 100),
+  );
+  actor.maxFp = Math.min(
+    MAX_RESOURCE,
+    add(actor.maxFp, item.add_mfp, actor.maxFp),
+  );
+  actor.fp = Math.min(
+    Math.min(MAX_RESOURCE, actor.maxFp * 2),
+    add(actor.fp, item.add_fp, actor.maxFp),
+  );
+  actor.maxMp = Math.min(
+    MAX_RESOURCE,
+    add(actor.maxMp, item.add_mmp, actor.maxMp),
+  );
+  actor.mp = Math.min(
+    Math.min(MAX_RESOURCE, actor.maxMp * 2),
+    add(actor.mp, item.add_mp, actor.maxMp),
+  );
+  const after = [
+    actor.hp,
+    actor.maxHp,
+    actor.fp,
+    actor.maxFp,
+    actor.mp,
+    actor.maxMp,
+    actor.food,
+    actor.water,
+  ];
   if (
-    before ===
-    [
-      actor.hp,
-      actor.maxHp,
-      actor.fp,
-      actor.maxFp,
-      actor.food,
-      actor.water,
-    ].join()
+    before.join() === after.join()
   )
-    return { ok: false, text: "你现在不需要使用此物。" };
+    return { ok: false, text: "此物已无法继续提升，当前状态已达上限。" };
   if (item.consumable !== false) {
     actor.inventory[entry.key]--;
     if (actor.inventory[entry.key] <= 0) delete actor.inventory[entry.key];
   }
-  return { ok: true, text: `使用了${entry.name}。` };
+  const labels = [
+    ["气血", before[0], after[0]],
+    ["伤势上限", before[1], after[1]],
+    ["内力", before[2], after[2]],
+    ["内力上限", before[3], after[3]],
+    ["法力", before[4], after[4]],
+    ["法力上限", before[5], after[5]],
+  ] as const;
+  const changes = labels.flatMap(([label, oldValue, newValue]) =>
+    newValue > oldValue ? [`${label}+${newValue - oldValue}`] : [],
+  );
+  return {
+    ok: true,
+    text: `使用了${entry.name}${changes.length ? `：${changes.join("，")}。` : "。"}`,
+  };
 }

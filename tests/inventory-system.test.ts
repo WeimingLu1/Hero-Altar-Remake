@@ -6,6 +6,7 @@ import {
   maxFood,
   activateBattleEntry,
   activateEntry,
+  battleConsumableEntries,
 } from "../app/game-core/inventory-system";
 import type { SceneActorState } from "../app/game-core/scene-event";
 const actor = (): SceneActorState => ({
@@ -53,9 +54,57 @@ test("battle item activation applies original consumable data", () => {
   const medicine = bagEntries(a)[0];
   const result = activateBattleEntry(a, medicine);
   assert.equal(result.ok, true);
-  assert.equal(a.hp, 30);
+  assert.equal(a.hp, 45);
   assert.equal(a.maxHp, 75);
+  assert.match(result.text, /气血\+15/);
+  assert.match(result.text, /伤势上限\+25/);
   assert.equal(a.inventory["1:8"], undefined);
+});
+test("生肌膏按完整气血比例同时恢复当前气血和伤势上限", () => {
+  const a = actor();
+  a.inventory = { "1:9": 1 };
+  a.hp = 20;
+  a.maxHp = 40;
+  const result = activateBattleEntry(a, bagEntries(a)[0]);
+  assert.equal(result.ok, true);
+  assert.equal(a.hp, 50);
+  assert.equal(a.maxHp, 90);
+  assert.equal(a.inventory["1:9"], undefined);
+});
+test("只要当前气血未满，战斗中始终可以使用回血药", () => {
+  const a = actor();
+  a.inventory = { "1:8": 2 };
+  a.hp = 99;
+  a.maxHp = 100;
+  const result = activateBattleEntry(a, battleConsumableEntries(a)[0]);
+  assert.equal(result.ok, true);
+  assert.equal(a.hp, 100);
+  assert.equal(a.inventory["1:8"], 1);
+});
+test("战斗物品画面和键盘共用列表且排除永久丹药", () => {
+  const a = actor();
+  a.inventory = { "1:10": 1, "1:30": 1, "1:9": 1, "1:8": 1 };
+  assert.deepEqual(
+    battleConsumableEntries(a).map((entry) => entry.id),
+    [9, 8],
+  );
+});
+test("永久丹药同时提升内力法力并严格钳制在六万五千五百三十五", () => {
+  const a = actor();
+  a.inventory = { "1:10": 2 };
+  a.fp = a.maxFp = 65534;
+  a.mp = a.maxMp = 65534;
+  const first = activateEntry(a, bagEntries(a)[0]);
+  assert.equal(first.ok, true);
+  assert.equal(a.fp, 65535);
+  assert.equal(a.maxFp, 65535);
+  assert.equal(a.mp, 65535);
+  assert.equal(a.maxMp, 65535);
+  assert.equal(a.inventory["1:10"], 1);
+  const second = activateEntry(a, bagEntries(a)[0]);
+  assert.equal(second.ok, false);
+  assert.match(second.text, /已达上限/);
+  assert.equal(a.inventory["1:10"], 1);
 });
 test("food follows original item effect and maximum", () => {
   const a = actor(),
