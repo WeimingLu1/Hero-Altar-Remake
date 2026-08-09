@@ -2,14 +2,14 @@
   "type": "tileset",
   "version": "1.10",
   "tiledversion": "1.12.2",
-  "name": "lpc-open-source-furniture",
-  "tilewidth": 32,
-  "tileheight": 32,
-  "tilecount": 256,
-  "columns": 16,
-  "margin": 0,
+  "name": "wuxia-furniture",
+  "tilewidth": 156,
+  "tileheight": 156,
+  "tilecount": 64,
+  "columns": 8,
+  "margin": 3,
   "spacing": 0,
-  "image": "../../../public/game-assets/open-source/lpc-house-interior/interior.png",
-  "imagewidth": 512,
-  "imageheight": 512
+  "image": "../../../public/game-assets/generated/wuxia-indoor-furniture-v1.png",
+  "imagewidth": 1254,
+  "imageheight": 1254
 }

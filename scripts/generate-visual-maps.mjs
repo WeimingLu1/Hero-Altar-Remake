@@ -235,14 +235,7 @@ function buildVisualMap(map) {
     for (const [x, y] of [[6, 5], [24, 5], [5, 13], [25, 13], [7, 22], [23, 22]]) foreground.set(key(x, y), cell(x, y, 53));
   }
 
-  const baseSprite =
-    theme === "indoor" ? 46 :
-    factionIds.has(map.id) ? 15 :
-    theme === "water" ? 24 :
-    theme === "snow" ? 16 :
-    theme === "altar" ? 15 :
-    theme === "mystic" ? 7 :
-    theme === "mountain" ? 7 : 0;
+  const baseSprite = theme === "indoor" ? (/豆腐店|药店/.test(map.name) ? 47 : 46) : theme === "water" ? 24 : theme === "snow" ? 16 : theme === "altar" ? 15 : theme === "mountain" ? 7 : 0;
   const defaultSpawn = { x: Math.min(map.width - 1, Math.max(0, 9)), y: Math.min(map.height - 1, Math.max(0, 7)), direction: 2 };
   return {
     originalMapId: map.id, name: map.name, version: 1, width: map.width, height: map.height,
