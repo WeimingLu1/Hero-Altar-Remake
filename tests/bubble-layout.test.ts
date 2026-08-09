@@ -55,7 +55,7 @@ test("动作气泡避开多人对话卡", () => {
   assert.ok(card.height >= 70, "卡片高度应容纳全部行");
 });
 
-test("对话卡保留完整换行且主角会话固定置顶", () => {
+test("对话卡保留完整换行且从主角头顶向上展开", () => {
   const ctx = mockCtx();
   const card = layoutConversationCard(ctx, {
     x: 320,
@@ -64,7 +64,7 @@ test("对话卡保留完整换行且主角会话固定置顶", () => {
     playerName: "主角",
     lines: [`主角 to 顾炎武：这是一段${"很长".repeat(60)}的完整对话内容`],
   });
-  assert.equal(card.top, 5);
+  assert.equal(card.top + card.height, 400, "卡片底边应保持在主角头顶锚点");
   assert.ok(card.entries[0].lines.length > 2, "长台词不应只保留前两行");
   assert.match(card.entries[0].lines.join(""), /完整对话内容$/);
 });

@@ -196,7 +196,7 @@ export function layoutConversationCard(ctx: CanvasRenderingContext2D, card: Conv
     }),
     height = 14 + wrapped.reduce((sum, entry) => sum + 13 + entry.lines.length * 12 + 3, 0),
     left = Math.max(5, Math.min(W - width - 5, card.x - width / 2)),
-    top = card.playerInvolved ? 5 : Math.max(5, Math.min(H - height - 5, card.y - height));
+    top = Math.max(5, Math.min(H - height - 5, card.y - height));
   return { ...card, left, top, width, height, entries: wrapped };
 }
 

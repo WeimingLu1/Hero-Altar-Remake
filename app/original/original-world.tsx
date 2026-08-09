@@ -4495,7 +4495,13 @@ function draw(ctx: CanvasRenderingContext2D, state: WorldSave, ambient: AmbientW
     { sheet: 0, row: state.actor.gender ? 1 : 0 },
     pos.direction,
   );
-  const conversationCards = collectConversationCards(ambient, playerAmbient, sx, sy, state.actor.name).map((card) => layoutConversationCard(ctx, card)),
+  const conversationCards = collectConversationCards(ambient, playerAmbient, sx, sy, state.actor.name)
+      .map((card) => card.playerInvolved ? {
+        ...card,
+        x: (pos.x - sx) * T + 16,
+        y: (pos.y - sy) * T - 13,
+      } : card)
+      .map((card) => layoutConversationCard(ctx, card)),
     playerGrouped = conversationCards.length > 0 && playerAmbient.npcIds.length > 0;
   if (playerAmbient.bubble && !playerGrouped) ambientBubbles.push({
     x: (pos.x - sx) * T + 16,
