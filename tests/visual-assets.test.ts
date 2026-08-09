@@ -6,6 +6,10 @@ const source = readFileSync(
   new URL("../app/original/original-world.tsx", import.meta.url),
   "utf8",
 );
+const worldCss = readFileSync(
+  new URL("../app/original/world.css", import.meta.url),
+  "utf8",
+);
 const ambientSource = readFileSync(
   new URL("../app/game-core/ambient-npc.ts", import.meta.url),
   "utf8",
@@ -219,6 +223,15 @@ test("maps render a clean base before sparse transparent overlays", () => {
   assert.match(source, /时空的尽头.*"scifi"/);
   assert.match(source, /vegetationBorder/);
   assert.match(source, /besideRoad/);
+});
+
+test("world canvas renders characters props bubbles and text at high resolution", () => {
+  assert.match(source, /new ResizeObserver\(resizeCanvas\)/);
+  assert.match(source, /window\.devicePixelRatio/);
+  assert.match(source, /ctx\.setTransform\(width \/ W, 0, 0, height \/ H/);
+  assert.match(source, /ctx\.imageSmoothingEnabled = true/);
+  assert.match(source, /ctx\.imageSmoothingQuality = "high"/);
+  assert.doesNotMatch(worldCss, /image-rendering:\s*pixelated/);
 });
 
 test("indoor furnishing follows repeatable scene-specific patterns", () => {

@@ -2767,14 +2767,37 @@ ${mode}输出必须符合古代武侠世界，不推动正式任务，不改变�
     return () => window.clearInterval(id);
   }, [enrichAmbientNpc, enrichAmbientPlayer, screen, state.position.mapId]);
   useEffect(() => {
+    const target = canvas.current;
+    if (!target) return;
     let raf = 0;
+    const resizeCanvas = () => {
+      const bounds = target.getBoundingClientRect(),
+        ratio = Math.min(2.5, Math.max(1, window.devicePixelRatio || 1)),
+        width = Math.max(W, Math.round(bounds.width * ratio)),
+        height = Math.max(H, Math.round(bounds.height * ratio));
+      if (target.width !== width || target.height !== height) {
+        target.width = width;
+        target.height = height;
+      }
+      const ctx = target.getContext("2d");
+      if (!ctx) return;
+      ctx.setTransform(width / W, 0, 0, height / H, 0, 0);
+      ctx.imageSmoothingEnabled = true;
+      ctx.imageSmoothingQuality = "high";
+    };
+    resizeCanvas();
+    const observer = new ResizeObserver(resizeCanvas);
+    observer.observe(target);
     const frame = () => {
-      const ctx = canvas.current?.getContext("2d");
+      const ctx = target.getContext("2d");
       if (ctx) draw(ctx, stateRef.current, ambientWorld.current, ambientPlayer.current);
       raf = requestAnimationFrame(frame);
     };
     frame();
-    return () => cancelAnimationFrame(raf);
+    return () => {
+      observer.disconnect();
+      cancelAnimationFrame(raf);
+    };
   }, []);
   const exportJson = () => {
     save();
