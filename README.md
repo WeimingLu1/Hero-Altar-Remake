@@ -14,19 +14,53 @@
 
 ![失落的世界全景](docs/screenshots/lost-world.jpg)
 
+### 地域与门派地图
+
+| 冰火岛渡口 | 东海 |
+| --- | --- |
+| ![冰火岛渡口](docs/screenshots/ice-fire-island.jpg) | ![东海](docs/screenshots/east-sea.jpg) |
+
+| 红莲教 | 大雪山寨 |
+| --- | --- |
+| ![红莲教](docs/screenshots/red-lotus.jpg) | ![大雪山寨](docs/screenshots/faction.jpg) |
+
+| 茅山 | 长白山 |
+| --- | --- |
+| ![茅山](docs/screenshots/maoshan.jpg) | ![长白山](docs/screenshots/changbai.jpg) |
+
+### NPC 与环境会话
+
 | NPC 近身群聊 | 主角参与环境对话 |
 | --- | --- |
 | ![NPC 与主角参与的多人会话](docs/screenshots/npc-dialogue.jpg) | ![主角高亮对话](docs/screenshots/player-dialogue.jpg) |
+
+### 人物关系与成长
+
+![NPC 完整人物背景](docs/screenshots/npc-profile.jpg)
+
+| 拜师 | 请教功夫 |
+| --- | --- |
+| ![拜师李青照](docs/screenshots/apprenticeship.jpg) | ![向师父请教](docs/screenshots/teaching.jpg) |
+
+### 任务系统
+
+| 捕快发布任务 | 地图追捕目标 |
+| --- | --- |
+| ![捕快发布通缉任务](docs/screenshots/quest-dialogue.jpg) | ![平安镇东郊通缉犯](docs/screenshots/quest-target.jpg) |
+
+### 自由对话与战斗
 
 | 独立自由对话 | 多回合生死战 |
 | --- | --- |
 | ![自动推进的独立自由对话](docs/screenshots/free-dialogue.jpg) | ![完整战斗过程](docs/screenshots/battle.jpg) |
 
+### 人物状态与武功
+
 | 人物状态 | 完整功夫配置 |
 | --- | --- |
 | ![人物状态](docs/screenshots/status.jpg) | ![功夫与当前运用](docs/screenshots/kungfu.jpg) |
 
-完整图库还覆盖 NPC 人物背景、拜师、请教、任务发布与追捕，以及冰火岛、东海、红莲教、大雪山寨、茅山、长白山等地域：见 [360° 实机 Demo 图库](docs/SCREENSHOT_GALLERY.md)。
+以上 18 张高清截图已经全部直接展示在项目首页；带有更详细说明和分类介绍的版本见 [360° 实机 Demo 图库](docs/SCREENSHOT_GALLERY.md)。
 
 网页版本保留原作69张地图及转场关系；地图事件继续负责交易、任务、拜师、战斗和场景转移。玩家近身加入环境会话时，整组对话使用蓝色会话卡并从主角头顶向上展开；独立自由对话支持行动、语言和自动推进；战斗支持普通攻击、主动绝招、物品、逃跑与完整战况记录。
 
