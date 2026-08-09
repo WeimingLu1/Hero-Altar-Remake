@@ -896,7 +896,7 @@ export default function OriginalWorld() {
         if (tasks.visitId === id) {
           tasks.visitId = -1;
           sync(next);
-          setEventText(`${npcRecord(id).name}\n拜访已经完成，回村长处复命吧。`);
+          setEventText(`${npcDisplayName(id)}\n拜访已经完成，回村长处复命吧。`);
           setNpcMenu(null);
           return;
         }
@@ -905,7 +905,7 @@ export default function OriginalWorld() {
             Math.floor(Math.random() * Math.max(1, max)),
           );
           sync(next);
-          setEventText(`${npcRecord(id).name}\n${result.text}`);
+          setEventText(`${npcDisplayName(id)}\n${result.text}`);
           setNpcMenu(null);
           return;
         }
@@ -915,7 +915,7 @@ export default function OriginalWorld() {
               ? startStoneTask(next.actor, tasks)
               : finishStoneTask(next.actor, tasks);
           sync(next);
-          setEventText(`${npcRecord(id).name}\n${result.text}`);
+          setEventText(`${npcDisplayName(id)}\n${result.text}`);
           setNpcMenu(null);
           return;
         }
@@ -928,7 +928,7 @@ export default function OriginalWorld() {
             next.position,
           );
           sync(next);
-          setEventText(`${npcRecord(id).name}\n${result.text}`);
+          setEventText(`${npcDisplayName(id)}\n${result.text}`);
           setNpcMenu(null);
           return;
         }
@@ -936,7 +936,7 @@ export default function OriginalWorld() {
           const altar = startTanQuest(next.actor);
           if (altar.ok) {
             sync(next);
-            setEventText(`${npcRecord(id).name}\n${altar.text}`);
+            setEventText(`${npcDisplayName(id)}\n${altar.text}`);
             setNpcMenu(null);
             return;
           }
@@ -963,28 +963,28 @@ export default function OriginalWorld() {
                   .text;
           }
           sync(next);
-          setEventText(`${npcRecord(id).name}\n${text}`);
+          setEventText(`${npcDisplayName(id)}\n${text}`);
           setNpcMenu(null);
           return;
         }
         if (id === 31 && tasks.finishFlag) {
           const result = claimMainReward(next.actor, tasks, random);
           sync(next);
-          setEventText(`${npcRecord(id).name}\n${result.text}`);
+          setEventText(`${npcDisplayName(id)}\n${result.text}`);
           setNpcMenu(null);
           return;
         }
         const specialTalk = resolveSpecialNpcTalk(id, next.actor);
         if (specialTalk.handled) {
           sync(next);
-          setEventText(`${npcRecord(id).name}\n${specialTalk.text}`);
+          setEventText(`${npcDisplayName(id)}\n${specialTalk.text}`);
           setNpcMenu(null);
           return;
         }
         const hidden = completeHiddenQuest(next.actor, id);
         if (hidden.ok || hidden.text) {
           sync(next);
-          setEventText(`${npcRecord(id).name}\n${hidden.text}`);
+          setEventText(`${npcDisplayName(id)}\n${hidden.text}`);
           setNpcMenu(null);
           return;
         }
@@ -998,7 +998,7 @@ export default function OriginalWorld() {
           next.actor,
           id + next.position.mapId,
         );
-        setEventText(`${npcRecord(id).name}\n${r.lines.join("\n")}`);
+        setEventText(`${npcDisplayName(id)}\n${r.lines.join("\n")}`);
       } else if (option === "chat") {
         setNpcChat({
           id,
@@ -1023,11 +1023,11 @@ export default function OriginalWorld() {
       else if (option === "join") {
         const r = attemptJoin(id, next.actor);
         sync(next);
-        setEventText(`${npcRecord(id).name}\n${r.text}`);
+        setEventText(`${npcDisplayName(id)}\n${r.text}`);
       } else {
         const allowed = canStudyWithNpc(id, next.actor);
         if (allowed.ok) setStudy({ id, index: 0 });
-        else setEventText(`${npcRecord(id).name}\n${allowed.text}`);
+        else setEventText(`${npcDisplayName(id)}\n${allowed.text}`);
       }
       setNpcMenu(null);
     },
@@ -4517,6 +4517,9 @@ const sceneLabels: Record<number, string> = {
   15: "桃花源",
   16: "房间入口",
 };
+function npcDisplayName(id: number, fallback = "江湖人物") {
+  return String(npcRecord(id).name || fallback);
+}
 function eventVisual(event: MapEvent, state: WorldSave): EventVisual {
   const page = activePage(event),
     result = executeMapCommands(page.commands),

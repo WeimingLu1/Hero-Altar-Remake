@@ -33,6 +33,13 @@ test("NPC art selection uses original gender age role and description", () => {
   assert.match(source, /盗\|匪\|恶\|杀手/);
 });
 
+test("generic map characters never render an undefined speaker name", () => {
+  assert.match(source, /function npcDisplayName\(id: number, fallback = "江湖人物"\)/);
+  assert.match(source, /String\(npcRecord\(id\)\.name \|\| fallback\)/);
+  assert.doesNotMatch(source, /setEventText\(`\$\{npcRecord\(id\)\.name\}/);
+  assert.match(source, /setEventText\(`\$\{npcDisplayName\(id\)\}/);
+});
+
 test("environment art uses authored themes and entrance road networks", () => {
   assert.match(source, /function mapTheme/);
   assert.match(source, /function authoredRoads/);
