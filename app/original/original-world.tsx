@@ -3900,6 +3900,16 @@ function BattleView({
         <b>
           {battle.mode === "spar" ? "切磋" : "生死战"} · 第 {battle.turn + 1}{" "}
           回合
+          {battle.enemyId === 149 && !actor.swordBattle && (
+            <>
+              {" "}
+              · 铸剑挑战 第{" "}
+              {Math.min(actor.forgeChallengeStep || 0, 3) + 1}/4 轮 · 用{" "}
+              {["钢刀", "长剑", "钢杖", "长鞭"][
+                Math.min(actor.forgeChallengeStep || 0, 3)
+              ]}
+            </>
+          )}
         </b>
         <div className="fighter enemy">
           <CharacterPortrait
@@ -4089,7 +4099,7 @@ function GameMenu({
                     {entry.name}
                     {entry.equipped ? "〔装备中〕" : ""}
                   </b>
-                  <small>{entry.description}</small>
+                  <small className="item-desc">{entry.description}</small>
                   <em className="item-bonuses">{entry.bonuses}</em>
                 </span>
                 <em>×{entry.amount}</em>

@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import maps from "../game-data/maps.json";
 import {
+  activePage,
   canMoveBetween,
   friendlyEventName,
   getOriginalMap,
@@ -97,6 +98,17 @@ test("transfer and Scene_Event hooks retain exact arguments", () => {
     fade: 0,
   });
   assert.deepEqual(result.sceneEvent, { type: 13, id: 64, extra: 0 });
+});
+
+test("铸剑谷(67)有传回茅山(52)的出口，玩家不会被困住", () => {
+  const map = getOriginalMap(67);
+  const exit = map.events.find(
+    (event) =>
+      event.x === 9 &&
+      event.y === 12 &&
+      executeMapCommands(activePage(event).commands).transfer?.mapId === 52,
+  );
+  assert.ok(exit, "铸剑谷应存在传回茅山的出口事件");
 });
 
 test("parseSceneGate 解析被物品门槛锁住的坛入口，与条件是否满足无关", () => {

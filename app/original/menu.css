@@ -108,6 +108,15 @@
   text-overflow: ellipsis;
   max-width: 410px;
 }
+/* 物品描述自动换行并可滚动查看全文 */
+.bag-list .item-desc {
+  white-space: normal;
+  overflow-y: auto;
+  max-height: 42px;
+  max-width: 410px;
+  line-height: 1.35;
+  text-overflow: clip;
+}
 .bag-list .item-slot {
   width: max-content;
   color: #c7a858;
