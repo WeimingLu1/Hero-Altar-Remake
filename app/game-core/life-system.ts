@@ -2,6 +2,28 @@ import { originalSystem } from "./original-data";
 import type { SceneActorState } from "./scene-event";
 
 export const swordTypes = ["剑", "刀", "杖", "鞭"];
+// 自制武器的词缀描述：攻击(sword1)、中缀-闪避/命中(sword2)、后缀-四维(sword3)。
+// 中缀/后缀的类型与数值由重铸时福缘(luck)与经验动态生成。
+export function customSwordBonus(actor: SceneActorState): string {
+  const parts: string[] = [];
+  if (actor.sword1) parts.push(`攻击+${actor.sword1}`);
+  const middleType = Math.floor((actor.sword2 || 0) / 100),
+    middleValue = (actor.sword2 || 0) % 100;
+  if (middleValue)
+    parts.push(
+      middleType === 3
+        ? `闪避+${middleValue}`
+        : middleType === 4
+          ? `命中+${middleValue}`
+          : `中缀+${middleValue}`,
+    );
+  const suffixType = Math.floor((actor.sword3 || 0) / 100),
+    suffixValue = (actor.sword3 || 0) % 100,
+    suffixNames = ["", "膂力", "敏捷", "悟性", "根骨"];
+  if (suffixValue)
+    parts.push(`${suffixNames[suffixType] || "后缀"}+${suffixValue}`);
+  return parts.length ? parts.join(" · ") : "无常驻属性";
+}
 export const furnitureNames = (originalSystem.jiaju_menu as string[]) || [
   "小凳",
   "小桌",
@@ -62,7 +84,10 @@ export function reforgeSword(
     if (n >= 0) actor.sword3 = Math.floor(n / 20) * 5 + (random(5) + 1) * 100;
   }
   actor.swordTimes = (actor.swordTimes || 0) + 1;
-  return { ok: true, text: `重铸完成，攻击增加 ${actor.sword1}。` };
+  return {
+    ok: true,
+    text: `重铸完成！${customSwordBonus(actor)}（福缘 ${actor.luck} 影响中缀与后缀品质）。`,
+  };
 }
 
 export function upgradeRoom(actor: SceneActorState) {

@@ -1,6 +1,7 @@
 import { originalTables, type OriginalRecord } from "./original-data";
 import type { SceneActorState } from "./scene-event";
 import { altarEntranceHint } from "./altar-map";
+import { customSwordBonus } from "./life-system";
 
 export type BagEntry = {
   key: string;
@@ -71,7 +72,10 @@ export function bagEntries(actor: SceneActorState): BagEntry[] {
               : false,
         category: entryCategory(kind, record),
         slot: entrySlot(kind, record),
-        bonuses: entryBonuses(record),
+        bonuses:
+          kind === 2 && id === 31 && actor.swordName
+            ? customSwordBonus(actor)
+            : entryBonuses(record),
       },
     ];
   });

@@ -361,6 +361,16 @@
   margin-top: auto;
   color: #93a096;
 }
+.life-hint {
+  max-width: 300px;
+  margin: 6px 0 0;
+  padding: 7px 9px;
+  color: #d9c186;
+  border-left: 3px solid #b39557;
+  background: #b3955714;
+  font-size: 11px;
+  line-height: 1.5;
+}
 .arcade-score {
   font: 13px monospace;
   color: #d7bd72;

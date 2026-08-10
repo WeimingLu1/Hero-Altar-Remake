@@ -4,6 +4,7 @@ import type { SceneActorState } from "../app/game-core/scene-event";
 import {
   buyFurniture,
   createSword,
+  customSwordBonus,
   reforgeSword,
   upgradeRoom,
 } from "../app/game-core/life-system";
@@ -77,6 +78,27 @@ test("自制武器31号槽将前中后缀数值计入人物属性", () => {
   assert.equal(equipmentBonus(a, "add_atk"), 45);
   assert.equal(equipmentBonus(a, "add_eva"), 9);
   assert.equal(equipmentBonus(a, "add_agi"), 15);
+});
+
+test("自制武器词缀说明按攻击、中缀与后缀生成", () => {
+  const a = actor();
+  a.sword1 = 45;
+  a.sword2 = 309; // 中缀 type3=闪避 +9
+  a.sword3 = 215; // 后缀 type2=敏捷 +15
+  const text = customSwordBonus(a);
+  assert.match(text, /攻击\+45/);
+  assert.match(text, /闪避\+9/);
+  assert.match(text, /敏捷\+15/);
+  assert.equal(customSwordBonus(actor()), "无常驻属性");
+});
+
+test("重铸结果说明词缀并提示福缘影响", () => {
+  const a = actor();
+  createSword(a, 0, "秋水");
+  const result = reforgeSword(a, () => 0);
+  assert.equal(result.ok, true);
+  assert.match(result.text, /重铸完成/);
+  assert.match(result.text, /福缘 20/);
 });
 
 test("房屋升级固定二百万且一级房仅容纳一件家具", () => {

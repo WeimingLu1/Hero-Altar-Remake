@@ -123,6 +123,7 @@ import {
   buyFurniture,
   clearFurniture,
   createSword,
+  customSwordBonus,
   furnitureNames,
   reforgeSword,
   swordTypes,
@@ -762,11 +763,13 @@ export default function OriginalWorld() {
       return;
     }
     const nextForge = structuredClone(s),
-      required = [8, 15, 25, 21];
+      required = [8, 15, 25, 21],
+      weaponNames = ["钢刀", "长剑", "钢杖", "长鞭"];
     nextForge.actor.forgeChallengeStep = 0;
     nextForge.actor.inventory[`2:${required[0]}`] = 1;
     nextForge.actor.weaponId = required[0];
     sync(nextForge);
+    setNotice(`干匠：先让我的夫人墨邪试试你对${weaponNames[0]}的掌握吧！第 1/4 轮，装备${weaponNames[0]}击败墨邪。`);
     setBattle(beginOriginalBattle(149, s.tasks.clock + 149, undefined, "story"));
   }, [sync]);
   const runAt = useCallback(
@@ -1415,6 +1418,7 @@ export default function OriginalWorld() {
         }
         if (battle.enemyId === 149) {
           const required = [8, 15, 25, 21],
+            weaponNames = ["钢刀", "长剑", "钢杖", "长鞭"],
             step = next.actor.forgeChallengeStep || 0,
             requiredId = required[step],
             key = `2:${requiredId}`;
@@ -1422,7 +1426,7 @@ export default function OriginalWorld() {
             delete next.actor.inventory[key];
             next.actor.weaponId = 0;
             next.actor.forgeChallengeStep = 0;
-            altarText = "兵器与本轮要求不符，铸剑挑战失败。";
+            altarText = `墨邪：我们考的是${weaponNames[step]}，你这算什么？铸剑挑战失败，需要找干匠重新开始。`;
           } else {
             delete next.actor.inventory[key];
             next.actor.weaponId = 0;
@@ -1437,13 +1441,13 @@ export default function OriginalWorld() {
                 undefined,
                 "story",
               );
-              altarText = `第 ${step + 1} 轮通过，换用指定兵器继续挑战。`;
+              altarText = `第 ${step + 1}/4 轮通过！干匠递给你${weaponNames[step + 1]}：第 ${step + 2}/4 轮，用${weaponNames[step + 1]}再战墨邪。`;
             } else {
               next.actor.swordBattle = true;
               next.actor.forgeChallengeStep = 0;
               // 与原版一致：通过后传送进铸剑谷(67)。
               next.position = { mapId: 67, x: 9, y: 11, direction: 8 };
-              altarText = "四轮铸剑挑战全部通过，铸剑谷已经开放。";
+              altarText = "四轮铸剑挑战全部通过！干匠：去我的铸剑谷自己打造趁手的武器吧。";
             }
           }
         }
@@ -3764,6 +3768,13 @@ function LifeMenu({
           ? `经验 ${actor.exp} · 银两 ${actor.gold} · 武器名可在 JSON 中修改`
           : `银两 ${actor.gold} · 家具每件 60000`}
       </small>
+      {menu.kind === "forge" && (
+        <p className="life-hint">
+          {forgeNew
+            ? `福缘 ${actor.luck}：中缀(闪避/命中)与后缀(四维)的品质受福缘影响，福缘越高越容易出好词缀。`
+            : `当前「${actor.swordName || "无名兵器"}」：${customSwordBonus(actor)}。重铸品质受福缘 ${actor.luck} 影响。`}
+        </p>
+      )}
     </section>
   );
 }
