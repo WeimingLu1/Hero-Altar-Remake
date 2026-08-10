@@ -99,6 +99,7 @@ import {
   completeHiddenQuest,
   finishFreeWork,
   finishMainTask,
+  hiddenQuestOffer,
   finishStoneTask,
   finishWantedTask,
   freshTaskState,
@@ -170,7 +171,6 @@ import {
 } from "../game-core/lm-studio";
 import { MAX_PLAYER_EXP } from "../game-core/progression-limits";
 import { isCurrentKillTarget } from "../game-core/kill-target";
-import { altarOwnMap } from "../game-core/altar-map";
 import {
   npcVisibleWithInventory,
   tokenGateState,
@@ -746,6 +746,11 @@ export default function OriginalWorld() {
     entry: BagEntry;
     index: number;
   } | null>(null);
+  // 隐藏交换的确认弹窗。
+  const [hiddenConfirm, setHiddenConfirm] = useState<{
+    npcId: number;
+    index: number;
+  } | null>(null);
   const [cultivation, setCultivation] = useState<number | null>(null);
   const [cultivationActive, setCultivationActive] = useState(false);
   const [flyMenu, setFlyMenu] = useState<number | null>(null);
@@ -805,6 +810,11 @@ export default function OriginalWorld() {
     }
     if (s.actor.exp < 150000) {
       setEventText("干匠\n你的江湖阅历还不足以接受铸剑挑战。");
+      return;
+    }
+    // 原版：墨邪被击杀后干匠不再提供铸剑挑战。
+    if ((s.actor.killList || []).includes(149)) {
+      setEventText("干匠\n墨邪已不在人世，无人再能试你的功夫了。");
       return;
     }
     const nextForge = structuredClone(s),
@@ -913,7 +923,11 @@ export default function OriginalWorld() {
           return true;
         }
         applySceneResolution(next.actor, resolution);
-        next.tasks.clock += resolution.playTimeDelta || 0;
+        if (resolution.taskTimeDelta) {
+          // 喝酒只加速通缉/石料循环，不推进主任务期限时钟。
+          next.tasks.wantedStarted += resolution.taskTimeDelta;
+          next.tasks.stoneStartedAt += resolution.taskTimeDelta;
+        } else next.tasks.clock += resolution.playTimeDelta || 0;
         if (resolution.transfer)
           next.position = {
             ...resolution.transfer,
@@ -1179,13 +1193,6 @@ export default function OriginalWorld() {
           setNpcMenu(null);
           return;
         }
-        const hidden = completeHiddenQuest(next.actor, id);
-        if (hidden.ok || hidden.text) {
-          sync(next);
-          setEventText(`${npcDisplayName(id)}\n${hidden.text}`);
-          setNpcMenu(null);
-          return;
-        }
         if (id === 172 && next.actor.haveNewHome) {
           setLife({ kind: "home", index: 0 });
           setNpcMenu(null);
@@ -1197,6 +1204,10 @@ export default function OriginalWorld() {
           id + next.position.mapId,
         );
         setEventText(`${npcDisplayName(id)}\n${r.lines.join("\n")}`);
+        // 原版：普通对话后再检查隐藏交换，可交换时弹确认窗口。
+        if (hiddenQuestOffer(next.actor, id).ok) {
+          setHiddenConfirm({ npcId: id, index: 0 });
+        }
       } else if (option === "chat") {
         setNpcChat({
           id,
@@ -1521,22 +1532,21 @@ export default function OriginalWorld() {
           next.actor.taskKill = (next.actor.taskKill || 0) + 1;
           altarText += ` 杀手任务目标已经伏诛，累计完成 ${next.actor.taskKill} 次；回任务发布人处复命。`;
         }
-        const altarId = battle.enemyId - 162;
+        // 原版：砍头任意坛主(163-170)即结算当前阶段奖励并推进坛进度。
+        // 地图链(每坛主掉落下一张)引导顺序；奖励按坛阶段(tanId)给。
         if (
           kill &&
-          altarId === next.actor.tanId &&
-          altarId >= 1 &&
-          altarId <= 8
+          battle.enemyId >= 163 &&
+          battle.enemyId <= 170 &&
+          next.actor.tanId >= 1 &&
+          next.actor.tanId <= 8
         ) {
-          // 消耗本坛地图：村长赠送青龙坛地图(21)，之后每坛地图由上一坛主掉落。
-          const ownMap = altarOwnMap(battle.enemyId);
-          if (ownMap !== undefined) {
-            const mapKey = `1:${ownMap}`;
-            if ((next.actor.inventory[mapKey] || 0) > 0) {
-              next.actor.inventory[mapKey]--;
-              if (next.actor.inventory[mapKey] <= 0)
-                delete next.actor.inventory[mapKey];
-            }
+          // 消耗当前阶段地图，与原版 lose_item(1, 20+tan_id) 一致。
+          const mapKey = `1:${20 + next.actor.tanId}`;
+          if ((next.actor.inventory[mapKey] || 0) > 0) {
+            next.actor.inventory[mapKey]--;
+            if (next.actor.inventory[mapKey] <= 0)
+              delete next.actor.inventory[mapKey];
           }
           next.actor.killList = Array.from(
             new Set([...(next.actor.killList || []), battle.enemyId]),
@@ -1694,6 +1704,20 @@ export default function OriginalWorld() {
       else setItemConfirm({ entry, index: 0 });
     },
     [activateBagEntry],
+  );
+  // 隐藏交换确认。
+  const confirmHiddenQuest = useCallback(
+    (doExchange: boolean) => {
+      if (!hiddenConfirm) return;
+      const npcId = hiddenConfirm.npcId;
+      setHiddenConfirm(null);
+      if (!doExchange) return;
+      const next = structuredClone(stateRef.current),
+        result = completeHiddenQuest(next.actor, npcId);
+      sync(next);
+      setEventText(`${npcDisplayName(npcId)}\n${result.text}`);
+    },
+    [hiddenConfirm, sync],
   );
   // 丢弃行囊条目。
   const discardBagEntry = useCallback(
@@ -2338,6 +2362,16 @@ export default function OriginalWorld() {
           else if (cancel || k === "h") setFlyMenu(null);
           return;
         }
+        if (hiddenConfirm) {
+          if (["arrowup", "arrowdown", "w", "s"].includes(k))
+            setHiddenConfirm({
+              ...hiddenConfirm,
+              index: (hiddenConfirm.index + 1) % 2,
+            });
+          else if (confirm) confirmHiddenQuest(hiddenConfirm.index === 0);
+          else if (cancel) setHiddenConfirm(null);
+          return;
+        }
         if (itemConfirm) {
           if (["arrowup", "arrowdown", "w", "s"].includes(k))
             setItemConfirm({
@@ -2558,6 +2592,8 @@ export default function OriginalWorld() {
     maximizeCheatSkill,
     maximizeCheatStat,
     itemConfirm,
+    hiddenConfirm,
+    confirmHiddenQuest,
     npcMenu,
     npcChat,
     closeNpcChat,
@@ -3527,6 +3563,19 @@ ${mode}输出必须符合古代武侠世界，不推动正式任务，不改变�
             index={itemConfirm.index}
             choose={confirmBagAction}
           />
+        )}
+        {hiddenConfirm && (
+          (() => {
+            const offer = hiddenQuestOffer(state.actor, hiddenConfirm.npcId);
+            return (
+              <Choice
+                title={`用「${offer.requestName}×${offer.requestCount}」交换「${offer.prizeName}」？`}
+                items={["交换", "取消"]}
+                index={hiddenConfirm.index}
+                choose={(index) => confirmHiddenQuest(index === 0)}
+              />
+            );
+          })()
         )}
         {flyMenu !== null && (
           <Choice

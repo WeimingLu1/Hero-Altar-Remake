@@ -82,15 +82,15 @@ test("砍坛主写入击杀名单但不按普通NPC扣除道德", () => {
   assert.equal(a.morals, 128);
 });
 
-test("当前坛主击杀掉落机械顺序的下一坛地图", () => {
+test("当前坛主击杀掉落故事顺序的下一坛地图", () => {
   const a = actor();
   a.tanId = 1;
-  settleVictoryLoot(a, 163, true); // 青龙坛主 → 白虎坛地图(28)
-  assert.equal(a.inventory["1:28"], 1);
+  settleVictoryLoot(a, 163, true); // 青龙坛主 → 地罡坛地图(22)
+  assert.equal(a.inventory["1:22"], 1);
 
   const b = actor();
   b.tanId = 2;
-  settleVictoryLoot(b, 164, true); // 总瓢把子 → 朱雀坛地图(23)
+  settleVictoryLoot(b, 170, true); // 地罡坛主 → 朱雀坛地图(23)
   assert.equal(b.inventory["1:23"], 1);
 });
 
@@ -98,44 +98,36 @@ test("手下留情当前坛主不掉落坛地图", () => {
   const a = actor();
   a.tanId = 1;
   settleVictoryLoot(a, 163, false); // 手下留情
-  assert.equal(a.inventory["1:28"], undefined, "不留情不掉下一坛地图");
-  assert.equal(a.inventory["1:22"], undefined);
+  assert.equal(a.inventory["1:22"], undefined, "手下留情不掉下一坛地图");
   assert.equal(a.killList, undefined, "手下留情不记击杀");
   assert.equal(a.inventory["2:8"], 1, "一般战利品(钢刀)仍按原版规则获得");
 });
 
-test("全部坛主按机械顺序掉落正确的下一坛地图", () => {
+test("全部坛主按故事顺序掉落正确的下一坛地图", () => {
   const expected = {
-    163: 28, // 青龙坛主 → 白虎坛地图
-    164: 23, // 总瓢把子 → 朱雀坛地图
-    165: 25, // 朱雀坛主 → 玄武坛地图
-    166: 27, // 玄武坛主 → 天徽坛地图
-    167: 26, // 天徽坛主 → 紫煞坛地图
-    168: 24, // 紫煞坛主 → 山岚坛地图
-    169: 22, // 山岚坛主 → 地罡坛地图
+    163: 22, // 青龙坛主 → 地罡坛地图
+    170: 23, // 地罡坛主 → 朱雀坛地图
+    165: 24, // 朱雀坛主 → 山岚坛地图
+    169: 25, // 山岚坛主 → 玄武坛地图
+    166: 26, // 玄武坛主 → 紫煞坛地图
+    168: 27, // 紫煞坛主 → 天徽坛地图
+    167: 28, // 天徽坛主 → 白虎坛地图
   };
   for (const [enemyId, mapId] of Object.entries(expected)) {
     const a = actor();
-    a.tanId = Number(enemyId) - 162;
     settleVictoryLoot(a, Number(enemyId), true);
     assert.equal(a.inventory[`1:${mapId}`], 1, `敌 ${enemyId} 应掉落地图 ${mapId}`);
   }
 });
 
-test("重复击杀旧坛主不再掉落坛地图", () => {
+test("最后一坛(白虎坛/总瓢把子164)不掉落坛地图", () => {
   const a = actor();
-  a.tanId = 2; // 已推进到第二坛，青龙坛主已是旧目标
-  settleVictoryLoot(a, 163, true);
-  assert.equal(a.inventory["1:28"], undefined);
-  assert.equal(a.inventory["1:22"], undefined);
-});
-
-test("最后一坛(170)不掉落坛地图", () => {
-  const a = actor();
-  a.tanId = 8;
-  settleVictoryLoot(a, 170, true);
-  assert.equal(a.inventory["1:22"], undefined);
-  assert.equal(a.inventory["1:23"], undefined);
+  settleVictoryLoot(a, 164, true);
+  const altarMaps = Object.keys(a.inventory).filter((key) => {
+    const [kind, id] = key.split(":").map(Number);
+    return kind === 1 && id >= 21 && id <= 28;
+  });
+  assert.equal(altarMaps.length, 0, "总瓢把子不掉落任何坛地图");
 });
 
 test("清虚道长首次掉落三角石板并在战果中明确提示", () => {

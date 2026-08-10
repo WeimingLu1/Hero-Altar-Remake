@@ -83,6 +83,8 @@ export type SceneResolution = {
   waterDelta?: number;
   consume?: { kind: 1 | 2 | 3; id: number; amount: number };
   playTimeDelta?: number;
+  // 喝酒等只加速通缉/石料循环、不推进主任务时钟的偏移。
+  taskTimeDelta?: number;
   battleEnemyId?: number;
   tag: string;
 };
@@ -260,7 +262,10 @@ export function resolveSceneEvent(
       ? {
           lines: [String(originalText.drink_wine_text || "你喝下一杯酒。")],
           consume: { kind: 1, id: 16, amount: 1 },
+          // 原版：喝酒只推进年龄(play_time)、加速通缉/石料循环，
+          // 不推进主任务期限时钟。
           playTimeDelta: 10800,
+          taskTimeDelta: -10800,
           tag: "drink-wine",
         }
       : { lines: ["你身上没有女儿红。"], tag: "drink-wine:none" };

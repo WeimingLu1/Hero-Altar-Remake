@@ -3,13 +3,22 @@ import test from "node:test";
 import {
   ALTAR_MAP_ITEM_ENTRANCE,
   altarEntranceHint,
-  altarOwnMap,
 } from "../app/game-core/altar-map";
 import { originalTables } from "../app/game-core/original-data";
 import { getOriginalMap } from "../app/game-core/original-world";
 
-// 机械坛序：坛任务按敌人 id 163→170 推进。
-const BOSS_ORDER = [163, 164, 165, 166, 167, 168, 169, 170];
+// 故事坛序：青龙→地罡→朱雀→山岚→玄武→紫煞→天徽→白虎。
+// 各坛主按该顺序掉落下一张坛地图。
+const STORY_DROPS: Record<number, number> = {
+  163: 22, // 青龙坛主 → 地罡坛地图
+  170: 23, // 地罡坛主 → 朱雀坛地图
+  165: 24, // 朱雀坛主 → 山岚坛地图
+  169: 25, // 山岚坛主 → 玄武坛地图
+  166: 26, // 玄武坛主 → 紫煞坛地图
+  168: 27, // 紫煞坛主 → 天徽坛地图
+  167: 28, // 天徽坛主 → 白虎坛地图
+  // 164 总瓢把子(白虎坛)是最后一坛，不掉坛地图
+};
 
 function altarMapDrop(enemyId: number): number | undefined {
   const enemy = originalTables.enemies[enemyId];
@@ -21,29 +30,14 @@ function altarMapDrop(enemyId: number): number | undefined {
   return undefined;
 }
 
-test("每位坛主都有自身坛地图，起始青龙坛地图(21)由村长赠送", () => {
-  for (const id of BOSS_ORDER) {
-    const map = altarOwnMap(id);
-    assert.ok(map !== undefined, `敌 ${id} 应有自身坛地图`);
-    assert.ok(map >= 21 && map <= 28, `地图 id ${map} 应在坛地图范围内`);
-  }
-  assert.equal(altarOwnMap(163), 21);
-});
-
-test("击杀当前坛主掉落的正是下一坛的自身地图，形成连续指引链", () => {
-  for (let i = 0; i < BOSS_ORDER.length - 1; i++) {
-    const boss = BOSS_ORDER[i];
-    const nextBoss = BOSS_ORDER[i + 1];
-    assert.equal(
-      altarMapDrop(boss),
-      altarOwnMap(nextBoss),
-      `敌 ${boss} 应掉落下一坛(敌 ${nextBoss})的地图 ${altarOwnMap(nextBoss)}`,
-    );
+test("各坛主按故事顺序掉落下一张坛地图，形成连续指引链", () => {
+  for (const [boss, nextMap] of Object.entries(STORY_DROPS)) {
+    assert.equal(altarMapDrop(Number(boss)), nextMap, `敌 ${boss} 应掉落地图 ${nextMap}`);
   }
 });
 
-test("最后一坛(170)不掉落坛地图", () => {
-  assert.equal(altarMapDrop(170), undefined);
+test("最后一坛(白虎坛/总瓢把子164)不掉落坛地图", () => {
+  assert.equal(altarMapDrop(164), undefined);
 });
 
 test("每张坛地图使用后都返回入口所在的地图与坐标", () => {

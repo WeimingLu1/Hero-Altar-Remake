@@ -511,6 +511,37 @@ export function finishWantedTask(actor: SceneActorState, tasks: TaskState) {
   return { ok: true, text: reward(actor, exp, potential, -1) };
 }
 
+// 返回隐藏交换的请求与奖励信息(不消耗)，供确认弹窗使用。
+export function hiddenQuestOffer(
+  actor: SceneActorState,
+  npcId: number,
+): {
+  ok: boolean;
+  requestName: string;
+  requestCount: number;
+  prizeName: string;
+} {
+  const quest = (
+    originalTasks.quest_list as Record<
+      string,
+      [[number, number, number, number], [number, number, number]]
+    >
+  )?.[String(npcId)];
+  if (!quest) return { ok: false, requestName: "", requestCount: 0, prizeName: "" };
+  const [request, prize] = quest,
+    [, type1, id1, num1] = request,
+    [type2, id2] = prize,
+    requestKey = `${type1}:${id1}`;
+  if ((actor.inventory[requestKey] || 0) < num1)
+    return { ok: false, requestName: "", requestCount: 0, prizeName: "" };
+  return {
+    ok: true,
+    requestName: String(tableFor(type1)[id1]?.name || id1),
+    requestCount: num1,
+    prizeName: String(tableFor(type2)[id2]?.name || id2),
+  };
+}
+
 export function completeHiddenQuest(actor: SceneActorState, npcId: number) {
   const quest = (
     originalTasks.quest_list as Record<
