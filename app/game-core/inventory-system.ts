@@ -68,7 +68,7 @@ export function bagEntries(actor: SceneActorState): BagEntry[] {
           name: data.name || `${swordTypes[id - 31]}器`,
           description: customSwordDescription(data, id - 31),
           equipped: actor.weaponId === id,
-          category: `武器 · ${swordTypes[id - 31] || "奇门"}`,
+          category: `武器 · ${weaponKinds[id - 31] || "奇门"}`,
           slot: "主手武器",
           bonuses: customSwordBonus(data),
         },
@@ -237,6 +237,19 @@ export function discardEntry(actor: SceneActorState, entry: BagEntry) {
   if (entry.kind === 2 && actor.weaponId === entry.id) actor.weaponId = 0;
   if (entry.kind === 3)
     actor.armorIds = actor.armorIds.filter((id) => id !== entry.id);
+  // 丢弃自制武器会重置对应类型的铸造数据，可重新铸造加回行囊。
+  if (entry.kind === 2 && entry.id >= 31 && entry.id <= 34) {
+    const type = entry.id - 31;
+    if (actor.swords?.[type])
+      actor.swords[type] = {
+        forged: false,
+        name: "",
+        atk: 0,
+        mid: 0,
+        suf: 0,
+        times: 0,
+      };
+  }
   delete actor.inventory[entry.key];
   return { ok: true, text: `丢掉了${entry.name}。` };
 }
