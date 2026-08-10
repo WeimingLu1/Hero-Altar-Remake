@@ -61,6 +61,15 @@ export type SceneActorState = {
   sword2?: number;
   sword3?: number;
   swordTimes?: number;
+  // 四把自制武器(剑/刀/杖/鞭)，swords[type] 独立保存名称、词缀与重铸次数。
+  swords?: Array<{
+    forged: boolean;
+    name: string;
+    atk: number;
+    mid: number;
+    suf: number;
+    times: number;
+  }>;
   forgeChallengeStep?: number;
   haveNewHome?: boolean;
   jiajuList?: number[];

@@ -160,7 +160,6 @@ export const cheatStats = [
   { key: "ball", name: "投球纪录", group: "进度", step: 10, max: 65535 },
   { key: "roomLevel", name: "房屋等级", group: "家园", step: 1, max: 3 },
   { key: "forgeChallengeStep", name: "铸剑挑战轮次", group: "铸剑", step: 1, max: 4 },
-  { key: "swordTimes", name: "重铸次数", group: "铸剑", step: 1, max: 65535 },
 ] as const;
 
 export function cheatStatMaximum(actor: SceneActorState, index: number) {

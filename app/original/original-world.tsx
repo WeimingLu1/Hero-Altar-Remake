@@ -536,6 +536,12 @@ const newActor = (): SceneActorState => ({
   sword2: 0,
   sword3: 0,
   swordTimes: 0,
+  swords: [
+    { forged: false, name: "", atk: 0, mid: 0, suf: 0, times: 0 },
+    { forged: false, name: "", atk: 0, mid: 0, suf: 0, times: 0 },
+    { forged: false, name: "", atk: 0, mid: 0, suf: 0, times: 0 },
+    { forged: false, name: "", atk: 0, mid: 0, suf: 0, times: 0 },
+  ],
   forgeChallengeStep: 0,
   haveNewHome: false,
   roomLevel: 0,
@@ -551,23 +557,58 @@ const fresh = (): WorldSave => ({
   actor: newActor(),
   tasks: freshTaskState(),
 });
-const normalize = (value: WorldSave): WorldSave => ({
-  ...value,
-  actor: {
-    ...newActor(),
-    ...(value.actor || {}),
-    skills: value.actor?.skills || {},
-    inventory: value.actor?.inventory || {},
-    exp: Math.min(Number(value.actor?.exp || 0), MAX_PLAYER_EXP),
-    skillUse: [
-      ...(value.actor?.skillUse || []),
-      0, 0, 0, 0, 0, 0, 0,
-    ].slice(0, 7),
-  },
-  flags: value.flags || {},
-  variables: value.variables || {},
-  tasks: { ...freshTaskState(), ...(value.tasks || {}) },
-});
+const normalize = (value: WorldSave): WorldSave => {
+  const swords = [...(value.actor?.swords || [])],
+    inventory = { ...(value.actor?.inventory || {}) };
+  // 旧版单把自制武器(swordType/swordName/sword1-3)迁移进 swords[swordType]，
+  // 并把行囊槽 2:31 移到对应类型槽 2:(31+type)。
+  const old = value.actor || {};
+  if (
+    swords.length === 0 &&
+    typeof old.swordType === "number" &&
+    old.swordType >= 0 &&
+    old.swordName
+  ) {
+    for (let type = 0; type < 4; type++) {
+      if (type === old.swordType) {
+        swords.push({
+          forged: true,
+          name: String(old.swordName || ""),
+          atk: Number(old.sword1 || 0),
+          mid: Number(old.sword2 || 0),
+          suf: Number(old.sword3 || 0),
+          times: Number(old.swordTimes || 0),
+        });
+      } else
+        swords.push({ forged: false, name: "", atk: 0, mid: 0, suf: 0, times: 0 });
+    }
+    const target = `2:${31 + old.swordType}`;
+    if (inventory["2:31"]) {
+      inventory[target] = Math.max(1, inventory[target] || 0);
+      delete inventory["2:31"];
+    }
+  }
+  while (swords.length < 4)
+    swords.push({ forged: false, name: "", atk: 0, mid: 0, suf: 0, times: 0 });
+  return {
+    ...value,
+    actor: {
+      ...newActor(),
+      ...(value.actor || {}),
+      skills: value.actor?.skills || {},
+      inventory,
+      exp: Math.min(Number(value.actor?.exp || 0), MAX_PLAYER_EXP),
+      skillUse: [
+        ...(value.actor?.skillUse || []),
+        0, 0, 0, 0, 0, 0, 0,
+      ].slice(0, 7),
+      swords,
+    },
+    flags: value.flags || {},
+    variables: value.variables || {},
+    tasks: { ...freshTaskState(), ...(value.tasks || {}) },
+  };
+};
 const loadLocalSave = (): WorldSave => {
   try {
     const raw = localStorage.getItem("rmxp-original-world-v1");
@@ -1037,7 +1078,13 @@ export default function OriginalWorld() {
       setEventNpcId(["talk", "status", "join"].includes(option) ? id : null);
       if (option === "forge") {
         setNpcMenu(null);
-        startSwordChallenge();
+        if (stateRef.current.actor.swordBattle) {
+          // 已通过铸剑挑战：直接传送到铸剑谷。
+          const passed = structuredClone(stateRef.current);
+          passed.position = { mapId: 67, x: 9, y: 11, direction: 8 };
+          sync(passed);
+          setNotice("干匠：铸剑谷已开放，去打造趁手的武器吧。");
+        } else startSwordChallenge();
         return;
       }
       const next = structuredClone(stateRef.current);
@@ -2097,12 +2144,7 @@ export default function OriginalWorld() {
           return;
         }
         if (life) {
-          const length =
-            life.kind === "forge"
-              ? (stateRef.current.actor.swordType ?? -1) < 0
-                ? 4
-                : 2
-              : 8;
+          const length = life.kind === "forge" ? 5 : 8;
           if (k === "arrowup" || k === "w")
             setLife({ ...life, index: (life.index + length - 1) % length });
           else if (k === "arrowdown" || k === "s")
@@ -2112,18 +2154,17 @@ export default function OriginalWorld() {
             const next = structuredClone(stateRef.current);
             let result: { ok: boolean; text: string };
             if (life.kind === "forge") {
-              if ((next.actor.swordType ?? -1) < 0)
-                result = createSword(
-                  next.actor,
-                  life.index,
-                  `无名${swordTypes[life.index]}`,
-                );
-              else if (life.index === 0)
-                result = reforgeSword(
-                  next.actor,
-                  seeded(next.tasks.clock + (next.actor.swordTimes || 0)),
-                );
-              else {
+              if (life.index < 4) {
+                const type = life.index,
+                  sword = next.actor.swords?.[type];
+                result = sword?.forged
+                  ? reforgeSword(
+                      next.actor,
+                      type,
+                      seeded(next.tasks.clock + (sword.times || 0)),
+                    )
+                  : createSword(next.actor, type, `无名${swordTypes[type]}`);
+              } else {
                 setLife(null);
                 return;
               }
@@ -2137,12 +2178,6 @@ export default function OriginalWorld() {
             }
             sync(next);
             setNotice(result.text);
-            if (
-              result.ok &&
-              life.kind === "forge" &&
-              (next.actor.swordType ?? -1) >= 0
-            )
-              setLife(null);
           }
           return;
         }
@@ -3776,21 +3811,26 @@ function LifeMenu({
   menu: LifeState;
   actor: SceneActorState;
 }) {
-  const forgeNew = (actor.swordType ?? -1) < 0,
-    items =
-      menu.kind === "forge"
-        ? forgeNew
-          ? swordTypes.map((name) => `铸造${name}`)
-          : [`重铸「${actor.swordName || "无名兵器"}」`, "离开"]
-        : [
-            `翻修房屋（当前 ${actor.roomLevel || 0}/3）`,
-            ...furnitureNames.map(
-              (name, index) =>
-                `${name} / 已有 ${actor.jiajuList?.[index] || 0}`,
-            ),
-            "销毁全部家具",
-            "离开",
-          ];
+  const items =
+    menu.kind === "forge"
+      ? [
+          ...swordTypes.map((name, type) => {
+            const sword = actor.swords?.[type];
+            return sword?.forged
+              ? `重铸「${sword.name || `${name}器`}」`
+              : `铸造${name}`;
+          }),
+          "离开",
+        ]
+      : [
+          `翻修房屋（当前 ${actor.roomLevel || 0}/3）`,
+          ...furnitureNames.map(
+            (name, index) =>
+              `${name} / 已有 ${actor.jiajuList?.[index] || 0}`,
+          ),
+          "销毁全部家具",
+          "离开",
+        ];
   return (
     <section className="arcade-panel life-panel">
       <h2>{menu.kind === "forge" ? "铸剑谷" : "桃花源管家"}</h2>
@@ -3806,9 +3846,14 @@ function LifeMenu({
       </small>
       {menu.kind === "forge" && (
         <p className="life-hint">
-          {forgeNew
-            ? `福缘 ${actor.luck}：中缀(闪避/命中)与后缀(四维)的品质受福缘影响，福缘越高越容易出好词缀。`
-            : `当前「${actor.swordName || "无名兵器"}」：${customSwordBonus(actor)}。重铸品质受福缘 ${actor.luck} 影响。`}
+          {menu.index < 4
+            ? (() => {
+                const sword = actor.swords?.[menu.index];
+                return sword?.forged
+                  ? `当前「${sword.name || "无名兵器"}」：${customSwordBonus(sword)}。重铸品质受福缘 ${actor.luck} 影响。`
+                  : `铸造${swordTypes[menu.index]}：中缀(闪避/命中)与后缀(四维)品质受福缘 ${actor.luck} 影响，福缘越高越容易出好词缀。`;
+              })()
+            : "选择要铸造或重铸的兵器类型，按 E/Enter 确认。"}
         </p>
       )}
     </section>

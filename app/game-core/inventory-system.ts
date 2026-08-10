@@ -1,7 +1,11 @@
 import { originalTables, type OriginalRecord } from "./original-data";
 import type { SceneActorState } from "./scene-event";
 import { altarEntranceHint } from "./altar-map";
-import { customSwordBonus, customSwordDescription } from "./life-system";
+import {
+  customSwordBonus,
+  customSwordDescription,
+  swordTypes,
+} from "./life-system";
 
 export type BagEntry = {
   key: string;
@@ -49,24 +53,37 @@ export function fullHp(actor: SceneActorState) {
 }
 export function bagEntries(actor: SceneActorState): BagEntry[] {
   const entries = Object.entries(actor.inventory).flatMap(([key, amount]) => {
-    const [kind, id] = key.split(":").map(Number),
-      record = table(kind)[id];
-    if (!record || amount <= 0 || kind < 1 || kind > 3) return [];
+    const [kind, id] = key.split(":").map(Number);
+    if (amount <= 0 || kind < 1 || kind > 3) return [];
+    // 四把自制武器(2:31-2:34)从 swords 合成条目。
+    if (kind === 2 && id >= 31 && id <= 34) {
+      const data = actor.swords?.[id - 31];
+      if (!data?.forged) return [];
+      return [
+        {
+          key,
+          kind: 2 as const,
+          id,
+          amount,
+          name: data.name || `${swordTypes[id - 31]}器`,
+          description: customSwordDescription(data, id - 31),
+          equipped: actor.weaponId === id,
+          category: `武器 · ${swordTypes[id - 31] || "奇门"}`,
+          slot: "主手武器",
+          bonuses: customSwordBonus(data),
+        },
+      ];
+    }
+    const record = table(kind)[id];
+    if (!record) return [];
     return [
       {
         key,
         kind: kind as 1 | 2 | 3,
         id,
         amount,
-        name: String(
-          kind === 2 && id === 31 && actor.swordName
-            ? actor.swordName
-            : record.name || id,
-        ),
-        description:
-          kind === 2 && id === 31 && actor.swordName
-            ? customSwordDescription(actor)
-            : String(record.description || ""),
+        name: String(record.name || id),
+        description: String(record.description || ""),
         equipped:
           kind === 2
             ? actor.weaponId === id
@@ -75,10 +92,7 @@ export function bagEntries(actor: SceneActorState): BagEntry[] {
               : false,
         category: entryCategory(kind, record),
         slot: entrySlot(kind, record),
-        bonuses:
-          kind === 2 && id === 31 && actor.swordName
-            ? customSwordBonus(actor)
-            : entryBonuses(record),
+        bonuses: entryBonuses(record),
       },
     ];
   });
@@ -163,16 +177,20 @@ export function equipmentBonus(
   let value = 0;
   if (actor.weaponId) {
     value += Number(originalTables.weapons[actor.weaponId]?.[key] || 0);
-    if (actor.weaponId === 31) {
-      if (key === "add_atk") value += actor.sword1 || 0;
-      const middleType = Math.floor((actor.sword2 || 0) / 100),
-        middleValue = (actor.sword2 || 0) % 100,
-        suffixType = Math.floor((actor.sword3 || 0) / 100),
-        suffixValue = (actor.sword3 || 0) % 100;
-      if (key === "add_eva" && middleType === 3) value += middleValue;
-      if (key === "add_hit" && middleType === 4) value += middleValue;
-      const suffixKeys = ["", "add_str", "add_agi", "add_int", "add_bon"];
-      if (suffixKeys[suffixType] === key) value += suffixValue;
+    // 四把自制武器(31-34)：读 swords[type] 的词缀。
+    if (actor.weaponId >= 31 && actor.weaponId <= 34) {
+      const data = actor.swords?.[actor.weaponId - 31];
+      if (data?.forged) {
+        if (key === "add_atk") value += data.atk;
+        const middleType = Math.floor(data.mid / 100),
+          middleValue = data.mid % 100,
+          suffixType = Math.floor(data.suf / 100),
+          suffixValue = data.suf % 100;
+        if (key === "add_eva" && middleType === 3) value += middleValue;
+        if (key === "add_hit" && middleType === 4) value += middleValue;
+        const suffixKeys = ["", "add_str", "add_agi", "add_int", "add_bon"];
+        if (suffixKeys[suffixType] === key) value += suffixValue;
+      }
     }
   }
   for (const id of actor.armorIds)
