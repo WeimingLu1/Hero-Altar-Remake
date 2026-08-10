@@ -27,13 +27,12 @@ export function customSwordBonus(actor: SceneActorState): string {
     : "初铸兵器 · 尚无词缀，可重铸获得中缀(闪避/命中)与后缀(四维)";
 }
 
-// 自制武器的动态描述：初铸为凡品，重铸后按词缀情况说明。
+// 自制武器的动态描述：初铸为凡品，重铸后列出实际词缀。
 export function customSwordDescription(actor: SceneActorState): string {
-  const typeName = swordTypes[actor.swordType ?? 0] || "兵",
-    refined = Boolean(actor.sword1 || actor.sword2 || actor.sword3);
-  return refined
-    ? `经重铸淬炼的${typeName}器，词缀品质随福缘而变。`
-    : `干匠初铸的${typeName}器，尚是凡品。回铸剑谷重铸可获得中缀(闪避/命中)与后缀(四维)词缀，福缘越高越容易出好词缀。`;
+  const typeName = swordTypes[actor.swordType ?? 0] || "兵";
+  if (actor.sword1 || actor.sword2 || actor.sword3)
+    return `经重铸淬炼的${typeName}器：${customSwordBonus(actor)}（词缀品质随福缘而变）。`;
+  return `干匠初铸的${typeName}器，尚是凡品。回铸剑谷重铸可获得中缀(闪避/命中)与后缀(四维)词缀，福缘越高越容易出好词缀。`;
 }
 export const furnitureNames = (originalSystem.jiaju_menu as string[]) || [
   "小凳",

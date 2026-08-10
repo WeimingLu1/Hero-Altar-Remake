@@ -214,6 +214,14 @@ export function derivedStats(actor: SceneActorState) {
 export function activateEntry(actor: SceneActorState, entry: BagEntry) {
   return activateItemEntry(actor, entry, false);
 }
+// 丢弃行囊条目：移除物品并卸下已装备的武器/防具。
+export function discardEntry(actor: SceneActorState, entry: BagEntry) {
+  if (entry.kind === 2 && actor.weaponId === entry.id) actor.weaponId = 0;
+  if (entry.kind === 3)
+    actor.armorIds = actor.armorIds.filter((id) => id !== entry.id);
+  delete actor.inventory[entry.key];
+  return { ok: true, text: `丢掉了${entry.name}。` };
+}
 export function activateBattleEntry(actor: SceneActorState, entry: BagEntry) {
   return activateItemEntry(actor, entry, true);
 }

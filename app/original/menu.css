@@ -74,7 +74,27 @@
   font: 9px monospace;
   letter-spacing: 0;
 }
-.bag-list button {
+.bag-list .bag-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: stretch;
+  gap: 4px;
+  width: 100%;
+  min-width: 0;
+  border: 1px solid #ffffff10;
+  background: #ffffff05;
+  color: #ddd3b5;
+}
+.bag-list .bag-row.active {
+  border-color: #b39b58;
+  background: #82663338;
+}
+/* 已装备的武器/防具高亮 */
+.bag-list .bag-row.equipped {
+  border-color: #4fb3c9;
+  background: #2f5f7438;
+}
+.bag-list .bag-main {
   display: grid;
   grid-template-columns: 34px minmax(0, 1fr) 42px;
   align-items: center;
@@ -83,18 +103,21 @@
   min-width: 0;
   padding: 8px;
   text-align: left;
-  border: 1px solid #ffffff10;
-  background: #ffffff05;
-  color: #ddd3b5;
+  border: 0;
+  background: transparent;
+  color: inherit;
 }
-.bag-list button.active {
-  border-color: #b39b58;
-  background: #82663338;
+.bag-list .bag-drop {
+  padding: 0 10px;
+  border: 0;
+  border-left: 1px solid #ffffff14;
+  background: transparent;
+  color: #a89c86;
+  white-space: nowrap;
 }
-/* 已装备的武器/防具高亮 */
-.bag-list button.equipped {
-  border-color: #4fb3c9;
-  background: #2f5f7438;
+.bag-list .bag-drop:hover {
+  color: #f0a58f;
+  background: #74322f38;
 }
 .bag-list span {
   display: grid;
@@ -108,11 +131,9 @@
   text-overflow: ellipsis;
   max-width: 410px;
 }
-/* 物品描述自动换行并可滚动查看全文 */
+/* 物品描述自动换行完整展示，不出现滚动条 */
 .bag-list .item-desc {
   white-space: normal;
-  overflow-y: auto;
-  max-height: 42px;
   max-width: 410px;
   line-height: 1.35;
   text-overflow: clip;

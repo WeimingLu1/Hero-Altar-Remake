@@ -79,6 +79,7 @@ import {
   activateEntry,
   activateBattleEntry,
   battleConsumableEntries,
+  discardEntry,
   equipmentCategory,
   type BagEntry,
 } from "../game-core/inventory-system";
@@ -1646,6 +1647,28 @@ export default function OriginalWorld() {
       else setItemConfirm({ entry, index: 0 });
     },
     [activateBagEntry],
+  );
+  // 丢弃行囊条目。
+  const discardBagEntry = useCallback(
+    (entry?: BagEntry) => {
+      if (!entry) return;
+      const next = structuredClone(stateRef.current),
+        result = discardEntry(next.actor, entry);
+      sync(next);
+      setNotice(result.text);
+      setMenu((current) =>
+        current
+          ? {
+              ...current,
+              index: Math.min(
+                current.index,
+                Math.max(0, bagEntries(next.actor).length - 1),
+              ),
+            }
+          : current,
+      );
+    },
+    [sync],
   );
   const activateSkill = useCallback(
     (id?: number, parry = false) => {
@@ -3440,6 +3463,7 @@ ${mode}输出必须符合古代武侠世界，不推动正式任务，不改变�
             menu={menu}
             setMenu={setMenu}
             activate={openBagEntry}
+            discard={discardBagEntry}
             activateKf={activateSkill}
             quickAction={applyCheatAction}
             changeStat={changeCheatStat}
@@ -4033,6 +4057,7 @@ function GameMenu({
   menu,
   setMenu,
   activate,
+  discard,
   activateKf,
   quickAction,
   changeStat,
@@ -4046,6 +4071,7 @@ function GameMenu({
   menu: { tab: number; index: number; sub: number };
   setMenu: (value: { tab: number; index: number; sub: number } | null) => void;
   activate: (entry?: BagEntry) => void;
+  discard: (entry?: BagEntry) => void;
   activateKf: (id?: number, parry?: boolean) => void;
   quickAction: (action: CheatQuickAction) => void;
   changeStat: (index: number, direction: -1 | 1) => void;
@@ -4099,23 +4125,34 @@ function GameMenu({
                     </small>
                   </header>
                 )}
-              <button
-                className={`${menu.index === i ? "active" : ""}${entry.equipped ? " equipped" : ""}`}
+              <div
+                className={`bag-row${menu.index === i ? " active" : ""}${entry.equipped ? " equipped" : ""}`}
                 onMouseEnter={() => setMenu({ tab: 0, index: i, sub: 0 })}
-                onClick={() => activate(entry)}
               >
-                <i className={`item-pixel kind-${entry.kind}`} />
-                <span>
-                  <small className="item-slot">{entry.slot}</small>
-                  <b>
-                    {entry.name}
-                    {entry.equipped ? "〔装备中〕" : ""}
-                  </b>
-                  <small className="item-desc">{entry.description}</small>
-                  <em className="item-bonuses">{entry.bonuses}</em>
-                </span>
-                <em>×{entry.amount}</em>
-              </button>
+                <button
+                  className="bag-main"
+                  onClick={() => activate(entry)}
+                >
+                  <i className={`item-pixel kind-${entry.kind}`} />
+                  <span>
+                    <small className="item-slot">{entry.slot}</small>
+                    <b>
+                      {entry.name}
+                      {entry.equipped ? "〔装备中〕" : ""}
+                    </b>
+                    <small className="item-desc">{entry.description}</small>
+                    <em className="item-bonuses">{entry.bonuses}</em>
+                  </span>
+                  <em>×{entry.amount}</em>
+                </button>
+                <button
+                  className="bag-drop"
+                  onClick={() => discard(entry)}
+                  title="丢掉"
+                >
+                  丢掉
+                </button>
+              </div>
               </div>
             ))
           ) : (

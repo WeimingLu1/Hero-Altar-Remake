@@ -7,6 +7,7 @@ import {
   activateBattleEntry,
   activateEntry,
   battleConsumableEntries,
+  discardEntry,
 } from "../app/game-core/inventory-system";
 import type { SceneActorState } from "../app/game-core/scene-event";
 const actor = (): SceneActorState => ({
@@ -173,6 +174,24 @@ test("原版石板来源记录在行囊合并显示为关键物品", () => {
   assert.equal(stone.amount, 2);
   assert.equal(stone.slot, "关键物品");
   assert.equal(stone.bonuses, "已收集 2/6");
+});
+
+test("丢弃行囊条目会移除物品并卸下已装备的武器/防具", () => {
+  const a = actor();
+  a.inventory = { "1:5": 2, "2:8": 1, "3:4": 1 };
+  a.weaponId = 8;
+  a.armorIds = [4];
+  const entries = bagEntries(a),
+    weapon = entries.find((entry) => entry.key === "2:8")!,
+    armor = entries.find((entry) => entry.key === "3:4")!,
+    food = entries.find((entry) => entry.key === "1:5")!;
+  discardEntry(a, weapon);
+  assert.equal(a.inventory["2:8"], undefined);
+  assert.equal(a.weaponId, 0);
+  discardEntry(a, armor);
+  assert.deepEqual(a.armorIds, []);
+  discardEntry(a, food);
+  assert.equal(a.inventory["1:5"], undefined);
 });
 
 test("使用坛地图提示入口位置且不消耗物品", () => {
