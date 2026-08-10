@@ -683,6 +683,9 @@ export default function OriginalWorld() {
     } | null>(null);
   const [studyActive, setStudyActive] = useState(false);
   const [battle, setBattle] = useState<OriginalBattle | null>(null);
+  // 铸剑挑战首轮：先显示文字说明，玩家确认后再进入战斗。
+  const [pendingSwordBattle, setPendingSwordBattle] =
+    useState<OriginalBattle | null>(null);
   const [battleNarratives, setBattleNarratives] = useState<BattleNarrative[]>([]);
   const [battleOutcome, setBattleOutcome] = useState<number | null>(null);
   const [battleItem, setBattleItem] = useState<number | null>(null);
@@ -769,8 +772,13 @@ export default function OriginalWorld() {
     nextForge.actor.inventory[`2:${required[0]}`] = 1;
     nextForge.actor.weaponId = required[0];
     sync(nextForge);
-    setNotice(`干匠：先让我的夫人墨邪试试你对${weaponNames[0]}的掌握吧！第 1/4 轮，装备${weaponNames[0]}击败墨邪。`);
-    setBattle(beginOriginalBattle(149, s.tasks.clock + 149, undefined, "story"));
+    // 首轮先给文字说明，玩家确认后再进入战斗。
+    setEventText(
+      `干匠\n先让我的夫人墨邪试试你对${weaponNames[0]}的掌握吧。这是铸剑挑战第 1/4 轮，装备${weaponNames[0]}击败墨邪。`,
+    );
+    setPendingSwordBattle(
+      beginOriginalBattle(149, s.tasks.clock + 149, undefined, "story"),
+    );
   }, [sync]);
   const runAt = useCallback(
     (x: number, y: number, automatic = false) => {
@@ -2380,8 +2388,11 @@ export default function OriginalWorld() {
           return;
         }
         if (eventText && (confirm || cancel)) {
+          const pending = pendingSwordBattle;
+          setPendingSwordBattle(null);
           setEventText("");
           setEventNpcId(null);
+          if (pending) setBattle(pending);
           return;
         }
         if (npcMenu) {
@@ -2494,6 +2505,7 @@ export default function OriginalWorld() {
     closeNpcChat,
     openBagEntry,
     openFlyMenu,
+    pendingSwordBattle,
     startSwordChallenge,
     save,
     shop,

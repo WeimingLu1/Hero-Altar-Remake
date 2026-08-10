@@ -5,6 +5,7 @@ import {
   buyFurniture,
   createSword,
   customSwordBonus,
+  customSwordDescription,
   reforgeSword,
   upgradeRoom,
 } from "../app/game-core/life-system";
@@ -89,7 +90,15 @@ test("自制武器词缀说明按攻击、中缀与后缀生成", () => {
   assert.match(text, /攻击\+45/);
   assert.match(text, /闪避\+9/);
   assert.match(text, /敏捷\+15/);
-  assert.equal(customSwordBonus(actor()), "无常驻属性");
+  assert.match(customSwordBonus(actor()), /初铸兵器/);
+});
+
+test("自制武器初铸与重铸有动态描述", () => {
+  const a = actor();
+  createSword(a, 0, "秋水");
+  assert.match(customSwordDescription(a), /凡品/);
+  a.sword1 = 45;
+  assert.match(customSwordDescription(a), /重铸淬炼/);
 });
 
 test("重铸结果说明词缀并提示福缘影响", () => {

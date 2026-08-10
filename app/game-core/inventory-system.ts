@@ -1,7 +1,7 @@
 import { originalTables, type OriginalRecord } from "./original-data";
 import type { SceneActorState } from "./scene-event";
 import { altarEntranceHint } from "./altar-map";
-import { customSwordBonus } from "./life-system";
+import { customSwordBonus, customSwordDescription } from "./life-system";
 
 export type BagEntry = {
   key: string;
@@ -63,7 +63,10 @@ export function bagEntries(actor: SceneActorState): BagEntry[] {
             ? actor.swordName
             : record.name || id,
         ),
-        description: String(record.description || ""),
+        description:
+          kind === 2 && id === 31 && actor.swordName
+            ? customSwordDescription(actor)
+            : String(record.description || ""),
         equipped:
           kind === 2
             ? actor.weaponId === id
