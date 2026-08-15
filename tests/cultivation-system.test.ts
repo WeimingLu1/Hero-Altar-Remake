@@ -4,12 +4,15 @@ import type { SceneActorState } from "../app/game-core/scene-event";
 import {
   cultivationAvailability,
   fullFp,
+  fullMp,
   healWounds,
   meditateForce,
+  meditateMagic,
   practiceOptions,
   practiceOnce,
   recoverHp,
   setForcePower,
+  setMagicPower,
 } from "../app/game-core/cultivation-system";
 
 const actor = (): SceneActorState => ({
@@ -135,4 +138,121 @@ test("R 修炼菜单列出全部已学可练专门功夫而非仅限已运用功
   assert.equal(options.some((skill) => skill.id === 12), true);
   assert.equal(options.find((skill) => skill.id === 12)?.equipped, false);
   assert.equal(options.some((skill) => skill.id === 16), false);
+});
+
+test("冥思、法点和两类修为提示与内功分支对称", () => {
+  const a = actor();
+  a.skills["8"] = { level: 80, points: 0 };
+  a.skills["52"] = { level: 80, points: 0 };
+  a.skillUse[5] = 52;
+  a.maxMp = 50;
+  a.mp = 100;
+  assert.ok(fullMp(a) > a.maxMp);
+  assert.deepEqual(meditateMagic(a), { ok: true, increased: true, capped: false });
+  assert.equal(a.maxMp, 51);
+  assert.equal(a.mp, 0);
+  assert.equal(setMagicPower(a, -5), 0);
+  assert.equal(setMagicPower(a, 999), 60);
+  assert.equal(cultivationAvailability(a, "magic").ok, true);
+  assert.match(cultivationAvailability(a, "spell").requirement, /范围 0/);
+  assert.equal(cultivationAvailability(a, "meditate").ok, true);
+  assert.equal(cultivationAvailability(a, "force").ok, true);
+});
+
+test("吸气覆盖满血、内力不足与内力不足以完全恢复", () => {
+  const a = actor();
+  assert.equal(recoverHp(a), false);
+  a.fp = 100;
+  a.hp = a.maxHp;
+  assert.equal(recoverHp(a), false);
+  assert.match(cultivationAvailability(a, "recover").text, /全满/);
+  a.hp = 1;
+  a.fp = 2;
+  assert.equal(recoverHp(a), false);
+  a.fp = 20;
+  assert.equal(recoverHp(a), true);
+  assert.ok(a.hp > 1 && a.hp < a.maxHp);
+  assert.equal(a.fp, 0);
+  assert.equal(cultivationAvailability({ ...a, fp: 20 }, "recover").ok, true);
+});
+
+test("疗伤可用性逐一覆盖修为、资源与伤势边界", () => {
+  const low = actor();
+  low.skills["1"].level = 0;
+  low.skills["16"].level = 10;
+  low.fp = low.maxFp = 200;
+  assert.match(cultivationAvailability(low, "heal").text, /修为不足/);
+
+  const insufficientLimit = actor();
+  insufficientLimit.fp = 200;
+  insufficientLimit.maxFp = 149;
+  assert.match(cultivationAvailability(insufficientLimit, "heal").text, /上限不足/);
+
+  const insufficientCurrent = actor();
+  insufficientCurrent.maxFp = 200;
+  insufficientCurrent.fp = 99;
+  assert.match(cultivationAvailability(insufficientCurrent, "heal").text, /内力不足/);
+
+  const healthy = actor();
+  healthy.fp = healthy.maxFp = 200;
+  healthy.maxHp = healthy.hp = 150;
+  assert.match(cultivationAvailability(healthy, "heal").text, /并未受伤/);
+  assert.equal(healWounds(healthy), false);
+
+  const critical = actor();
+  critical.fp = critical.maxFp = 200;
+  critical.maxHp = critical.hp = 49;
+  assert.match(cultivationAvailability(critical, "heal").text, /伤势过重/);
+  assert.equal(healWounds(critical), false);
+
+  const recoverable = actor();
+  recoverable.fp = recoverable.maxFp = 200;
+  recoverable.maxHp = recoverable.hp = 100;
+  assert.equal(cultivationAvailability(recoverable, "heal").ok, true);
+});
+
+test("练功失败会准确区分伤势、兵器、基本功、经验和内力", () => {
+  const unavailable = actor();
+  assert.match(practiceOnce(unavailable, 99).text, /无法练习/);
+
+  const injured = actor();
+  injured.skills["2"] = { level: 100, points: 0 };
+  injured.skills["12"] = { level: 50, points: 0 };
+  assert.match(practiceOnce(injured, 12).text, /身上有伤/);
+
+  const bareWeaponSkill = actor();
+  bareWeaponSkill.skills["4"] = { level: 100, points: 0 };
+  bareWeaponSkill.skills["14"] = { level: 50, points: 0 };
+  bareWeaponSkill.maxHp = bareWeaponSkill.hp = 475;
+  assert.match(practiceOnce(bareWeaponSkill, 14).text, /需要配合相应兵器/);
+
+  const wrongWeapon = structuredClone(bareWeaponSkill);
+  wrongWeapon.weaponId = 15;
+  assert.match(practiceOnce(wrongWeapon, 14).text, /兵器与这门功夫不合/);
+
+  const missingBasic = actor();
+  missingBasic.skills["12"] = { level: 50, points: 0 };
+  missingBasic.maxHp = missingBasic.hp = 475;
+  assert.match(practiceOnce(missingBasic, 12).text, /基本功夫尚未学会/);
+
+  const weakBasic = structuredClone(missingBasic);
+  weakBasic.skills["2"] = { level: 49, points: 0 };
+  assert.match(practiceOnce(weakBasic, 12).text, /基本功夫不足/);
+
+  const noExperience = structuredClone(weakBasic);
+  noExperience.skills["2"].level = 100;
+  noExperience.exp = 0;
+  assert.match(practiceOnce(noExperience, 12).text, /实战经验不足/);
+
+  const noForce = structuredClone(noExperience);
+  noForce.exp = 100000;
+  noForce.maxFp = 1;
+  assert.match(practiceOnce(noForce, 12).text, /内力修为不足/);
+
+  const progressing = structuredClone(noForce);
+  progressing.maxFp = 1000;
+  const result = practiceOnce(progressing, 12);
+  assert.equal(result.ok, true);
+  assert.equal(result.leveled, false);
+  assert.ok(progressing.skills["12"].points > 0);
 });

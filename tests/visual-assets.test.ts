@@ -1,11 +1,29 @@
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import test from "node:test";
+import {
+  characterDirectionColumn,
+  mapTheme,
+  npcCharacterSprite,
+} from "../app/original/world-renderer";
 
-const source = readFileSync(
+const worldSource = readFileSync(
   new URL("../app/original/original-world.tsx", import.meta.url),
   "utf8",
 );
+const rendererSource = readFileSync(
+  new URL("../app/original/world-renderer.tsx", import.meta.url),
+  "utf8",
+);
+const uiSource = readFileSync(
+  new URL("../app/original/world-ui.tsx", import.meta.url),
+  "utf8",
+);
+const ambientRuntimeSource = readFileSync(
+  new URL("../app/original/use-ambient-runtime.ts", import.meta.url),
+  "utf8",
+);
+const source = `${worldSource}\n${rendererSource}\n${uiSource}\n${ambientRuntimeSource}`;
 const worldCss = readFileSync(
   new URL("../app/original/world.css", import.meta.url),
   "utf8",
@@ -14,23 +32,28 @@ const ambientSource = readFileSync(
   new URL("../app/game-core/ambient-npc.ts", import.meta.url),
   "utf8",
 );
+const ambientDialogueSource = readFileSync(
+  new URL("../app/game-core/ambient-dialogue.ts", import.meta.url),
+  "utf8",
+);
 const bubbleSource = readFileSync(
   new URL("../app/game-core/ambient-bubble-layout.ts", import.meta.url),
   "utf8",
 );
 
 test("player left and right directions use screen-facing sprite columns", () => {
-  assert.match(source, /direction === 4 \? 2 : direction === 6 \? 1/);
+  assert.equal(characterDirectionColumn(2), 0);
+  assert.equal(characterDirectionColumn(4), 2);
+  assert.equal(characterDirectionColumn(6), 1);
+  assert.equal(characterDirectionColumn(8), 3);
 });
 
 test("NPC art selection uses original gender age role and description", () => {
-  assert.match(source, /npc\.gender/);
-  assert.match(source, /npc\.age/);
-  assert.match(source, /npc\.type/);
-  assert.match(source, /npc\.des_text/);
-  assert.match(source, /和尚\|大师\|方丈/);
-  assert.match(source, /捕快\|官\|衙门/);
-  assert.match(source, /盗\|匪\|恶\|杀手/);
+  assert.deepEqual(npcCharacterSprite(2), { sheet: 1, row: 0 });
+  assert.deepEqual(npcCharacterSprite(12), { sheet: 1, row: 1 });
+  assert.equal(npcCharacterSprite(3).sheet, 2);
+  assert.equal(npcCharacterSprite(110).portrait, 20);
+  assert.equal(npcCharacterSprite(59).portrait, 21);
 });
 
 test("generic map characters never render an undefined speaker name", () => {
@@ -41,26 +64,59 @@ test("generic map characters never render an undefined speaker name", () => {
 });
 
 test("environment art uses authored themes and entrance road networks", () => {
-  assert.match(source, /function mapTheme/);
-  assert.match(source, /function authoredRoads/);
-  assert.match(source, /function drawAuthoredTerrain/);
-  assert.match(source, /executeMapCommands\(activePage\(event\)\.commands\)\.transfer/);
-  assert.doesNotMatch(source, /wuxia-map-modules-v2\.png/);
-  assert.doesNotMatch(source, /function drawEnvironmentCell/);
-  assert.match(source, /function drawCleanBuilding/);
-  assert.match(source, /function drawStoneFoundation/);
+  assert.equal(mapTheme({ name: "平安小镇" }), "town");
+  assert.equal(mapTheme({ name: "大雪山" }), "snow");
+  assert.equal(mapTheme({ name: "时空的尽头" }), "scifi");
+  assert.equal(mapTheme({ name: "桃花源" }), "forest");
+  assert.match(rendererSource, /function authoredRoads/);
+  assert.match(rendererSource, /function drawAuthoredTerrain/);
+  assert.match(rendererSource, /executeMapCommands\(activePage\(event\)\.commands\)\.transfer/);
+  assert.doesNotMatch(rendererSource, /wuxia-map-modules-v2\.png/);
+  assert.doesNotMatch(rendererSource, /function drawEnvironmentCell/);
+  assert.match(rendererSource, /function drawCleanBuilding/);
+  assert.match(rendererSource, /function drawStoneFoundation/);
 });
 
 test("NPC marker stays above the character face", () => {
-  assert.match(source, /y - 47 - \(pulse \? 2 : 0\)/);
+  assert.match(rendererSource, /y - 47 - \(pulse \? 2 : 0\)/);
 });
 
 test("portraits are shared by dialogue chat status and battle", () => {
-  assert.match(source, /function CharacterPortrait/);
-  assert.match(source, /className="dialog-portrait"/);
-  assert.match(source, /className="chat-portrait"/);
-  assert.match(source, /className="status-portrait"/);
-  assert.match(source, /className="battle-portrait"/);
+  assert.match(rendererSource, /function CharacterPortrait/);
+  assert.match(worldSource, /className="dialog-portrait"/);
+  assert.match(worldSource, /className="chat-portrait"/);
+  assert.match(uiSource, /className="status-portrait"/);
+  assert.match(uiSource, /className="battle-portrait"/);
+});
+
+test("world orchestration consumes modal UI through its public boundary", () => {
+  assert.match(worldSource, /from "\.\/world-ui"/);
+  assert.match(worldSource, /<GameMenu/);
+  assert.match(worldSource, /<BattleView/);
+  assert.match(uiSource, /export function GameMenu/);
+  assert.match(uiSource, /export function BattleView/);
+  assert.doesNotMatch(worldSource, /function useDialogFocus/);
+  assert.doesNotMatch(worldSource, /function CheatInner/);
+});
+
+test("world orchestration consumes the renderer through its public boundary", () => {
+  assert.match(worldSource, /from "\.\/world-renderer"/);
+  assert.match(worldSource, /drawWorld\(ctx,/);
+  assert.match(worldSource, /loadWorldArt\(\)/);
+  assert.doesNotMatch(worldSource, /function drawAuthoredTerrain/);
+  assert.doesNotMatch(worldSource, /function npcCharacterSprite/);
+  assert.doesNotMatch(worldSource, /staticMapCache/);
+});
+
+test("world orchestration consumes ambient NPC runtime through its public hook", () => {
+  assert.match(worldSource, /from "\.\/use-ambient-runtime"/);
+  assert.match(worldSource, /useAmbientRuntime\(\{/);
+  assert.match(ambientRuntimeSource, /export function useAmbientRuntime/);
+  assert.match(ambientRuntimeSource, /interruptAmbientPlayerConversation/);
+  assert.match(ambientRuntimeSource, /ambientControllers\.current\.clear\(\)/);
+  assert.doesNotMatch(worldSource, /const enrichAmbientPlayer/);
+  assert.doesNotMatch(worldSource, /const enrichAmbientNpc/);
+  assert.doesNotMatch(worldSource, /ambientControllers = useRef/);
 });
 
 test("free chat has a fixed history region and continuous automatic dialogue", () => {
@@ -77,7 +133,7 @@ test("a nearby player can be addressed and join ambient NPC conversations", () =
   assert.match(source, /const ids = nearby\.map\(\(npc\) => npc\.eventId\)/);
   assert.match(source, /groupId = nearby\.length > 1/);
   assert.match(source, /buildAutoPlayerPrompt\(target\.npcId/);
-  assert.match(source, /ambientPlayer\.current = \{ npcIds: \[\], replyToNpcId: 0, bubble: ""/);
+  assert.match(source, /createAmbientPlayerState\(\)/);
 });
 
 test("ambient dialogue lifecycle rejects stale requests and ghost NPCs", () => {
@@ -121,8 +177,17 @@ test("历史对话不能在主角离开后复活并继续跟随主角", () => {
 
 test("战报生成期间仍可打开战斗药品且中止战报不会永久锁定", () => {
   assert.match(source, /if \(k === "i"\) setBattleItem\(0\)/);
+  assert.match(source, /if \(controller\.signal\.aborted\)[\s\S]*battleNarrationAbort\.current[\s\S]*loading: false/);
   assert.match(source, /text: item\.text \|\| item\.facts\.join\("\\n"\),\s*loading: false/);
   assert.match(source, /openItem} disabled=\{Boolean\(battle\.finished\)\}/);
+});
+
+test("离开游玩界面或卸载世界会中止自由对话和战报请求", () => {
+  assert.match(source, /runtimeMounted\.current = false/);
+  assert.match(source, /activeChat\?\.abort\(\)/);
+  assert.match(source, /activeNarration\?\.abort\(\)/);
+  assert.match(source, /const returnToTitle = useCallback\([\s\S]*closeNpcChat\(\);[\s\S]*battleNarrationAbort\.current\?\.abort\(\)/);
+  assert.match(source, /onClick=\{returnToTitle\}>主菜单/);
 });
 
 test("战报生成不能锁住普通攻击绝招或退出操作", () => {
@@ -149,7 +214,9 @@ test("group chats cycle through every member and mark the player bubble", () => 
   assert.match(source, /让群聊其余成员随后轮流回应/);
   // 群成员回应时不强制对玩家：一半概率随机指向群里另一个人
   assert.match(source, /Math\.random\(\) < 0\.5/);
-  assert.match(source, /peers\[Math\.floor\(Math\.random\(\) \* peers\.length\)\]\.name/);
+  assert.match(source, /responseTarget = peers\.length[\s\S]*peers\[Math\.floor\(Math\.random\(\) \* peers\.length\)\]/);
+  assert.match(source, /speechTargetName = responseTarget\?\.name \|\| playerName/);
+  assert.match(source, /speechTargetEventId = responseTarget\?\.eventId \|\| 0/);
 });
 
 test("self-talk and action bubbles carry an explicit speaker label", () => {
@@ -168,17 +235,17 @@ test("every directed ambient turn requires one-tile hearing distance", () => {
 });
 
 test("ambient conversations strip narration and request spoken lines only", () => {
-  assert.match(source, /const cleanAmbientSpeech/);
-  assert.match(source, /const cleanAmbientAction/);
+  assert.match(ambientDialogueSource, /function cleanAmbientSpeech/);
+  assert.match(ambientDialogueSource, /function cleanAmbientAction/);
   assert.match(source, /严禁描写天气、风景、地点、环境/);
   assert.match(source, /只生成要求的口头台词，不补充任何背景描写/);
-  assert.match(source, /spokenClauses/);
+  assert.match(ambientDialogueSource, /spokenClauses/);
   assert.match(source, /禁止输出状态、动作、神态/);
   assert.match(source, /严禁描写天气、风景、地点、环境、声音、衣物、身体、动作或神态/);
   assert.match(source, /cleanAmbientSpeech\(line, \[npc\.name, partner\.name\]\)/);
   assert.match(source, /不得再次出现任何参与者姓名/);
   assert.match(source, /绝对不得输出或讨论 to、谁对谁/);
-  assert.match(source, /\\s\+to\\s\+/);
+  assert.match(ambientDialogueSource, /\\s\+to\\s\+/);
 });
 
 test("ambient performance text is generated without canned fallback lines", () => {
@@ -192,7 +259,8 @@ test("ambient performance text is generated without canned fallback lines", () =
 
 test("LLM sessions use a player-first bounded priority queue", () => {
   assert.match(source, /activeNpcOnlySessions/);
-  assert.match(source, /Math\.max\(0, 2 - activeNpcOnlySessions\)/);
+  assert.match(source, /ambientConcurrency\.current = loadLlmSettings\(\)\.concurrency/);
+  assert.match(source, /maxConcurrency - 1 - activeNpcOnlySessions/);
   assert.match(source, /isPlayerWork\(item\) \? 0/);
   assert.match(source, /sole dispatcher for ambient LLM work/);
   assert.match(source, /now - lastPlayerMove\.current >= 450/);
@@ -266,7 +334,9 @@ test("world canvas renders characters props bubbles and text at high resolution"
   assert.match(source, /ctx\.setTransform\(width \/ W, 0, 0, height \/ H/);
   assert.match(source, /ctx\.imageSmoothingEnabled = true/);
   assert.match(source, /ctx\.imageSmoothingQuality = "high"/);
-  assert.match(source, /observer\.disconnect\(\);[\s\S]*cancelAnimationFrame\(raf\);[\s\S]*\}, \[screen\]\);/);
+  assert.match(worldSource, /observer\.disconnect\(\)/);
+  assert.match(worldSource, /cancelAnimationFrame\(raf\)/);
+  assert.match(worldSource, /drawWorld\(ctx, stateRef\.current, ambientWorld\.current, ambientPlayer\.current\)/);
   assert.doesNotMatch(worldCss, /image-rendering:\s*pixelated/);
 });
 

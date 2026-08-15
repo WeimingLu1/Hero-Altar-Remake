@@ -1,3 +1,10 @@
+import {
+  readJsonStorage,
+  writeJsonStorage,
+  type StorageBackend,
+  type StorageResult,
+} from "./safe-storage";
+
 export const LM_STUDIO_ENDPOINT = "http://127.0.0.1:1234";
 export const LM_STUDIO_MODEL = "qwen3.6-35b-a3b-uncensored-hauhaucs-aggressive";
 export const NPC_MAX_OUTPUT_TOKENS = 512;
@@ -7,7 +14,6 @@ export const LLM_REQUEST_TIMEOUT_MS = 15_000;
 export const LLM_SETTINGS_KEY = "rmxp-hero-llm-settings-v1";
 
 export type LlmSettings = {
-  provider: "lm-studio" | "openai-compatible";
   endpoint: string;
   model: string;
   timeoutMs: number;
@@ -15,7 +21,6 @@ export type LlmSettings = {
 };
 
 export const DEFAULT_LLM_SETTINGS: LlmSettings = {
-  provider: "lm-studio",
   endpoint: LM_STUDIO_ENDPOINT,
   model: LM_STUDIO_MODEL,
   timeoutMs: LLM_REQUEST_TIMEOUT_MS,
@@ -24,6 +29,7 @@ export const DEFAULT_LLM_SETTINGS: LlmSettings = {
 
 export function normalizeLlmSettings(value: unknown): LlmSettings {
   const source = value && typeof value === "object" ? value as Partial<LlmSettings> : {};
+  const requestedConcurrency = Number(source.concurrency);
   let endpoint = typeof source.endpoint === "string" ? source.endpoint.trim() : "";
   try {
     const url = new URL(endpoint || LM_STUDIO_ENDPOINT);
@@ -33,30 +39,38 @@ export function normalizeLlmSettings(value: unknown): LlmSettings {
     endpoint = LM_STUDIO_ENDPOINT;
   }
   return {
-    provider: source.provider === "openai-compatible" ? source.provider : "lm-studio",
     endpoint,
     model: typeof source.model === "string" && source.model.trim()
       ? source.model.trim().slice(0, 160)
       : LM_STUDIO_MODEL,
     timeoutMs: Math.max(3_000, Math.min(60_000, Number(source.timeoutMs) || LLM_REQUEST_TIMEOUT_MS)),
-    concurrency: Math.max(1, Math.min(3, Math.trunc(Number(source.concurrency) || 3))),
+    concurrency: Number.isFinite(requestedConcurrency)
+      ? Math.max(1, Math.min(3, Math.trunc(requestedConcurrency)))
+      : 3,
   };
 }
 
-export function loadLlmSettings(): LlmSettings {
-  if (typeof localStorage === "undefined") return DEFAULT_LLM_SETTINGS;
-  try {
-    return normalizeLlmSettings(JSON.parse(localStorage.getItem(LLM_SETTINGS_KEY) || "null"));
-  } catch {
-    return DEFAULT_LLM_SETTINGS;
-  }
+export function loadLlmSettingsResult(
+  storage?: StorageBackend | null,
+): StorageResult<LlmSettings> {
+  const stored = readJsonStorage(LLM_SETTINGS_KEY, storage);
+  return stored.ok
+    ? { ok: true, value: normalizeLlmSettings(stored.value) }
+    : stored;
 }
 
-export function saveLlmSettings(value: unknown) {
+export function loadLlmSettings(storage?: StorageBackend | null): LlmSettings {
+  const stored = loadLlmSettingsResult(storage);
+  return stored.ok ? stored.value : DEFAULT_LLM_SETTINGS;
+}
+
+export function saveLlmSettings(
+  value: unknown,
+  storage?: StorageBackend | null,
+): StorageResult<LlmSettings> {
   const settings = normalizeLlmSettings(value);
-  if (typeof localStorage !== "undefined")
-    localStorage.setItem(LLM_SETTINGS_KEY, JSON.stringify(settings));
-  return settings;
+  const written = writeJsonStorage(LLM_SETTINGS_KEY, settings, storage);
+  return written.ok ? { ok: true, value: settings } : written;
 }
 
 export type ChatMessage = { role: "user" | "assistant"; content: string };
@@ -87,6 +101,13 @@ export function lmStudioTransportUrl(hostname?: string) {
     : `${LM_STUDIO_ENDPOINT}/api/v1/chat`;
 }
 
+function forwardAbortSignal(signal: AbortSignal | undefined, controller: AbortController) {
+  const forward = () => controller.abort(signal?.reason);
+  if (signal?.aborted) forward();
+  else signal?.addEventListener("abort", forward, { once: true });
+  return () => signal?.removeEventListener("abort", forward);
+}
+
 export async function probeLlmHealth(signal?: AbortSignal, supplied?: LlmSettings) {
   const settings = supplied || loadLlmSettings();
   const localPage = typeof location !== "undefined" &&
@@ -94,8 +115,7 @@ export async function probeLlmHealth(signal?: AbortSignal, supplied?: LlmSetting
   const useProxy = localPage && settings.endpoint === LM_STUDIO_ENDPOINT;
   const url = useProxy ? "/api/lm-studio" : `${settings.endpoint}/api/v1/models`;
   const controller = new AbortController();
-  const forwardAbort = () => controller.abort(signal?.reason);
-  signal?.addEventListener("abort", forwardAbort, { once: true });
+  const stopForwardingAbort = forwardAbortSignal(signal, controller);
   const timeout = globalThis.setTimeout(() => controller.abort(), 2_500);
   try {
     const response = await fetch(url, { signal: controller.signal, cache: "no-store" });
@@ -104,7 +124,7 @@ export async function probeLlmHealth(signal?: AbortSignal, supplied?: LlmSetting
     return false;
   } finally {
     globalThis.clearTimeout(timeout);
-    signal?.removeEventListener("abort", forwardAbort);
+    stopForwardingAbort();
   }
 }
 
@@ -132,8 +152,7 @@ export async function streamNpcReply(options: {
   const proxy = transportUrl.startsWith("/");
   const nextSpeaker = options.nextSpeaker?.trim() || "NPC";
   const controller = new AbortController();
-  const abortFromCaller = () => controller.abort(options.signal?.reason);
-  options.signal?.addEventListener("abort", abortFromCaller, { once: true });
+  const stopForwardingAbort = forwardAbortSignal(options.signal, controller);
   const timeout = globalThis.setTimeout(
     () => controller.abort(new Error("LM Studio 请求超时")),
     options.timeoutMs ?? settings.timeoutMs,
@@ -203,6 +222,6 @@ export async function streamNpcReply(options: {
     return answer.trim();
   } finally {
     globalThis.clearTimeout(timeout);
-    options.signal?.removeEventListener("abort", abortFromCaller);
+    stopForwardingAbort();
   }
 }

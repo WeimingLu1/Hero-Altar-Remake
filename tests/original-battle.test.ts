@@ -8,8 +8,11 @@ import {
   burningDamage,
   diminishingBattleResource,
   endSpar,
+  specialRound,
 } from "../app/game-core/original-battle";
 import type { SceneActorState } from "../app/game-core/scene-event";
+import { originalTables } from "../app/game-core/original-data";
+import { battleSpecials } from "../app/game-core/special-system";
 const actor = (): SceneActorState => ({
   inventory: {},
   gold: 100,
@@ -138,4 +141,197 @@ test("生死战失败不会套用切磋的自动回血", () => {
   battle.finished = "lose";
   endSpar(a, battle);
   assert.equal(a.hp, 0);
+});
+
+const weaponForKungfuType: Record<number, number> = {
+  3: 15,
+  4: 8,
+  5: 25,
+  6: 21,
+};
+
+function specialActor(specialId: number) {
+  const a = actor();
+  a.hp = a.maxHp = 1_000_000;
+  a.fp = a.maxFp = 100_000;
+  a.mp = a.maxMp = 100_000;
+  a.exp = 10_000_000;
+  a.str = a.agi = a.int = a.bon = 100;
+  a.baseStr = a.baseAgi = a.baseInt = a.baseBon = 100;
+  a.fpPlus = 100;
+  a.mpPlus = 100;
+  a.skillUse = [0, 0, 0, 0, 0, 0, 0];
+  for (let id = 1; id <= 60; id++)
+    a.skills[String(id)] = { level: 255, points: 0 };
+
+  const owner = originalTables.kungfus.findIndex((record) =>
+    ((record?.skill as number[]) || []).includes(specialId),
+  );
+  assert.ok(owner > 0, `special ${specialId} should have a kungfu owner`);
+  const requirements =
+    (originalTables.skills[specialId]?.require as number[][] | undefined) || [];
+  const equip = (id: number) => {
+    const type = Number(originalTables.kungfus[id]?.type || 0);
+    if (type === 1) a.skillUse[3] = id;
+    else if (type === 2) a.skillUse[0] = id;
+    else if (type >= 3 && type <= 7) a.skillUse[1] = id;
+    else if (type === 8) a.skillUse[5] = id;
+    else if (type === 9) a.skillUse[2] = id;
+    else if (type === 10) a.skillUse[4] = id;
+  };
+  equip(owner);
+  for (const [id] of requirements) if (id > 0) equip(id);
+
+  const weaponSkill = a.skillUse[1];
+  if (weaponSkill > 0) {
+    const type = Number(originalTables.kungfus[weaponSkill]?.type || 0);
+    a.weaponId = weaponForKungfuType[type] || 15;
+    a.inventory[`2:${a.weaponId}`] = 1;
+  }
+  return a;
+}
+
+const sturdyEnemy = {
+  ...originalTables.enemies[1],
+  name: "试招木桩",
+  hp: 1_000_000,
+  maxhp: 1_000_000,
+  fp: 3000,
+  maxfp: 3000,
+  mp: 3000,
+  maxmp: 3000,
+  exp: 100_000,
+  fp_plus: 20,
+  base_hit: 0,
+  base_eva: 0,
+  atk: 0,
+  pdef: 0,
+  agi: 20,
+  int: 20,
+  str: 20,
+};
+
+test("四十项绝招都能通过真实装备条件进入对应战斗状态转换", () => {
+  for (let specialId = 1; specialId <= 40; specialId++) {
+    const a = specialActor(specialId);
+    const available = battleSpecials(a).find((item) => item.id === specialId);
+    assert.equal(available?.enabled, true, `${specialId}: ${available?.reason}`);
+    const beforeFp = a.fp, beforeMp = a.mp, beforeHp = a.hp;
+    const battle = specialRound(
+      beginOriginalBattle(1, 1000 + specialId, sturdyEnemy),
+      a,
+      specialId,
+    );
+    assert.equal(battle.turn, 1, `special ${specialId}`);
+    assert.ok(battle.log.length >= 3, `special ${specialId}`);
+    assert.ok(a.fp <= beforeFp, `special ${specialId} force cost`);
+    assert.ok(a.mp <= beforeMp, `special ${specialId} magic cost`);
+    assert.ok(a.hp <= beforeHp, `special ${specialId} health cost`);
+  }
+});
+
+test("战斗动作在已结束、忙乱和不可用绝招状态下保持安全", () => {
+  const a = actor();
+  const finished = beginOriginalBattle(1, 3);
+  finished.finished = "win";
+  assert.deepEqual(battleRound(finished, a), finished);
+  assert.deepEqual(battleItemRound(finished, a, "不应使用"), finished);
+  assert.deepEqual(specialRound(finished, a, 1), finished);
+
+  const unavailable = specialRound(beginOriginalBattle(1, 3), a, 40);
+  assert.match(unavailable.log.at(-1) || "", /无法施展/);
+  assert.equal(unavailable.turn, 0);
+
+  const busyActor = specialActor(1), busy = beginOriginalBattle(1, 4, sturdyEnemy);
+  busy.playerBusy = 2;
+  const delegated = specialRound(busy, busyActor, 1);
+  assert.equal(delegated.turn, 1);
+  assert.ok(delegated.log.some((line) => line.includes("无法出手")));
+});
+
+test("逃跑成功与失败都遵循敏捷和逐次补偿并在失败后还手", () => {
+  const swift = actor();
+  swift.baseAgi = swift.agi = 100;
+  const successEnemy = { ...sturdyEnemy, agi: 0, base_agi: 0 };
+  const escaped = attemptEscape(
+    beginOriginalBattle(1, 7, successEnemy, "lethal"),
+    swift,
+  );
+  assert.equal(escaped.escaped, true);
+
+  const slow = actor();
+  slow.hp = slow.maxHp = 100_000;
+  slow.baseAgi = slow.agi = 1;
+  const failureEnemy = { ...sturdyEnemy, agi: 9999, base_agi: 9999 };
+  const failed = attemptEscape(
+    beginOriginalBattle(1, 7, failureEnemy, "lethal"),
+    slow,
+  );
+  assert.equal(failed.escaped, false);
+  assert.equal(failed.battle.escapeFactor, 10);
+  assert.ok(failed.battle.log.some((line) => line.includes("想跑")));
+});
+
+test("回合结算统一推进冷却、增益、控制、苍鹰和灼烧状态", () => {
+  const a = specialActor(29);
+  const battle = beginOriginalBattle(1, 1, sturdyEnemy);
+  battle.cooldowns["1"] = 1;
+  battle.buff = {
+    hit: 10,
+    str: 10,
+    eva: 10,
+    agi: 10,
+    atk: 10,
+    pdef: 10,
+    fenshen: 10,
+    turns: 1,
+  };
+  battle.playerBusy = 2;
+  battle.enemyDebuff = {
+    hit: -10,
+    busy: 2,
+    turns: 1,
+    eagleTurns: 1,
+    burnTurns: 1,
+  };
+  const result = battleItemRound(battle, a, "运功调息。");
+  assert.equal(result.cooldowns["1"], undefined);
+  assert.deepEqual(result.buff, {
+    hit: 0,
+    str: 0,
+    eva: 0,
+    agi: 0,
+    atk: 0,
+    pdef: 0,
+    fenshen: 0,
+    turns: 0,
+  });
+  assert.equal(result.playerBusy, 1);
+  assert.equal(result.enemyDebuff.hit, 0);
+  assert.equal(result.enemyDebuff.busy, 1);
+  assert.equal(result.enemyDebuff.eagleTurns, 0);
+  assert.equal(result.enemyDebuff.burnTurns, 0);
+  assert.ok(result.log.some((line) => /苍鹰|灼烧/.test(line)));
+});
+
+test("吸血大法仅在普通攻击造成伤害后恢复实际缺失气血", () => {
+  let observed = false;
+  for (let seed = 1; seed <= 100 && !observed; seed++) {
+    const a = specialActor(1);
+    a.skillUse[6] = 56;
+    a.skills["56"].level = 100;
+    a.hp = a.maxHp - 1000;
+    const result = battleRound(beginOriginalBattle(1, seed, sturdyEnemy), a);
+    observed = result.log.some((line) => line.includes("吸血大法吸回"));
+  }
+  assert.equal(observed, true);
+});
+
+test("切磋落败按原作恢复最低气血", () => {
+  const a = actor(), battle = beginOriginalBattle(1, 1);
+  a.hp = 0;
+  a.maxHp = 95;
+  battle.finished = "lose";
+  endSpar(a, battle);
+  assert.equal(a.hp, 9);
 });

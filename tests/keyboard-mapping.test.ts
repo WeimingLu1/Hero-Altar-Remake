@@ -9,9 +9,19 @@ import {
   KEYBOARD_HELP,
   menuTabFromKey,
 } from "../app/original/keybindings";
+import { resolveGameKey } from "../app/game-core/game-input";
 
-const source = readFileSync(
+const worldSource = readFileSync(
   new URL("../app/original/original-world.tsx", import.meta.url),
+  "utf8",
+);
+const uiSource = readFileSync(
+  new URL("../app/original/world-ui.tsx", import.meta.url),
+  "utf8",
+);
+const source = `${worldSource}\n${uiSource}`;
+const rendererSource = readFileSync(
+  new URL("../app/original/world-renderer.tsx", import.meta.url),
   "utf8",
 );
 
@@ -40,8 +50,13 @@ test("正式版不绑定字母 F 或 F1-F12 功能键", () => {
 });
 
 test("中文输入法组合输入不会被全局键盘处理抢占", () => {
-  assert.match(source, /if \(e\.isComposing \|\| e\.keyCode === 229\) return/);
-  assert.match(source, /target\?\.tagName === "INPUT"/);
+  const context = { screen: "play" } as const;
+  assert.equal(resolveGameKey({ key: "e", isComposing: true }, context).layer, "composition");
+  assert.equal(resolveGameKey({ key: "e", keyCode: 229 }, context).command, null);
+  assert.deepEqual(
+    resolveGameKey({ key: "Escape", target: { tagName: "INPUT" } }, context).command,
+    { type: "blur-editor" },
+  );
   assert.match(source, /e\.nativeEvent\.isComposing/);
 });
 
@@ -50,10 +65,24 @@ test("战斗结束后的按钮和确认键统一进入战果处理", () => {
   assert.match(source, /leave=\{leaveBattle\}/);
 });
 
+test("所有行囊操作都先确认，剧情说明的鼠标和键盘推进共用入口", () => {
+  assert.match(
+    worldSource,
+    /const openBagEntry = useCallback\([\s\S]*setItemConfirm\(\{ entry, index: 0 \}\)/,
+  );
+  assert.doesNotMatch(worldSource, /entry\.kind === 2 \|\| entry\.kind === 3/);
+  assert.match(worldSource, /const advanceEventText = useCallback/);
+  assert.match(
+    worldSource,
+    /resolved\.layer === "dialogue"[\s\S]*advanceEventText\(\)/,
+  );
+  assert.match(worldSource, /onClick=\{advanceEventText\}/);
+});
+
 test("被砍头的地图人物会变成不可重复互动的遗骸", () => {
-  assert.match(source, /kind: "corpse"/);
+  assert.match(rendererSource, /kind: "corpse"/);
   assert.match(source, /kind !== "corpse"/);
-  assert.match(source, /drawCorpseMarker/);
+  assert.match(rendererSource, /drawCorpseMarker/);
 });
 
 test("连续请教和修炼时仍可用 W/S 停止并切换项目", () => {

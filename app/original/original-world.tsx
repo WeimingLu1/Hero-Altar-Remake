@@ -1,40 +1,16 @@
 "use client";
 import { useCallback, useEffect, useRef, useState } from "react";
 import {
-  activePage,
   canMoveBetween,
-  friendlyEventName,
   getOriginalMap,
-  passable,
   triggerEvent,
-  type MapEvent,
-  type OriginalMap,
 } from "../game-core/original-world";
-import {
-  ambientNpcAt,
-  ambientCanHear,
-  ambientNpcInViewport,
-  ambientViewportBounds,
-  createAmbientWorld,
-  resetAmbientSessions,
-  tickAmbientWorld,
-  type AmbientBubbleKind,
-  type AmbientNpc,
-  type AmbientWorld,
-} from "../game-core/ambient-npc";
-import {
-  drawAmbientBubble,
-  drawConversationCard,
-  layoutConversationCard,
-  resolveAmbientBubbleLayout,
-} from "../game-core/ambient-bubble-layout";
+import { ambientNpcAt } from "../game-core/ambient-npc";
 import {
   applySceneResolution,
   resolveSceneEvent,
-  type SceneActorState,
 } from "../game-core/scene-event";
 import {
-  executeMapCommands,
   parseSceneGate,
   selectSceneEvent,
 } from "../game-core/rmxp-events";
@@ -70,21 +46,15 @@ import {
 } from "../game-core/original-battle";
 import {
   bagEntries,
-  derivedStats,
-  fullHp,
-  maxFood,
-  maxWater,
   activateEntry,
   activateBattleEntry,
   battleConsumableEntries,
   discardEntry,
-  equipmentCategory,
   type BagEntry,
 } from "../game-core/inventory-system";
 import {
   effectiveLevel,
   equipSkill,
-  learnedSkills,
   toggleParry,
 } from "../game-core/skill-system";
 import { battleSpecials } from "../game-core/special-system";
@@ -100,13 +70,11 @@ import {
   hiddenQuestOffer,
   finishStoneTask,
   finishWantedTask,
-  freshTaskState,
   giveTanReward,
   startStoneTask,
   startTanQuest,
   taskJournal,
   wantedEnemyRecord,
-  type TaskState,
 } from "../game-core/task-system";
 import {
   cultivationAvailability,
@@ -123,8 +91,6 @@ import {
   buyFurniture,
   clearFurniture,
   createSword,
-  customSwordBonus,
-  furnitureNames,
   reforgeSword,
   swordTypes,
   upgradeRoom,
@@ -133,40 +99,31 @@ import { settleVictoryLoot } from "../game-core/battle-settlement";
 import {
   adjustCheatSkill,
   adjustCheatStat,
-  addCheatInventory,
   applyCheatQuick,
   cheatQuickOptions,
-  cheatSchools,
   cheatStats,
-  cheatStatMaximum,
-  cheatTeachers,
   maxCheatSkill,
   maxCheatStat,
-  removeCheatSkill,
-  reviveCheatNpc,
-  setCheatIdentity,
-  setCheatInventory,
   setCheatSkill,
-  setCheatStat,
-  type CheatInventoryKind,
   type CheatQuickAction,
 } from "../game-core/cheat-system";
-import {
-  actorStatusProfile,
-  levelTier,
-  levelTitle,
-} from "../game-core/status-system";
-import { buildNpcSystemPrompt, npcConversationFacts, npcLore } from "../game-core/npc-lore";
+import { actorStatusProfile } from "../game-core/status-system";
+import { buildNpcSystemPrompt, npcLore } from "../game-core/npc-lore";
 import {
   buildBattleNarrationFacts,
   buildBattleNarrationPrompt,
   type BattleNarrative,
   type BattleNarrationEvent,
 } from "../game-core/battle-narration";
+import { streamNpcReply, type ChatMessage } from "../game-core/lm-studio";
+import { parseNpcDialogue } from "../game-core/ambient-dialogue";
+import { FixedStepClock } from "../game-core/fixed-step-clock";
 import {
-  streamNpcReply,
-  type ChatMessage,
-} from "../game-core/lm-studio";
+  normalizeGameKey,
+  resolveGameKey,
+  type InputContext,
+} from "../game-core/game-input";
+import { readJsonStorage, writeJsonStorage } from "../game-core/safe-storage";
 import { MAX_PLAYER_EXP } from "../game-core/progression-limits";
 import {
   fresh,
@@ -175,16 +132,7 @@ import {
   parseSave,
   type WorldSave,
 } from "../game-core/save-system";
-import { isCurrentKillTarget } from "../game-core/kill-target";
-import {
-  npcVisibleWithInventory,
-  tokenGateState,
-} from "../game-core/hidden-npc";
 import { canObtainCaihua } from "../game-core/actor-conditions";
-import {
-  kungfuSchoolId,
-  kungfuSchoolName,
-} from "../game-core/kungfu-school";
 import {
   isCancelKey,
   isConfirmKey,
@@ -193,282 +141,39 @@ import {
   KEYBOARD_HELP,
   menuTabFromKey,
 } from "./keybindings";
+import {
+  CharacterPortrait,
+  drawWorld,
+  eventVisual,
+  loadWorldArt,
+  npcDisplayName,
+  WORLD_HEIGHT as H,
+  WORLD_WIDTH as W,
+} from "./world-renderer";
+import {
+  allCheatSkills,
+  Arcade,
+  BattleView,
+  Choice,
+  GameMenu,
+  LifeMenu,
+  organizedBagEntries,
+  organizedSkills,
+  SpecialPicker,
+  StatusBar,
+  type ArcadeState,
+  type LifeState,
+} from "./world-ui";
+import {
+  buildAutoPlayerPrompt,
+  useAmbientRuntime,
+} from "./use-ambient-runtime";
 import "./world.css";
 import "./choice.css";
 import "./battle.css";
 import "./special.css";
 import "./menu.css";
 
-const W = 640,
-  H = 480,
-  T = 32;
-
-type WuxiaArt = {
-  characters: Array<HTMLImageElement | null>;
-  natureOverlays: HTMLImageElement | null;
-  interiorOverlays: HTMLImageElement | null;
-};
-type CharacterSprite = { sheet: number; row: number; portrait?: number };
-const wuxiaArt: WuxiaArt = {
-  characters: [null, null, null, null, null, null, null],
-  natureOverlays: null,
-  interiorOverlays: null,
-};
-const characterSheetNames = [
-  "wuxia-characters-v1.webp",
-  "wuxia-characters-ages-v1.webp",
-  "wuxia-characters-townsfolk-v1.webp",
-  "wuxia-characters-factions-v1.webp",
-  "wuxia-characters-women-v1.webp",
-  "wuxia-characters-faction-signatures-v1.webp",
-  "wuxia-characters-flower-variants-v1.webp",
-] as const;
-const loadingCharacterSheets = new Set<number>();
-let artRevision = 0;
-
-function loadWuxiaArt() {
-  const load = (src: string, ready: (image: HTMLImageElement) => void) => {
-    const image = new Image();
-    image.decoding = "async";
-    image.onload = () => ready(image);
-    image.src = src;
-  };
-  const loadCharacterSheet = (index: number) => {
-    if (wuxiaArt.characters[index] || loadingCharacterSheets.has(index)) return;
-    loadingCharacterSheets.add(index);
-    load(`/game-assets/generated/${characterSheetNames[index]}`, (image) => {
-      wuxiaArt.characters[index] = image;
-      loadingCharacterSheets.delete(index);
-      artRevision += 1;
-      staticMapCache.clear();
-    });
-  };
-  ensureCharacterSheet = loadCharacterSheet;
-  // The player sheet is required immediately. NPC sheets are requested only
-  // when a visible character actually uses them.
-  loadCharacterSheet(0);
-  load("/game-assets/redrawn/overlay-nature-v3.webp", (image) => {
-    wuxiaArt.natureOverlays = image;
-    artRevision += 1;
-    staticMapCache.clear();
-  });
-  load("/game-assets/redrawn/overlay-interior-v3.webp", (image) => {
-    wuxiaArt.interiorOverlays = image;
-    artRevision += 1;
-    staticMapCache.clear();
-  });
-}
-
-let ensureCharacterSheet: (index: number) => void = () => {};
-
-function npcCharacterSprite(id: number, fallbackName = ""): CharacterSprite {
-  const npc = id > 0 ? npcRecord(id) : {},
-    name = String(npc.name || fallbackName),
-    description = ((npc.des_text as string[]) || []).join(""),
-    text = `${name}${description}`,
-    age = Number(npc.age || 30),
-    female = Number(npc.gender || 0) === 1,
-    merchant = Number(npc.type || 0) === -1 || /老板|掌柜|商人|店|贩|卖/.test(text);
-  // Age is a physical identity constraint, not a styling hint. Keep children and
-  // elders recognisable even when their descriptions also mention a faction.
-  if (age < 18) return { sheet: 1, row: female ? 1 : 0 };
-  if (age >= 55) return { sheet: 1, row: female ? 3 : 2 };
-  const specialPortraits: Record<string, number> = {
-    阿绣: 20, 李青照: 21, 柳如是: 22, 聂隐娘: 23, 入画: 24,
-    唐晚词: 25, 李师师: 26, 薛涛: 27, 王璁儿: 28, 唐思儿: 29,
-    薛千柔: 32, 白瑞德: 33,
-  };
-  if (specialPortraits[name] !== undefined) {
-    if (/王璁儿|唐思儿/.test(name)) return { sheet: 5, row: 1, portrait: specialPortraits[name] };
-    if (name === "薛千柔") return { sheet: 5, row: 3, portrait: 32 };
-    if (name === "白瑞德") return { sheet: 0, row: 2, portrait: 33 };
-    const flowerRows: Record<string, number> = { 阿绣: 0, 李青照: 1, 柳如是: 2, 聂隐娘: 3 };
-    return { sheet: 6, row: flowerRows[name] ?? hashIndex(name, 4), portrait: specialPortraits[name] };
-  }
-  if (/花间派|李青照|名妓|侍女|剑器之舞|红拂女/.test(text) && female)
-    return { sheet: 6, row: hashIndex(name, 4), portrait: 20 + hashIndex(name, 8) };
-  if (/红莲教/.test(text))
-    return female
-      ? { sheet: 5, row: 1, portrait: 28 + hashIndex(name, 2) }
-      : { sheet: 3, row: 0, portrait: 31 };
-  if (/武当/.test(text)) return { sheet: 5, row: 2, portrait: 30 };
-  if (/雪山/.test(text))
-    return female ? { sheet: 5, row: 3, portrait: 32 } : { sheet: 0, row: 2, portrait: 33 };
-  if (/冰火岛/.test(text))
-    return female ? { sheet: 4, row: 0, portrait: 34 } : { sheet: 3, row: 0, portrait: 35 };
-  if (female) {
-    if (/师太|尼姑|女尼|居士/.test(text)) return { sheet: 4, row: 2 };
-    if (/女侠|掌门|剑|杀手|教主|寨主|护法|武功/.test(text))
-      return { sheet: 4, row: 0 };
-    if (merchant) return { sheet: 4, row: 1 };
-    if (/厨|妇人|婆|工|婶|嫂/.test(text))
-      return { sheet: 4, row: 3 };
-    return { sheet: 0, row: hashIndex(name, 2) ? 1 : 3 };
-  }
-  if (/和尚|大师|方丈|禅师|罗汉|僧/.test(text)) return { sheet: 3, row: 2 };
-  if (/道长|真人|道士|天师|武当|茅山/.test(text)) return { sheet: 3, row: 3 };
-  if (/捕快|官|衙门|村长|管事|将军/.test(text)) return { sheet: 2, row: 0 };
-  if (merchant) return { sheet: 2, row: 1 };
-  if (/公子|书生|秀才|先生|教书|文士|扇/.test(text)) return { sheet: 2, row: 2 };
-  if (/厨|工|铁匠|石料|樵夫|伙计|船夫/.test(text)) return { sheet: 2, row: 3 };
-  if (/盗|匪|恶|杀手|喽啰|山贼|强人/.test(text)) return { sheet: 3, row: 1 };
-  if (/大侠|掌门|剑|刀|教主|寨主|护法|武师|武功/.test(text))
-    return { sheet: 3, row: 0 };
-  return { sheet: 0, row: hashIndex(name, 2) ? 2 : 0 };
-}
-
-function CharacterPortrait({
-  npcId,
-  name = "",
-  playerGender,
-  className = "",
-}: {
-  npcId?: number;
-  name?: string;
-  playerGender?: number;
-  className?: string;
-}) {
-  const sprite =
-      playerGender === undefined
-        ? npcCharacterSprite(npcId || 0, name)
-        : { sheet: 0, row: playerGender ? 1 : 0 },
-    index = sprite.portrait ?? sprite.sheet * 4 + sprite.row,
-    factionPortrait = index >= 20,
-    localIndex = factionPortrait ? index - 20 : index,
-    columns = factionPortrait ? 4 : 5,
-    column = localIndex % columns,
-    row = Math.floor(localIndex / columns);
-  return (
-    <div
-      className={`character-portrait ${className}`.trim()}
-      role="img"
-      aria-label={`${name || "人物"}立绘`}
-      style={{
-        backgroundImage: factionPortrait
-          ? 'url("/game-assets/generated/wuxia-faction-portraits-v1.webp")'
-          : undefined,
-        backgroundSize: factionPortrait ? "400% 400%" : undefined,
-        backgroundPosition: `${(column / (columns - 1)) * 100}% ${(row / 3) * 100}%`,
-      }}
-    />
-  );
-}
-
-const organizedBagEntries = (actor: SceneActorState) =>
-  bagEntries(actor).sort(
-    (a, b) =>
-      a.category.localeCompare(b.category, "zh-CN") ||
-      Number(b.equipped) - Number(a.equipped) ||
-      a.id - b.id,
-  );
-const organizedSkills = (actor: SceneActorState) =>
-  learnedSkills(actor).sort((a, b) => a.type - b.type || a.id - b.id);
-const allCheatSkills = originalTables.kungfus
-  .flatMap((skill, id) =>
-    skill
-      ? [{ id, name: String(skill.name || id), type: Number(skill.type || 0) }]
-      : [],
-  )
-  .sort(
-    (a, b) => kungfuSchoolId(a.id) - kungfuSchoolId(b.id) || a.id - b.id,
-  );
-// 秘技「物品装备」的完整目录：防具按原作互斥装备槽分组，
-// 行内标记装备状态，不再复制一份“已装备”分组。
-const cheatCatalogGroups = (
-  kind: CheatInventoryKind,
-  equippedIds: number[],
-) => {
-  const table =
-      kind === 1
-        ? originalTables.items
-        : kind === 2
-          ? originalTables.weapons
-          : originalTables.armors,
-    equipped = new Set(equippedIds),
-    groups = new Map<
-      string,
-      Array<{
-        id: number;
-        name: string;
-        bonus: string;
-        description: string;
-        equipped: boolean;
-      }>
-    >();
-  table.forEach((record, id) => {
-    if (!record) return;
-    const name = String(record.name || id),
-      description = String(record.description || "");
-    let group: string, bonus: string;
-    if (kind === 1) {
-      const effects: string[] = [];
-      for (const [key, label] of [
-        ["add_food", "食物"],
-        ["add_water", "饮水"],
-        ["add_hp", "气血"],
-        ["add_mhp", "伤限"],
-        ["add_fp", "内力"],
-        ["add_mfp", "内力上限"],
-        ["add_mp", "法力"],
-        ["add_mmp", "法力上限"],
-      ] as const) {
-        const value = (record[key] as [number, number] | undefined)?.[1];
-        if (value) effects.push(`${label}+${value}`);
-      }
-      group = record.is_book
-        ? "秘籍"
-        : record.type === 0
-          ? "食物"
-          : record.type === 1
-            ? "丹药"
-            : "杂物";
-      if (record.is_book) {
-        const teaches = ((record.skill_list as number[][]) || []).map(
-          ([sid, lv]) => `${originalTables.kungfus[sid]?.name || sid}${lv}`,
-        );
-        bonus = teaches.length ? `研读：${teaches.join("、")}` : "无效果";
-      } else bonus = effects.length ? effects.join(" · ") : "无效果";
-    } else {
-      const stats: string[] = [];
-      for (const [key, label] of [
-        ["add_atk", "攻击"],
-        ["add_def", "防御"],
-        ["add_hit", "命中"],
-        ["add_eva", "闪避"],
-        ["add_str", "膂力"],
-        ["add_agi", "敏捷"],
-        ["add_int", "悟性"],
-        ["add_bon", "根骨"],
-      ] as const) {
-        const value = Number(record[key] || 0);
-        if (value) stats.push(`${label}${value > 0 ? "+" : ""}${value}`);
-      }
-      bonus = stats.length ? stats.join(" · ") : "无常驻属性";
-      group =
-        equipmentCategory(kind, record);
-    }
-    const list = groups.get(group) || [];
-    list.push({ id, name, bonus, description, equipped: equipped.has(id) });
-    groups.set(group, list);
-  });
-  return [...groups.entries()].map(([name, items]) => ({
-    name,
-    items,
-  }));
-};
-type ArcadeState =
-  | { kind: "select"; index: number }
-  | { kind: "dance"; dir: number; count: number; score: number }
-  | {
-      kind: "ball";
-      step: 1 | 2 | 3;
-      x: number;
-      dir: 1 | 2;
-      score: number;
-      fail: number;
-      flight: number;
-    };
-type LifeState = { kind: "forge" | "home"; index: number };
 export type LaunchScreen = "title" | "intro" | "create" | "help" | "play";
 type CreatorState = {
   step: 1 | 2;
@@ -495,26 +200,28 @@ type NpcDialogueMessage =
       speech: string;
       raw: string;
     };
-type AmbientPlayerState = {
-  npcIds: number[];
-  replyToNpcId: number;
-  bubble: string;
-  bubbleUntil: number;
-  bubbleShownAt: number;
-  replyAt: number;
-  llmRequested: boolean;
-  // 群聊时：玩家说完一句后，队列里还等待回应玩家的 NPC eventId(按 eventId 升序)
-  responderQueue?: number[];
+const startFixedStepLoop = (onStep: () => boolean | void) => {
+  const clock = new FixedStepClock({
+    onStep: () => {
+      if (onStep() === false) clock.pause();
+    },
+  });
+  const syncVisibility = () => {
+    if (document.hidden) clock.pause();
+    else if (clock.state === "paused") clock.resume();
+    else if (clock.state === "idle") clock.start();
+  };
+  document.addEventListener("visibilitychange", syncVisibility);
+  syncVisibility();
+  return () => {
+    document.removeEventListener("visibilitychange", syncVisibility);
+    clock.dispose();
+  };
 };
-const loadLocalSave = (): WorldSave => {
-  try {
-    const raw = localStorage.getItem(LOCAL_SAVE_KEY);
-    if (!raw) return fresh();
-    const parsed = parseSave(JSON.parse(raw));
-    return parsed.ok ? parsed.value : fresh();
-  } catch {
-    return fresh();
-  }
+const storageFailureNotice = (reason: "missing" | "unavailable" | "invalid" | "quota") => {
+  if (reason === "quota") return "浏览器存储空间已满，请立即导出 JSON 备份。";
+  if (reason === "invalid") return "存档无法序列化，请立即导出 JSON 备份。";
+  return "浏览器存储不可用，请立即导出 JSON 备份。";
 };
 const seeded = (seed: number) => {
   let value = seed >>> 0;
@@ -522,79 +229,6 @@ const seeded = (seed: number) => {
     value = (Math.imul(value, 1664525) + 1013904223) >>> 0;
     return Math.floor((value / 4294967296) * Math.max(1, max));
   };
-};
-const parseNpcDialogue = (raw: string) => {
-  const section = (name: string, next?: string) => {
-    const end = next ? `(?=\\n(?:${next})[：:])` : "$";
-    return raw.match(new RegExp(`(?:^|\\n)${name}[：:]\\s*([\\s\\S]*?)${end}`))?.[1]?.trim() || "";
-  };
-  return {
-    state: section("状态", "动作|语言"),
-    action: section("动作", "语言"),
-    speech: section("语言") || (!/[状态动作语言][：:]/.test(raw) ? raw.trim() : ""),
-  };
-};
-const cleanAmbientSpeech = (raw: string, forbiddenNames: string[] = []) => {
-  const parsed = parseNpcDialogue(raw),
-    speechOnly = parsed.speech || raw,
-    escapedNames = forbiddenNames.filter(Boolean).map((name) => name.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")),
-    namePattern = escapedNames.length ? escapedNames.join("|") : "(?!)",
-    withoutDirections = speechOnly
-      .replace(/(?:^|\n)\s*(?:状态|动作|神态|表情|姿态|旁白)[：:].*(?=\n|$)/g, " ")
-      .replace(/[（(【[].*?[）)】\]]/g, " ")
-      .replace(/^\s*(?:甲|乙|语言|台词)[：:]\s*/, "")
-      .replace(/^[^：\n]{1,20}\s+to\s+[^：\n]{1,20}[：:]\s*/, "")
-      .replace(/[^，。！？；：\n“”]{1,16}\s+to\s+[^，。！？；：\n“”]{1,16}/gi, " ")
-      .replace(/(?:谁|某人|某某|发言者)\s*(?:对|到|to)\s*(?:谁|某人|某某|接收者)/gi, " ")
-      .replace(/(?:发言者|接收者|说话者|对话对象|外层|气泡|格式|路由|标记)[：:]?/g, " ")
-      .replace(new RegExp(`^(?:${namePattern})(?:说|说道|问道|答道|道)?[：:,，]?\\s*`, "g"), "")
-      .replace(new RegExp(`(?:对|向)(?:${namePattern})(?:说|说道|问道|答道)[：:,，]?\\s*`, "g"), "")
-      .replace(new RegExp(`(?:${namePattern})`, "g"), "")
-      .replace(/[*_`#]/g, "")
-      .replace(/[“”]/g, "")
-      .replace(/\s+/g, " ")
-      .trim(),
-    narration = /(?:风|雨|雪|月光|阳光|雾|云|竹林|树影|花瓣|衣袖|发丝|眼眸|目光|嘴角|声音|回声).{0,14}(?:吹|掠|穿|落|摇|映|响|传|动|起|泛|垂|飘)|(?:微微|轻轻|缓缓|悄然).{0,10}(?:动|笑|抬|垂|转|望|看|吹|走|摇|点|皱)|(?:她|他|其).{0,12}(?:指尖|手指|抬眼|扫过|滑入|缩回|蹭了蹭|盯着|看向|望向|点了点)|(?:站|坐|走|立|倚)在.{0,14}(?:上|下|旁|边|前|后|中)/,
-    spokenClauses = withoutDirections.split(/(?<=[，。！？；])/).filter((clause) => !narration.test(clause)).join("").trim();
-  return spokenClauses && !/^(?:to|谁|某某|格式|接收者|发言者)+$/i.test(spokenClauses) ? spokenClauses : "……";
-};
-
-const cleanAmbientAction = (raw: string, forbiddenNames: string[] = []) => {
-  const escapedNames = forbiddenNames.filter(Boolean).map((name) => name.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")),
-    namePattern = escapedNames.length ? escapedNames.join("|") : "(?!)",
-    action = (parseNpcDialogue(raw).action || raw)
-      .replace(/(?:^|\n)\s*(?:状态|语言|台词|解释|旁白)[：:].*(?=\n|$)/g, " ")
-      .replace(/^\s*(?:动作)[：:]\s*/, "")
-      .replace(/[（(【[].*?[）)】\]]/g, " ")
-      .replace(new RegExp(`(?:${namePattern})`, "g"), "")
-      .replace(/[*_`#“”]/g, "")
-      .replace(/\s+/g, " ")
-      .trim();
-  return action && !/^(?:没有动作|无动作|无|暂无|……)$/.test(action) ? action : "……";
-};
-
-const buildAutoPlayerPrompt = (
-  id: number,
-  actor: SceneActorState,
-  mapName: string,
-) => {
-  const lore = npcLore(id),
-    profile = actorStatusProfile(actor);
-  return `你正在《英雄坛说：云游志》的武侠世界中扮演玩家主角“${actor.name}”，绝不能跳出角色，也不要提及自己是AI或提示词。
-【主角不可改写事实】${actor.age}岁，性别${profile.gender}，门派“${profile.school}”，师从“${profile.teacher}”，外貌${profile.appearance}（容貌第${profile.appearanceTier}/8阶），综合武境第${profile.realmTier}/50阶“${profile.realm}”，目前使用${profile.weapon}，道德名声${actor.morals}，气血${actor.hp}/${actor.maxHp}、内力${actor.fp}/${actor.maxFp}、银两${actor.gold}。
-【当前场景】你在${mapName}，正在与“${lore.name}”交谈。【对方不可改写事实】${npcConversationFacts(id)}；性情${lore.personality}；说话方式${lore.speech}。你应记住此前双方的动作和话语，自然延续话题。
-
-规则：根据主角已有设定、江湖处境、对方身份和前文，自主推动一轮有意义的互动；双方姓名、年龄、性别、门派、外貌与武境均为硬事实，称谓和代词必须符合明确性别，性别未知时使用中性称呼；可以问询、回应、试探、讲述、调侃、示好、质疑或结束某个话题，但不要替NPC行动；不要凭空取得物品、完成任务、发动正式战斗或修改游戏状态；不要念出编号和属性数字。要围绕当前话题深入：提出新信息、立场、疑问或反驳，给出有血有肉的具体内容，不要“是啊”“不错”这类空泛附和，也不要简单复述对方。
-
-每次必须严格按以下三个字段输出纯文本，不要添加Markdown、姓名或其他标题：
-状态：主角此刻可被观察到的神态、情绪或姿态
-动作：主角紧接着做出的具体动作；若没有动作写“没有动作”
-语言：主角实际说出口的话；若沉默写“……”`;
-};
-
-const ambientPlayerFacts = (actor: SceneActorState) => {
-  const profile = actorStatusProfile(actor);
-  return `${actor.name || "少侠"}：${actor.age}岁，性别${profile.gender}，门派${profile.school}，师父${profile.teacher}，外貌${profile.appearance}（容貌第${profile.appearanceTier}/8阶），综合武境第${profile.realmTier}/50阶“${profile.realm}”，兵刃${profile.weapon}`;
 };
 
 export default function OriginalWorld({
@@ -672,45 +306,95 @@ export default function OriginalWorld({
     nameInput = useRef<HTMLInputElement>(null),
     chatEnd = useRef<HTMLDivElement>(null),
     chatAbort = useRef<AbortController | null>(null),
-    ambientWorld = useRef<AmbientWorld>({ mapId: 0, npcs: [] }),
-    ambientPlayer = useRef<AmbientPlayerState>({ npcIds: [], replyToNpcId: 0, bubble: "", bubbleUntil: 0, bubbleShownAt: 0, replyAt: 0, llmRequested: true }),
-    ambientPlayerStarts = useRef(false),
-    ambientPlayerEpoch = useRef(0),
-    lastPlayerMove = useRef(0),
-    ambientPlayerCooldown = useRef(0),
-    ambientLlmActive = useRef(0),
-    ambientEpoch = useRef(0),
-    ambientPaused = useRef(false),
-    ambientWasPaused = useRef(false),
-    ambientControllers = useRef<Map<AbortController, { player: boolean; npcEventId?: number }>>(new Map()),
     battleNarrationAbort = useRef<AbortController | null>(null),
     battleNarrativesRef = useRef<BattleNarrative[]>([]),
+    runtimeMounted = useRef(true),
     stateRef = useRef<WorldSave>(state),
     keys = useRef(new Set<string>()),
     held = useRef<Record<string, number>>({});
-  const sync = useCallback((next: WorldSave) => {
-    next.actor.exp = Math.min(next.actor.exp, MAX_PLAYER_EXP);
-    stateRef.current = next;
-    setState(structuredClone(next));
+  const ambientShouldPause =
+      screen !== "play" ||
+      Boolean(
+        eventText ||
+          npcMenu ||
+          npcChat ||
+          shop ||
+          study ||
+          battle ||
+          menu ||
+          cheatConfirm ||
+          itemConfirm ||
+          hiddenConfirm ||
+          cultivation !== null ||
+          flyMenu !== null ||
+          caihua ||
+          arcade ||
+          life,
+      ),
+    {
+      ambientWorld,
+      ambientPlayer,
+      interruptAmbientPlayerConversation,
+    } = useAmbientRuntime({
+      active: screen === "play",
+      shouldPause: ambientShouldPause,
+      mapId: state.position.mapId,
+      killList: state.actor.killList,
+      inventory: state.actor.inventory,
+      stateRef,
+    });
+  useEffect(() => {
+    runtimeMounted.current = true;
+    return () => {
+      runtimeMounted.current = false;
+      const activeChat = chatAbort.current,
+        activeNarration = battleNarrationAbort.current;
+      chatAbort.current = null;
+      battleNarrationAbort.current = null;
+      activeChat?.abort();
+      activeNarration?.abort();
+    };
   }, []);
-  useEffect(() => loadWuxiaArt(), []);
+  const sync = useCallback((next: WorldSave) => {
+    const normalized = structuredClone(next);
+    normalized.actor.exp = Math.min(normalized.actor.exp, MAX_PLAYER_EXP);
+    stateRef.current = normalized;
+    setState(structuredClone(normalized));
+  }, []);
+  useEffect(() => loadWorldArt(), []);
   useEffect(() => {
     if (!restoreLocalSave) return;
     const id = window.setTimeout(() => {
-      const exists = localStorage.getItem(LOCAL_SAVE_KEY) !== null;
-      setHasSave(exists);
-      if (exists) sync(loadLocalSave());
+      const stored = readJsonStorage(LOCAL_SAVE_KEY);
+      if (!stored.ok) {
+        setHasSave(false);
+        if (stored.reason === "invalid")
+          setNotice("本地存档 JSON 已损坏，原数据未删除；请读取备份或开始新游戏。");
+        else if (stored.reason === "unavailable")
+          setNotice("浏览器无法读取本地存档；仍可游玩，请及时导出 JSON 备份。");
+        return;
+      }
+      const parsed = parseSave(stored.value);
+      if (!parsed.ok) {
+        setHasSave(false);
+        setNotice("本地存档格式无效，原数据未删除；请读取备份或开始新游戏。");
+        return;
+      }
+      setHasSave(true);
+      sync(parsed.value);
     }, 0);
     return () => window.clearTimeout(id);
   }, [restoreLocalSave, sync]);
   const save = useCallback(() => {
     const next = { ...stateRef.current, savedAt: new Date().toISOString() };
     sync(next);
-    try {
-      localStorage.setItem(LOCAL_SAVE_KEY, JSON.stringify(next));
+    const written = writeJsonStorage(LOCAL_SAVE_KEY, next);
+    if (written.ok) {
+      setHasSave(true);
       setNotice("原版世界进度已保存");
-    } catch {
-      setNotice("保存失败：浏览器存储空间不可用，请先下载 JSON 备份。");
+    } else {
+      setHasSave(false);
+      setNotice(`保存失败：${storageFailureNotice(written.reason)}`);
     }
   }, [sync]);
   // 铸剑挑战：未通过则先打四轮墨邪(149)；已通过则打开铸剑界面。
@@ -744,6 +428,13 @@ export default function OriginalWorld({
       beginOriginalBattle(149, s.tasks.clock + 149, undefined, "story"),
     );
   }, [sync]);
+  const advanceEventText = useCallback(() => {
+    const pending = pendingSwordBattle;
+    setPendingSwordBattle(null);
+    setEventText("");
+    setEventNpcId(null);
+    if (pending) setBattle(pending);
+  }, [pendingSwordBattle]);
   const runAt = useCallback(
     (x: number, y: number, automatic = false) => {
       const s = stateRef.current,
@@ -886,22 +577,7 @@ export default function OriginalWorld({
   );
   const move = useCallback(
     (dx: number, dy: number) => {
-      lastPlayerMove.current = Date.now();
-      const interruptedIds = new Set(ambientPlayer.current.npcIds);
-      for (const npc of ambientWorld.current.npcs.filter((item) => interruptedIds.has(item.eventId))) {
-        npc.partnerId = 0; npc.groupId = 0; npc.groupMembers = []; npc.groupTurn = -1; npc.groupNextAt = 0;
-        npc.bubble = ""; npc.queuedBubble = ""; npc.generationPending = false; npc.llmRequested = true;
-        npc.speechTargetName = ""; npc.conversationContext = []; npc.nextBehaviorAt = Date.now() + 700;
-      }
-      for (const [controller, job] of ambientControllers.current) {
-        if (!job.player && (!job.npcEventId || !interruptedIds.has(job.npcEventId))) continue;
-        controller.abort();
-        ambientControllers.current.delete(controller);
-      }
-      ambientPlayer.current = { npcIds: [], replyToNpcId: 0, bubble: "", bubbleUntil: 0, bubbleShownAt: 0, replyAt: 0, llmRequested: true };
-      ambientPlayerEpoch.current += 1;
-      ambientPlayerStarts.current = false;
-      ambientPlayerCooldown.current = Date.now() + 450;
+      interruptAmbientPlayerConversation();
       if (
         eventText ||
         npcMenu ||
@@ -909,8 +585,12 @@ export default function OriginalWorld({
         study ||
         battle ||
         menu ||
+        cheatConfirm ||
+        itemConfirm ||
+        hiddenConfirm ||
         caihua ||
         cultivation !== null ||
+        flyMenu !== null ||
         arcade ||
         life
       )
@@ -947,12 +627,18 @@ export default function OriginalWorld({
       } else sync(s);
     },
     [
+      ambientWorld,
       battle,
       caihua,
+      cheatConfirm,
       cultivation,
       arcade,
       life,
       eventText,
+      flyMenu,
+      hiddenConfirm,
+      interruptAmbientPlayerConversation,
+      itemConfirm,
       menu,
       npcMenu,
       npcChat,
@@ -998,7 +684,7 @@ export default function OriginalWorld({
     }
     if (!runAt(p.x + d[0], p.y + d[1]))
       setNotice("靠近人物并按 E / Enter 互动");
-  }, [runAt]);
+  }, [ambientWorld, runAt]);
   const chooseNpc = useCallback(
     (id: number, option: NpcOption) => {
       setEventNpcId(["talk", "status", "join"].includes(option) ? id : null);
@@ -1159,6 +845,11 @@ export default function OriginalWorld({
     chatAbort.current = null;
     setNpcChat(null);
   }, []);
+  const returnToTitle = useCallback(() => {
+    closeNpcChat();
+    battleNarrationAbort.current?.abort();
+    setScreen("title");
+  }, [closeNpcChat]);
   const requestNpcReply = useCallback(async (id: number, dialogueHistory: NpcDialogueMessage[]) => {
     const history: ChatMessage[] = dialogueHistory.map((message) => message.role === "user"
       ? {
@@ -1183,16 +874,20 @@ export default function OriginalWorld({
         system: buildNpcSystemPrompt(id, current.actor, current.tasks, getOriginalMap(current.position.mapId).name),
         messages: history,
         signal: controller.signal,
-        onToken: (token) => setNpcChat((chat) => {
-          if (!chat || chat.id !== id) return chat;
-          const messages = [...chat.messages], last = messages.length - 1;
-          const currentReply = messages[last];
-          if (currentReply.role !== "assistant") return chat;
-          const raw = currentReply.raw + token, parsed = parseNpcDialogue(raw);
-          messages[last] = { role: "assistant", raw, ...parsed };
-          return { ...chat, messages };
-        }),
+        onToken: (token) => {
+          if (!runtimeMounted.current || chatAbort.current !== controller) return;
+          setNpcChat((chat) => {
+            if (!chat || chat.id !== id) return chat;
+            const messages = [...chat.messages], last = messages.length - 1;
+            const currentReply = messages[last];
+            if (currentReply.role !== "assistant") return chat;
+            const raw = currentReply.raw + token, parsed = parseNpcDialogue(raw);
+            messages[last] = { role: "assistant", raw, ...parsed };
+            return { ...chat, messages };
+          });
+        },
       });
+      if (!runtimeMounted.current || chatAbort.current !== controller) return;
       const parsed = parseNpcDialogue(answer);
       setNpcChat((chat) => {
         if (!chat || chat.id !== id) return chat;
@@ -1202,11 +897,13 @@ export default function OriginalWorld({
       });
     } catch (error) {
       if (controller.signal.aborted) {
-        setNpcChat((chat) =>
-          chat?.id === id ? { ...chat, loading: false, auto: false } : chat,
-        );
+        if (runtimeMounted.current && chatAbort.current === controller)
+          setNpcChat((chat) =>
+            chat?.id === id ? { ...chat, loading: false, auto: false } : chat,
+          );
         return;
       }
+      if (!runtimeMounted.current || chatAbort.current !== controller) return;
       const detail = error instanceof Error ? error.message : "连接失败";
       const corsHint = detail === "Failed to fetch"
         ? "请在 LM Studio 的 Developer → Server Settings 打开 Enable CORS，然后重启服务。"
@@ -1246,6 +943,7 @@ export default function OriginalWorld({
           onToken: () => {},
         }),
         parsed = parseNpcDialogue(answer);
+      if (!runtimeMounted.current || chatAbort.current !== controller) return;
       setNpcChat((active) => active?.id === id ? {
         ...active,
         messages: [...active.messages, { role: "user", action: parsed.action, speech: parsed.speech }],
@@ -1253,13 +951,15 @@ export default function OriginalWorld({
       } : active);
     } catch (error) {
       if (controller.signal.aborted) {
-        setNpcChat((active) =>
-          active?.id === id
-            ? { ...active, loading: false, auto: false }
-            : active,
-        );
+        if (runtimeMounted.current && chatAbort.current === controller)
+          setNpcChat((active) =>
+            active?.id === id
+              ? { ...active, loading: false, auto: false }
+              : active,
+          );
         return;
       }
+      if (!runtimeMounted.current || chatAbort.current !== controller) return;
       const detail = error instanceof Error ? error.message : "连接失败";
       setNpcChat((active) => active?.id === id ? { ...active, loading: false, auto: false, error: `${detail}。自动对话已停止。` } : active);
     } finally {
@@ -1309,6 +1009,7 @@ export default function OriginalWorld({
       { role: "user", content: buildBattleNarrationFacts(event) } as const,
     ];
     const updateEntry = (change: (item: BattleNarrative) => BattleNarrative) => {
+      if (!runtimeMounted.current) return;
       const next = battleNarrativesRef.current.map((item) =>
         item === entry || (item.turn === entry.turn && item.loading) ? change(item) : item,
       );
@@ -1325,7 +1026,15 @@ export default function OriginalWorld({
       });
       updateEntry((item) => ({ ...item, text: answer, loading: false }));
     } catch (error) {
-      if (controller.signal.aborted) return;
+      if (controller.signal.aborted) {
+        if (battleNarrationAbort.current)
+          updateEntry((item) => ({
+            ...item,
+            text: item.text || item.facts.join("\n"),
+            loading: false,
+          }));
+        return;
+      }
       const detail = error instanceof Error ? error.message : "战报生成失败";
       updateEntry((item) => ({
         ...item,
@@ -1493,10 +1202,16 @@ export default function OriginalWorld({
           setBattle(null);
           setNotice(`${battle.enemyName}收手道：“承让了。”`);
         } else {
-          sync(loadLocalSave());
+          const stored = readJsonStorage(LOCAL_SAVE_KEY),
+            saved = stored.ok ? parseSave(stored.value) : null;
+          sync(saved?.ok ? saved.value : fresh());
           setBattle(null);
           setScreen("title");
-          setNotice("你已身死，未保存的进度已经失去。 ");
+          setNotice(
+            saved?.ok
+              ? "你已身死，未保存的进度已经失去。 "
+              : "你已身死，且无法读取有效的本地存档，已返回初始状态。",
+          );
         }
         setBattleOutcome(null);
         setBattleItem(null);
@@ -1606,14 +1321,13 @@ export default function OriginalWorld({
     },
     [sync],
   );
-  // 武器/防具直接装备或卸下，不弹确认；消耗品与秘籍保留确认/研读流程。
+  // 使用、研读、装备或卸下都先进入同一确认流程。
   const openBagEntry = useCallback(
     (entry?: BagEntry) => {
       if (!entry) return;
-      if (entry.kind === 2 || entry.kind === 3) activateBagEntry(entry);
-      else setItemConfirm({ entry, index: 0 });
+      setItemConfirm({ entry, index: 0 });
     },
-    [activateBagEntry],
+    [],
   );
   // 隐藏交换确认。
   const confirmHiddenQuest = useCallback(
@@ -1693,7 +1407,7 @@ export default function OriginalWorld({
     [study?.book, sync],
   );
   const studySelected = useCallback(() => {
-    if (study) studyAt(study.id, study.index);
+    return study ? studyAt(study.id, study.index) : undefined;
   }, [study, studyAt]);
   const beginStudyAt = useCallback(
     (index: number) => {
@@ -1907,13 +1621,13 @@ export default function OriginalWorld({
     };
     next.savedAt = new Date().toISOString();
     sync(next);
-    try {
-      localStorage.setItem(LOCAL_SAVE_KEY, JSON.stringify(next));
-    } catch {
-      setNotice("保存失败：浏览器存储空间不可用，请下载 JSON 备份。");
-    }
-    setHasSave(true);
-    setNotice(`${name}踏入江湖。`);
+    const written = writeJsonStorage(LOCAL_SAVE_KEY, next);
+    setHasSave(written.ok);
+    setNotice(
+      written.ok
+        ? `${name}踏入江湖。`
+        : `${name}踏入江湖，但自动保存失败：${storageFailureNotice(written.reason)}`,
+    );
     setScreen("play");
   }, [creator, sync]);
   const rememberArcadeScore = useCallback(
@@ -1993,22 +1707,70 @@ export default function OriginalWorld({
   );
   useEffect(() => {
     const down = (e: KeyboardEvent) => {
-        const target = e.target as HTMLElement | null;
-        if (e.isComposing || e.keyCode === 229) return;
-        if (
-          target?.tagName === "INPUT" ||
-          target?.tagName === "TEXTAREA" ||
-          target?.isContentEditable
-        ) {
-          if (e.key === "Escape") target.blur();
+        const target = e.target as HTMLElement | null,
+          inputContext: InputContext = {
+            screen,
+            confirmation: cheatConfirm
+              ? "cheat"
+              : hiddenConfirm
+                ? "hidden-quest"
+                : itemConfirm
+                  ? "item"
+                  : null,
+            dialogue: npcChat ? "npc-chat" : eventText ? "event-text" : null,
+            battle: battle
+              ? {
+                  view:
+                    battleOutcome !== null
+                      ? "outcome"
+                      : battleItem !== null
+                        ? "items"
+                        : specialMenu !== null
+                          ? "specials"
+                          : "action",
+                }
+              : null,
+            arcade: arcade?.kind || null,
+            modal: life
+              ? { kind: "life" }
+              : caihua
+                ? { kind: "appearance" }
+                : flyMenu !== null
+                  ? { kind: "fly" }
+                  : cultivation !== null
+                    ? { kind: "cultivation", active: cultivationActive }
+                    : npcMenu
+                      ? { kind: "npc" }
+                      : shop
+                        ? { kind: "shop" }
+                        : study
+                          ? { kind: "study", active: studyActive }
+                          : null,
+            menu: menu
+              ? {
+                  tab: menu.tab as 0 | 1 | 2 | 3,
+                  cheatSubtab: menu.sub,
+                }
+              : null,
+          },
+          resolved = resolveGameKey(
+            {
+              key: e.key,
+              isComposing: e.isComposing,
+              keyCode: e.keyCode,
+              target,
+            },
+            inputContext,
+          );
+        if (resolved.layer === "composition") return;
+        if (resolved.layer === "editor") {
+          if (resolved.command?.type === "blur-editor") target?.blur();
           return;
         }
-        const k = e.key.toLowerCase();
-        if (
-          ["arrowup", "arrowdown", "arrowleft", "arrowright", "tab"].includes(k)
-        )
-          e.preventDefault();
-        keys.current.add(k);
+        if (resolved.blocked || !resolved.command) return;
+        if (resolved.preventDefault) e.preventDefault();
+        const k = resolved.key;
+        if (resolved.trackHeld) keys.current.add(k);
         const confirm = isConfirmKey(k),
           cancel = isCancelKey(k);
         if (screen !== "play") {
@@ -2065,11 +1827,11 @@ export default function OriginalWorld({
           else if (cancel) setCreator({ ...creator, step: 1, index: 0 });
           return;
         }
-        if (npcChat) {
+        if (resolved.layer === "dialogue" && npcChat) {
           if (cancel) closeNpcChat();
           return;
         }
-        if (cheatConfirm) {
+        if (resolved.layer === "confirmation" && cheatConfirm) {
           if (["arrowup", "arrowdown", "w", "s"].includes(k))
             setCheatConfirm({
               ...cheatConfirm,
@@ -2081,7 +1843,7 @@ export default function OriginalWorld({
           } else if (cancel) setCheatConfirm(null);
           return;
         }
-        if (life) {
+        if (resolved.layer === "modal" && life) {
           const length = life.kind === "forge" ? 5 : 8;
           if (k === "arrowup" || k === "w")
             setLife({ ...life, index: (life.index + length - 1) % length });
@@ -2119,7 +1881,7 @@ export default function OriginalWorld({
           }
           return;
         }
-        if (arcade) {
+        if (resolved.layer === "arcade" && arcade) {
           if (arcade.kind === "select") {
             if (["arrowup", "arrowdown", "w", "s"].includes(k))
               setArcade({ ...arcade, index: (arcade.index + 1) % 3 });
@@ -2194,7 +1956,7 @@ export default function OriginalWorld({
           }
           return;
         }
-        if (battle) {
+        if (resolved.layer === "battle" && battle) {
           const specials = battleSpecials(
             stateRef.current.actor,
             battle.cooldowns,
@@ -2243,7 +2005,7 @@ export default function OriginalWorld({
           }
           return;
         }
-        if (caihua) {
+        if (resolved.layer === "modal" && caihua) {
           if (["arrowup", "arrowdown", "w", "s"].includes(k))
             setCaihua({ ...caihua, index: (caihua.index + 1) % 2 });
           else if (confirm) {
@@ -2261,7 +2023,7 @@ export default function OriginalWorld({
           } else if (cancel) setCaihua(null);
           return;
         }
-        if (flyMenu !== null) {
+        if (resolved.layer === "modal" && flyMenu !== null) {
           const length = ((originalSystem.fly_menu as string[]) || []).length,
             cols = 3;
           if (k === "arrowup" || k === "w")
@@ -2276,7 +2038,7 @@ export default function OriginalWorld({
           else if (cancel || k === "h") setFlyMenu(null);
           return;
         }
-        if (hiddenConfirm) {
+        if (resolved.layer === "confirmation" && hiddenConfirm) {
           if (["arrowup", "arrowdown", "w", "s"].includes(k))
             setHiddenConfirm({
               ...hiddenConfirm,
@@ -2286,7 +2048,7 @@ export default function OriginalWorld({
           else if (cancel) setHiddenConfirm(null);
           return;
         }
-        if (itemConfirm) {
+        if (resolved.layer === "confirmation" && itemConfirm) {
           if (["arrowup", "arrowdown", "w", "s"].includes(k))
             setItemConfirm({
               ...itemConfirm,
@@ -2296,7 +2058,7 @@ export default function OriginalWorld({
           else if (cancel) setItemConfirm(null);
           return;
         }
-        if (cultivation !== null) {
+        if (resolved.layer === "modal" && cultivation !== null) {
           const length = 6 + practiceOptions(stateRef.current.actor).length;
           if (cultivationActive) {
             if (k === "arrowup" || k === "w") {
@@ -2316,7 +2078,7 @@ export default function OriginalWorld({
           else if (cancel || k === "r") setCultivation(null);
           return;
         }
-        if (menu) {
+        if (resolved.layer === "menu" && menu) {
           const entries = organizedBagEntries(stateRef.current.actor),
             skills = organizedSkills(stateRef.current.actor),
             cols = 2,
@@ -2394,15 +2156,11 @@ export default function OriginalWorld({
           else if (cancel || isMainMenuKey(k)) setMenu(null);
           return;
         }
-        if (eventText && (confirm || cancel)) {
-          const pending = pendingSwordBattle;
-          setPendingSwordBattle(null);
-          setEventText("");
-          setEventNpcId(null);
-          if (pending) setBattle(pending);
+        if (resolved.layer === "dialogue" && eventText && (confirm || cancel)) {
+          advanceEventText();
           return;
         }
-        if (npcMenu) {
+        if (resolved.layer === "modal" && npcMenu) {
           const opts = npcOptions(npcMenu.id, stateRef.current.actor);
           if (k === "arrowup" || k === "w")
             setNpcMenu({
@@ -2418,7 +2176,7 @@ export default function OriginalWorld({
           else if (cancel) setNpcMenu(null);
           return;
         }
-        if (shop) {
+        if (resolved.layer === "modal" && shop) {
           const list = shopGoods(shop.id);
           if (k === "arrowup" || k === "w")
             setShop({
@@ -2431,7 +2189,7 @@ export default function OriginalWorld({
           else if (cancel) setShop(null);
           return;
         }
-        if (study) {
+        if (resolved.layer === "modal" && study) {
           const list = study.book
             ? bookStudyOptions(study.id)
             : studyOptions(study.id);
@@ -2459,6 +2217,7 @@ export default function OriginalWorld({
           else if (cancel) setStudy(null);
           return;
         }
+        if (resolved.layer !== "world") return;
         if (confirm) interact();
         else if (isMainMenuKey(k)) setMenu({ tab: 0, index: 0, sub: 0 });
         else if (isMenuTabKey(k))
@@ -2472,8 +2231,9 @@ export default function OriginalWorld({
         else if (cancel) location.href = "/";
       },
       up = (e: KeyboardEvent) => {
-        keys.current.delete(e.key.toLowerCase());
-        delete held.current[e.key.toLowerCase()];
+        const key = normalizeGameKey(e.key);
+        keys.current.delete(key);
+        delete held.current[key];
       };
     addEventListener("keydown", down);
     addEventListener("keyup", up);
@@ -2485,6 +2245,7 @@ export default function OriginalWorld({
     battle,
     battleItem,
     battleOutcome,
+    advanceEventText,
     beginCultivation,
     beginStudyAt,
     buySelected,
@@ -2514,7 +2275,6 @@ export default function OriginalWorld({
     closeNpcChat,
     openBagEntry,
     openFlyMenu,
-    pendingSwordBattle,
     startSwordChallenge,
     save,
     shop,
@@ -2542,7 +2302,7 @@ export default function OriginalWorld({
   const arcadeKind = arcade?.kind;
   useEffect(() => {
     if (!arcadeKind || arcadeKind === "select") return;
-    const id = window.setInterval(() => {
+    return startFixedStepLoop(() => {
       setArcade((current) => {
         if (!current || current.kind === "select") return current;
         if (current.kind === "dance") {
@@ -2566,8 +2326,7 @@ export default function OriginalWorld({
         }
         return current;
       });
-    }, 1000 / 120);
-    return () => window.clearInterval(id);
+    });
   }, [arcadeKind]);
   useEffect(() => {
     if (screen !== "play") return;
@@ -2602,390 +2361,19 @@ export default function OriginalWorld({
   }, [battle, screen, sync]);
   useEffect(() => {
     if (!cultivationActive || cultivation === null) return;
-    const id = window.setInterval(() => {
-      if (!cultivate(cultivation)) setCultivationActive(false);
-    }, 1000 / 120);
-    return () => window.clearInterval(id);
+    return startFixedStepLoop(() => {
+      const keepGoing = cultivate(cultivation);
+      if (!keepGoing) setCultivationActive(false);
+      return keepGoing;
+    });
   }, [cultivate, cultivation, cultivationActive]);
   useEffect(() => {
     if (!studyActive || !study) return;
-    const id = window.setInterval(() => studySelected(), 1000 / 120);
-    return () => window.clearInterval(id);
+    return startFixedStepLoop(() => {
+      const result = studySelected();
+      return Boolean(result?.ok && !result.leveled);
+    });
   }, [study, studyActive, studySelected]);
-  const ambientPopulationKey = `${state.position.mapId}:${(state.actor.killList || []).join(",")}:${tokenGateState(state.actor.inventory)}`,
-    ambientShouldPause = screen !== "play" || Boolean(eventText || npcMenu || npcChat || shop || study || battle || menu || cultivation !== null || arcade || life);
-  useEffect(() => {
-    ambientPaused.current = ambientShouldPause;
-    if (ambientShouldPause && !ambientWasPaused.current) {
-      resetAmbientSessions(ambientWorld.current, Date.now() + 700);
-      ambientEpoch.current += 1;
-      ambientControllers.current.forEach((_job, controller) => controller.abort());
-      ambientControllers.current.clear();
-      ambientPlayer.current = { npcIds: [], replyToNpcId: 0, bubble: "", bubbleUntil: 0, bubbleShownAt: 0, replyAt: 0, llmRequested: true };
-      ambientPlayerEpoch.current += 1;
-      ambientPlayerStarts.current = false;
-      lastPlayerMove.current = Date.now();
-    }
-    ambientWasPaused.current = ambientShouldPause;
-  }, [ambientShouldPause]);
-  useEffect(() => {
-    const map = getOriginalMap(state.position.mapId),
-      entries = map.events.flatMap((event) => {
-        const visual = eventVisual(event, stateRef.current);
-        if (visual.kind !== "npc") return [];
-        const lore = npcLore(visual.npcId || 0);
-        return [{ eventId: event.id, npcId: visual.npcId || 0, name: visual.label, identity: lore.identity, x: event.x, y: event.y }];
-      });
-    ambientWorld.current = createAmbientWorld(map.id, Date.now(), entries);
-    ambientEpoch.current += 1;
-    ambientControllers.current.forEach((_job, controller) => controller.abort());
-    ambientControllers.current.clear();
-    ambientPlayer.current = { npcIds: [], replyToNpcId: 0, bubble: "", bubbleUntil: 0, bubbleShownAt: 0, replyAt: 0, llmRequested: true };
-    ambientPlayerEpoch.current += 1;
-    ambientPlayerStarts.current = false;
-    lastPlayerMove.current = Date.now();
-  }, [ambientPopulationKey, state.position.mapId]);
-  useEffect(() => {
-    if (screen !== "play") return;
-    const id = window.setInterval(() => {
-      if (ambientPaused.current) return;
-      const current = stateRef.current,
-        map = getOriginalMap(current.position.mapId),
-        world = ambientWorld.current;
-      if (world.mapId !== map.id) return;
-      const viewport = ambientViewportBounds(map.width, map.height, current.position.x, current.position.y);
-      tickAmbientWorld({
-        world,
-        now: Date.now(),
-        playerX: current.position.x,
-        playerY: current.position.y,
-        indoor: mapTheme(map) === "indoor",
-        viewport,
-        pausedConversationNpcIds: ambientPlayer.current.npcIds,
-        canEnter: (moving, x, y) => {
-          const direction = x < moving.x ? 4 : x > moving.x ? 6 : y < moving.y ? 8 : 2;
-          if (!passable(map, x, y, direction)) return false;
-          return !world.npcs.some((npc) => npc.eventId !== moving.eventId && npc.x === x && npc.y === y);
-        },
-      });
-      const now = Date.now(), playerAmbient = ambientPlayer.current;
-      if (playerAmbient.bubble && playerAmbient.bubbleUntil <= now) {
-        ambientPlayer.current = { npcIds: [], replyToNpcId: 0, bubble: "", bubbleUntil: 0, bubbleShownAt: 0, replyAt: 0, llmRequested: true };
-        ambientPlayerEpoch.current += 1;
-        ambientPlayerStarts.current = false;
-        ambientPlayerCooldown.current = now + 10000;
-      }
-      if (now - lastPlayerMove.current >= 450 && now >= ambientPlayerCooldown.current && !ambientPlayer.current.npcIds.length) {
-        const nearby = world.npcs.filter((npc) => ambientCanHear(npc, current.position)).sort((a, b) => a.eventId - b.eventId);
-        if (nearby.length) {
-          const ids = nearby.map((npc) => npc.eventId), groupId = nearby.length > 1 ? ids[0] : 0,
-            candidate = nearby[0], playerStarts = (map.id + current.position.x + current.position.y + ids.reduce((sum, id) => sum + id, 0)) % 2 === 0;
-          const priorLinks = new Set(nearby.flatMap((npc) => [...npc.groupMembers, npc.partnerId].filter(Boolean)));
-          for (const linked of world.npcs.filter((npc) => priorLinks.has(npc.eventId) && !ids.includes(npc.eventId))) {
-            linked.partnerId = 0; linked.groupId = 0; linked.groupMembers = []; linked.groupTurn = -1; linked.groupNextAt = 0;
-            linked.bubble = ""; linked.queuedBubble = ""; linked.generationPending = false; linked.speechTargetName = "";
-            linked.conversationContext = []; linked.nextBehaviorAt = now + 700;
-          }
-          for (const npc of nearby) {
-            npc.partnerId = 0; npc.conversationTurn = 0; npc.conversationRound = 0;
-            npc.groupId = groupId; npc.groupMembers = groupId ? ids : []; npc.groupTurn = groupId ? -1 : 0; npc.groupNextAt = 0;
-            npc.bubble = ""; npc.queuedBubble = ""; npc.generationPending = false; npc.conversationContext = [];
-            npc.nextBehaviorAt = now + 30000;
-          }
-          if (!playerStarts) {
-            candidate.speechTargetName = current.actor.name || "少侠";
-            candidate.bubbleKind = "speech"; candidate.bubbleUntil = now + 12000;
-            candidate.llmRequested = false; candidate.generationPending = true; candidate.queuedAt = now;
-            if (groupId) candidate.groupTurn = 0;
-          }
-          ambientPlayerStarts.current = playerStarts;
-          ambientPlayerEpoch.current += 1;
-          ambientPlayer.current = { npcIds: ids, replyToNpcId: candidate.eventId, bubble: "", bubbleUntil: 0, bubbleShownAt: 0, replyAt: now + (playerStarts ? 0 : 1200), llmRequested: false };
-        }
-      }
-    }, 650);
-    return () => window.clearInterval(id);
-  }, [screen, state.position.mapId]);
-  const enrichAmbientPlayer = useCallback(async () => {
-    const player = ambientPlayer.current;
-    if (player.llmRequested || !player.npcIds.length || Date.now() < player.replyAt || ambientLlmActive.current >= 3) return;
-    player.llmRequested = true;
-    ambientLlmActive.current += 1;
-    const epoch = ambientEpoch.current, playerEpoch = ambientPlayerEpoch.current;
-    const controller = new AbortController();
-    ambientControllers.current.set(controller, { player: true });
-    const current = stateRef.current,
-      participants = player.npcIds.map((eventId) => ambientWorld.current.npcs.find((npc) => npc.eventId === eventId)).filter((npc): npc is AmbientNpc => Boolean(npc)),
-      // 玩家不必回复上一位发言者：在已开口的人群里随机挑一个人直接搭话
-      readyTargets = participants.filter((npc) => !npc.generationPending && npc.bubble),
-      targetPool = readyTargets.length ? readyTargets : participants,
-      target = targetPool[Math.floor(Math.random() * targetPool.length)] || participants[0];
-    if (target) player.replyToNpcId = target.eventId;
-    if (!target) {
-      if (ambientPlayerEpoch.current === playerEpoch) {
-        ambientPlayer.current = { npcIds: [], replyToNpcId: 0, bubble: "", bubbleUntil: 0, bubbleShownAt: 0, replyAt: 0, llmRequested: true };
-        ambientPlayerStarts.current = false;
-        ambientPlayerEpoch.current += 1;
-      }
-      ambientControllers.current.delete(controller); ambientLlmActive.current -= 1; return;
-    }
-    const playerOpening = ambientPlayerStarts.current;
-    if (!playerOpening && (target.generationPending || !target.bubble)) {
-      player.llmRequested = false;
-      ambientControllers.current.delete(controller);
-      ambientLlmActive.current -= 1;
-      if (!target.generationPending) {
-        ambientPlayer.current = { npcIds: [], replyToNpcId: 0, bubble: "", bubbleUntil: 0, bubbleShownAt: 0, replyAt: 0, llmRequested: true };
-        ambientPlayerStarts.current = false;
-        ambientPlayerEpoch.current += 1;
-      }
-      return;
-    }
-    try {
-      const answer = await streamNpcReply({
-        system: `${buildAutoPlayerPrompt(target.npcId, current.actor, getOriginalMap(current.position.mapId).name)}\n你是被附近NPC主动搭话，或刚刚驻足加入了他们的谈话。请依据主角设定和本轮前文自然接话，不要生硬自我介绍，不要另起无关话题。${participants.length > 1 ? `在场NPC有${participants.map((npc) => npc.name).join("、")}，你这句话是对${target.name}说的。` : ""}\n本次是地图头顶即时会话，覆盖上面的三字段格式：只输出主角实际说出口的一句台词。系统会在正文之外标识说话关系；正文绝对不得输出或讨论 to、谁对谁、发言者、接收者、对话对象、气泡、格式、路由或标记，不得再次出现任何参与者姓名，不得写“某某说/问/答”或“对某某说”。禁止输出状态、动作、神态、表情、姿态、旁白、姓名、字段标题、括号说明或舞台提示。`,
-        messages: [{ role: "assistant", content: [...new Set(participants.flatMap((npc) => npc.conversationContext)), ...participants.map((npc) => npc.bubble).filter(Boolean)].slice(-6).join("\n") || (playerOpening ? "你刚刚走近了附近人物，决定自然地开口。" : "附近人物正在看着你。") }],
-        nextSpeaker: "主角", maxOutputTokens: 120, signal: controller.signal, onToken: () => {},
-      });
-      if (ambientEpoch.current !== epoch || ambientPlayerEpoch.current !== playerEpoch || ambientPaused.current || !ambientPlayer.current.npcIds.length) return;
-      const playerLine = cleanAmbientSpeech(answer, [
-        current.actor.name || "少侠",
-        ...participants.map((npc) => npc.name),
-      ]);
-      if (playerLine === "……") throw new Error("LM Studio returned no usable ambient player line");
-      // 群聊时玩家气泡也标「群聊 · 」
-      const groupMark = participants.length > 1 ? "群聊 · " : "";
-      ambientPlayer.current.bubble = `${groupMark}${current.actor.name || "少侠"} to ${target.name}：“${playerLine}”`;
-      ambientPlayer.current.bubbleShownAt = Date.now();
-      ambientPlayer.current.bubbleUntil = Date.now() + Math.max(4200, ambientPlayer.current.bubble.length * 180);
-      ambientPlayerStarts.current = false;
-      participants.forEach((npc) => {
-        npc.conversationContext = [...npc.conversationContext, ambientPlayer.current.bubble].slice(-6);
-        if (npc.bubbleUntil <= Date.now()) npc.bubble = "";
-      });
-      // 无论是否开场，都把目标设为回应(可能回应玩家，也可能随机回应群里另一个人)，
-      // 并让群聊其余成员随后轮流回应，保证每个群成员都参与，而不是只和玩家或一个人聊。
-      const playerName = current.actor.name || "少侠";
-      const peer = participants.filter((n) => n.eventId !== target.eventId);
-      target.speechTargetName = peer.length && Math.random() < 0.5
-        ? peer[Math.floor(Math.random() * peer.length)].name
-        : playerName;
-      target.bubbleKind = "speech"; target.bubbleUntil = ambientPlayer.current.bubbleUntil + 12000;
-      target.llmRequested = false; target.generationPending = true; target.queuedAt = Date.now();
-      if (target.groupId) target.groupTurn = 0;
-      ambientPlayer.current.responderQueue =
-        participants.length > 1
-          ? participants
-              .filter((n) => n.eventId !== target.eventId)
-              .map((n) => n.eventId)
-              .sort((a, b) => a - b)
-          : [];
-    } catch {
-      if (ambientEpoch.current === epoch && ambientPlayerEpoch.current === playerEpoch && !ambientPaused.current) {
-        ambientPlayer.current = { npcIds: [], replyToNpcId: 0, bubble: "", bubbleUntil: 0, bubbleShownAt: 0, replyAt: 0, llmRequested: true };
-        ambientPlayerStarts.current = false;
-        ambientPlayerEpoch.current += 1;
-      }
-    } finally {
-      ambientControllers.current.delete(controller);
-      ambientLlmActive.current = Math.max(0, ambientLlmActive.current - 1);
-    }
-  }, []);
-  const enrichAmbientNpc = useCallback(async (npc: AmbientNpc) => {
-    if (ambientLlmActive.current >= 3) return;
-    ambientLlmActive.current += 1;
-    const epoch = ambientEpoch.current;
-    const controller = new AbortController();
-    ambientControllers.current.set(controller, { player: false, npcEventId: npc.eventId });
-    npc.llmRequested = true;
-    npc.bubbleUntil = Date.now() + 30000;
-    const current = stateRef.current,
-      map = getOriginalMap(current.position.mapId),
-      lore = npcLore(npc.npcId),
-      partner = npc.partnerId && !npc.groupId ? ambientWorld.current.npcs.find((item) => item.eventId === npc.partnerId) : undefined,
-      partnerLore = partner ? npcLore(partner.npcId) : undefined,
-      groupNames = npc.groupId ? npc.groupMembers.map((id) => ambientWorld.current.npcs.find((item) => item.eventId === id)?.name).filter(Boolean).join("、") : "",
-      groupNpcs = npc.groupId ? npc.groupMembers.map((id) => ambientWorld.current.npcs.find((item) => item.eventId === id)).filter((item): item is AmbientNpc => Boolean(item)) : [],
-      groupLeader = npc.groupId ? ambientWorld.current.npcs.find((item) => item.eventId === npc.groupId) : undefined,
-      sessionContext = (groupLeader?.conversationContext || npc.conversationContext).slice(-8),
-      // 开场没有前文时，让 NPC 自己现场发散、自然地提起一件具体的事当话题；
-      // 之后各轮则承接已聊到的事，把讨论往深里带。
-      isOpening = sessionContext.length === 0,
-      openingRule = `此刻你在${map.name}，按照你的身份和眼下所见，自然地提起一件具体的、正困扰或正关心的、或刚好撞见的闲事来开场——可以是一个疑虑、一个不满、一个见闻或一个盘算——不要只是寒暄问候。`,
-      depthRule =
-        "台词必须有具体内容：一个疑问、见闻、立场、经历或反驳，真正推进讨论；" +
-        "严禁“是啊”“不错”“确实”“原来如此”“言之有理”这类空泛附和，严禁重复前文或复述对方原话。",
-      mode = npc.groupId
-        ? `你正参与一场临时讨论，成员有${groupNames}。当前轮只允许${npc.name}发言，${isOpening ? openingRule : `你的话是对${npc.speechTargetName}说的，承接刚才聊到的事并把讨论往前推：提出新事实、立场、经历或反驳。`}${depthRule}系统会在正文外标识关系；正文绝对不得输出或讨论 to、谁对谁、发言者、接收者、对话对象、气泡、格式、路由或标记，不得再次出现任何成员姓名。只输出嘴里实际说出的台词，严禁描写天气、风景、地点、环境、声音、衣物、身体、神态或动作，禁止旁白、括号说明或舞台提示。`
-        : partner
-        ? `让${lore.name}与${partnerLore?.name || partner.name}展开一场有来有回的交谈。发言顺序严格固定：先由${lore.name}说甲句(${isOpening ? openingRule : "承接前面已经聊起的那件事，给出具体的疑问、见闻或立场"})，再由${partnerLore?.name || partner.name}针对甲句说乙句(承接并推进：补充细节、提出异议或说出自己的经历)。${depthRule}系统会在正文外标识关系；正文绝对不得输出或讨论 to、谁对谁、发言者、接收者、对话对象、气泡、格式、路由或标记，也不得出现双方姓名。只写两人嘴里实际说出的台词，严禁描写天气、风景、地点、环境、声音、衣物、身体、动作或神态，禁止旁白、括号说明或舞台提示。严格只输出两行：\n甲：第一人的一句台词\n乙：第二人针对甲内容的一句台词`
-        : npc.speechTargetName
-          ? `让${lore.name}${isOpening ? openingRule : `承接前面聊到的那件事，对${npc.speechTargetName}说一句具体的话：提问、表态、分享见闻或反驳。`}${depthRule}只输出嘴里实际说出的台词正文。严禁描写天气、风景、地点、环境、声音、衣物、身体、动作或神态，不输出姓名、关系标记、旁白或格式说明。`
-        : npc.bubbleKind === "action"
-          ? `由你随机构思${lore.name}此刻做出的一个简短、具体且符合身份与地点的日常动作。必须由模型现场生成，只输出动作本身，不加姓名、引号、解释、台词或默认占位内容。`
-          : `写${lore.name}此刻${isOpening ? "在心里琢磨的一件具体的事——一个疑虑、一个盘算、一个发现或一段牵挂，把它说出来" : "接着心里正琢磨的那件事往下想"}的一句简短自言自语，要有具体的内心活动、判断或感慨，不要泛泛。只输出嘴里实际说出的台词，严禁描写天气、风景、地点、环境、声音、衣物、身体、动作或神态，不加姓名、旁白或解释。`;
-    try {
-      const namedTarget = npc.speechTargetName
-        ? ambientWorld.current.npcs.find((item) => item.name === npc.speechTargetName)
-        : undefined;
-      if (partner && !ambientCanHear(npc, partner)) throw new Error("ambient speakers moved out of hearing range");
-      if (namedTarget && !ambientCanHear(npc, namedTarget)) throw new Error("ambient target moved out of hearing range");
-      if (npc.speechTargetName === (current.actor.name || "少侠") && !ambientCanHear(npc, current.position))
-        throw new Error("player moved out of hearing range");
-      const participantFacts = [
-        npcConversationFacts(npc.npcId),
-        ...groupNpcs.filter((item) => item.eventId !== npc.eventId).map((item) => npcConversationFacts(item.npcId)),
-        ...(partner ? [npcConversationFacts(partner.npcId)] : []),
-        ...(npc.speechTargetName === (current.actor.name || "少侠") ? [ambientPlayerFacts(current.actor)] : []),
-      ].filter((fact, index, facts) => facts.indexOf(fact) === index).join("\n");
-      const answer = await streamNpcReply({
-        system: `地点是${map.name}。
-【参与者不可改写事实】
-${participantFacts}
-${lore.name}的性情是${lore.personality}，说话方式是${lore.speech}。${partnerLore ? `${partnerLore.name}的性情是${partnerLore.personality}。` : ""}
-硬约束：姓名、年龄、性别、门派、外貌和武境必须服从上述事实；称谓与代词必须符合明确性别，绝不能凭姓名、服装、门派、外貌或声音猜测性别；性别未知时只用中性称呼。资料用于理解人物，不要在台词中机械报属性或复述档案。
-${mode}输出必须符合古代武侠世界，不推动正式任务，不改变物品或战斗状态。`,
-        messages: [{ role: "user", content: `${sessionContext.length ? `本轮仅供理解上下文的已说台词：\n${sessionContext.join("\n")}\n` : ""}${npc.bubbleKind === "action" ? "只生成一个动作。" : "只生成要求的口头台词，不补充任何背景描写。"}` }],
-        signal: controller.signal,
-        nextSpeaker: npc.bubbleKind === "action" ? "动作" : npc.name,
-        // A pair request produces two connected lines; solo and group turns only need one.
-        // Keeping the shared context short and budgets asymmetric prevents busy maps from
-        // monopolising a small local LM Studio model.
-        maxOutputTokens: partner ? 150 : 96,
-        onToken: () => {},
-      });
-      if (ambientEpoch.current !== epoch || ambientPaused.current || ambientWorld.current.mapId !== map.id || !npc.generationPending) return;
-      if (partner) {
-        const lines = answer.split("\n").map((line) => cleanAmbientSpeech(line, [npc.name, partner.name])).filter((line) => line !== "……");
-        if (lines.length < 2) throw new Error("LM Studio returned an incomplete paired exchange");
-        npc.bubble = `${npc.name} to ${partner.name}：“${lines[0]}”`;
-        npc.bubbleShownAt = Date.now();
-        npc.generationPending = false;
-        npc.bubbleUntil = Date.now() + Math.max(3400, npc.bubble.length * 180);
-        partner.queuedBubble = `${partner.name} to ${npc.name}：“${lines[1]}”`;
-        const nextContext = [...npc.conversationContext, npc.bubble, partner.queuedBubble].filter(Boolean).slice(-8);
-        npc.conversationContext = partner.conversationContext = nextContext;
-      } else {
-        const address = npc.speechTargetName ? `${npc.name} to ${npc.speechTargetName}：` : "";
-        const participantNames = npc.groupId
-          ? [...npc.groupMembers.map((id) => ambientWorld.current.npcs.find((item) => item.eventId === id)?.name || ""), npc.speechTargetName]
-          : [npc.name];
-        const generatedLine = npc.bubbleKind === "action" ? cleanAmbientAction(answer, participantNames) : cleanAmbientSpeech(answer, participantNames);
-        if (generatedLine === "……") throw new Error("LM Studio returned no usable ambient line");
-        // 动作标注「正在和环境交互」，无目标的自言自语标注「自言自语」，
-        // 定向对话(有 to 路由)保持原有格式；群聊成员的台词前缀「群聊 · 」。
-        const groupMark = npc.groupId ? "群聊 · " : "";
-        npc.bubble =
-          npc.bubbleKind === "action"
-            ? `${npc.name}正在和环境交互：${generatedLine}`
-            : address
-              ? `${groupMark}${address}“${generatedLine}”`
-              : `${groupMark}${npc.name}自言自语：“${generatedLine}”`;
-        npc.bubbleShownAt = Date.now();
-        npc.generationPending = false;
-        npc.bubbleUntil = Date.now() + Math.max(4200, npc.bubble.length * 180);
-        if (ambientPlayer.current.replyToNpcId === npc.eventId) {
-          // 群聊：让队列里下一个成员接着回应(可能回应玩家，也可能随机回应群里另一个人)；
-          // 都回完后玩家才能再次开口
-          const queue = ambientPlayer.current.responderQueue || [];
-          const nextId = queue.shift();
-          if (nextId) {
-            const next = ambientWorld.current.npcs.find((item) => item.eventId === nextId);
-            if (next && ambientCanHear(next, stateRef.current.position)) {
-              const playerName = stateRef.current.actor.name || "少侠";
-              const peers = ambientPlayer.current.npcIds
-                .map((id) => ambientWorld.current.npcs.find((item) => item.eventId === id))
-                .filter(
-                  (item): item is AmbientNpc =>
-                    Boolean(item) && item?.eventId !== next.eventId,
-                );
-              next.speechTargetName =
-                peers.length && Math.random() < 0.5
-                  ? peers[Math.floor(Math.random() * peers.length)].name
-                  : playerName;
-              next.bubbleKind = "speech"; next.bubbleUntil = Date.now() + 12000;
-              next.llmRequested = false; next.generationPending = true; next.queuedAt = Date.now();
-              if (next.groupId) next.groupTurn = 0;
-              ambientPlayer.current.replyToNpcId = next.eventId;
-            } else {
-              ambientPlayer.current.replyAt = Math.max(Date.now(), npc.bubbleUntil - 200);
-            }
-          } else {
-            ambientPlayer.current.replyAt = Math.max(Date.now(), npc.bubbleUntil - 200);
-          }
-        }
-        if (npc.groupId) {
-          const leader = ambientWorld.current.npcs.find((item) => item.eventId === npc.groupId);
-          if (leader) {
-            leader.groupNextAt = npc.bubbleUntil;
-            leader.conversationContext = [...leader.conversationContext, npc.bubble].slice(-8);
-          }
-        }
-      }
-    } catch {
-      npc.bubble = ""; npc.queuedBubble = ""; npc.generationPending = false;
-      npc.bubbleUntil = Date.now(); npc.nextBehaviorAt = Date.now() + 1800;
-      if (npc.groupId) {
-        for (const member of ambientWorld.current.npcs.filter((item) => npc.groupMembers.includes(item.eventId))) {
-          member.bubble = ""; member.queuedBubble = ""; member.generationPending = false;
-          member.groupId = 0; member.groupMembers = []; member.groupTurn = -1; member.groupNextAt = 0;
-          member.conversationContext = []; member.speechTargetName = ""; member.nextBehaviorAt = Date.now() + 1800;
-        }
-      }
-      if (partner) {
-        npc.partnerId = 0; npc.conversationTurn = 0; npc.conversationRound = 0; npc.conversationContext = [];
-        partner.bubble = ""; partner.queuedBubble = ""; partner.generationPending = false;
-        partner.partnerId = 0; partner.conversationTurn = 0; partner.conversationRound = 0; partner.conversationContext = [];
-        partner.bubbleUntil = Date.now(); partner.nextBehaviorAt = Date.now() + 1800;
-      }
-    } finally {
-      ambientControllers.current.delete(controller);
-      ambientLlmActive.current = Math.max(0, ambientLlmActive.current - 1);
-    }
-  }, []);
-  useEffect(() => {
-    if (screen !== "play") return;
-    const id = window.setInterval(() => {
-      if (ambientPaused.current) return;
-      // This is the sole dispatcher for ambient LLM work. Player work claims capacity
-      // first; NPC-only dialogue, monologue and action jobs follow in that order.
-      void enrichAmbientPlayer();
-      const capacity = Math.max(0, 3 - ambientLlmActive.current),
-        position = stateRef.current.position,
-        actorName = stateRef.current.actor.name || "少侠",
-        playerNpcIds = new Set(ambientPlayer.current.npcIds),
-        map = getOriginalMap(position.mapId),
-        viewport = ambientViewportBounds(map.width, map.height, position.x, position.y),
-        inRange = ambientWorld.current.npcs.filter((item) => ambientNpcInViewport(item, viewport)),
-        isPlayerWork = (item: AmbientNpc) => item.speechTargetName === actorName || playerNpcIds.has(item.eventId),
-        conversationIsClose = (item: AmbientNpc) => {
-          if (item.speechTargetName === actorName) return ambientCanHear(item, position);
-          const target = item.partnerId
-            ? ambientWorld.current.npcs.find((other) => other.eventId === item.partnerId)
-            : item.speechTargetName
-              ? ambientWorld.current.npcs.find((other) => other.name === item.speechTargetName)
-              : undefined;
-          if (item.speechTargetName && !target) return false;
-          return !target || ambientCanHear(item, target);
-        },
-        activeNpcOnlySessions = inRange.filter((item) => !isPlayerWork(item) && (Boolean(item.bubble) || (item.generationPending && item.llmRequested))).length,
-        pending = inRange
-          .filter((item) => item.generationPending && !item.llmRequested && conversationIsClose(item))
-          .sort((first, second) => {
-            const priority = (item: AmbientNpc) => isPlayerWork(item) ? 0 : item.partnerId || item.groupId ? 1 : item.bubbleKind === "speech" ? 2 : 3;
-            return priority(first) - priority(second) || first.queuedAt - second.queuedAt || first.eventId - second.eventId;
-          });
-      let npcOnlySlots = Math.max(0, 2 - activeNpcOnlySessions), dispatched = 0;
-      for (const npc of pending) {
-        if (dispatched >= capacity) break;
-        if (!isPlayerWork(npc) && npcOnlySlots <= 0) continue;
-        if (!isPlayerWork(npc)) npcOnlySlots -= 1;
-        dispatched += 1;
-        void enrichAmbientNpc(npc);
-      }
-    }, 320);
-    return () => window.clearInterval(id);
-  }, [enrichAmbientNpc, enrichAmbientPlayer, screen, state.position.mapId]);
   useEffect(() => {
     const target = canvas.current;
     if (!target) return;
@@ -3010,19 +2398,31 @@ ${mode}输出必须符合古代武侠世界，不推动正式任务，不改变�
     observer.observe(target);
     let lastFrame = 0;
     const frame = (now: number) => {
+      raf = 0;
       const ctx = target.getContext("2d");
-      if (!document.hidden && ctx && now - lastFrame >= 1000 / 30) {
+      if (ctx && now - lastFrame >= 1000 / 30) {
         lastFrame = now;
-        draw(ctx, stateRef.current, ambientWorld.current, ambientPlayer.current);
+        drawWorld(ctx, stateRef.current, ambientWorld.current, ambientPlayer.current);
       }
-      raf = requestAnimationFrame(frame);
+      if (!document.hidden) raf = requestAnimationFrame(frame);
     };
-    raf = requestAnimationFrame(frame);
+    const syncVisibility = () => {
+      if (document.hidden) {
+        if (raf) cancelAnimationFrame(raf);
+        raf = 0;
+        return;
+      }
+      lastFrame = 0;
+      if (!raf) raf = requestAnimationFrame(frame);
+    };
+    document.addEventListener("visibilitychange", syncVisibility);
+    syncVisibility();
     return () => {
       observer.disconnect();
-      cancelAnimationFrame(raf);
+      document.removeEventListener("visibilitychange", syncVisibility);
+      if (raf) cancelAnimationFrame(raf);
     };
-  }, [screen]);
+  }, [ambientPlayer, ambientWorld, screen]);
   const exportJson = () => {
     save();
     const a = document.createElement("a");
@@ -3037,18 +2437,27 @@ ${mode}输出必须符合古代武侠世界，不推动正式任务，不改变�
   };
   const importJson = async (f?: File) => {
     if (!f) return;
+    let source: unknown;
     try {
-      const x = JSON.parse(await f.text());
-      const parsed = parseSave(x);
-      if (!parsed.ok) throw new Error(parsed.error);
-      sync(parsed.value);
-      localStorage.setItem(LOCAL_SAVE_KEY, JSON.stringify(parsed.value));
-      setHasSave(true);
-      setScreen("play");
-      setNotice("JSON 读取成功");
+      source = JSON.parse(await f.text());
     } catch {
-      setNotice("存档格式无效");
+      setNotice("无法读取该文件，或文件不是有效的 JSON。");
+      return;
     }
+    const parsed = parseSave(source);
+    if (!parsed.ok) {
+      setNotice(`JSON 存档格式无效：${parsed.error}`);
+      return;
+    }
+    sync(parsed.value);
+    const written = writeJsonStorage(LOCAL_SAVE_KEY, parsed.value);
+    setHasSave(written.ok);
+    setScreen("play");
+    setNotice(
+      written.ok
+        ? "JSON 读取成功"
+        : `JSON 已载入，但本地保存失败：${storageFailureNotice(written.reason)}`,
+    );
   };
   const map = getOriginalMap(state.position.mapId),
     profile = actorStatusProfile(state.actor);
@@ -3262,7 +2671,7 @@ ${mode}输出必须符合古代武侠世界，不推动正式任务，不改变�
         </div>
         <div className="header-actions">
           <button onClick={save}>保存</button>
-          <button onClick={() => setScreen("title")}>主菜单</button>
+          <button onClick={returnToTitle}>主菜单</button>
         </div>
       </header>
       <section className="world-frame">
@@ -3278,10 +2687,7 @@ ${mode}输出必须符合古代武侠世界，不推动正式任务，不改变�
         {eventText && (
           <button
             className={`world-dialog${eventNpcId ? " with-portrait" : ""}`}
-            onClick={() => {
-              setEventText("");
-              setEventNpcId(null);
-            }}
+            onClick={advanceEventText}
           >
             {eventNpcId && (
               <CharacterPortrait
@@ -3696,2026 +3102,3 @@ const compactNumber = (value: number) =>
     notation: "compact",
     maximumFractionDigits: 1,
   }).format(value);
-
-function useDialogFocus<T extends HTMLElement>(trapTabs = true) {
-  const ref = useRef<T>(null);
-  useEffect(() => {
-    const root = ref.current;
-    if (!root) return;
-    const previous = document.activeElement instanceof HTMLElement
-      ? document.activeElement
-      : null;
-    const focusable = () => Array.from(
-      root.querySelectorAll<HTMLElement>(
-        'button:not([disabled]), input:not([disabled]), textarea:not([disabled]), select:not([disabled]), [tabindex]:not([tabindex="-1"])',
-      ),
-    );
-    const first = focusable()[0] || root;
-    const frame = requestAnimationFrame(() => first.focus());
-    const trap = (event: KeyboardEvent) => {
-      if (event.key !== "Tab") return;
-      const items = focusable();
-      if (!items.length) {
-        event.preventDefault();
-        root.focus();
-        return;
-      }
-      const current = items.indexOf(document.activeElement as HTMLElement);
-      const next = event.shiftKey
-        ? (current <= 0 ? items.length - 1 : current - 1)
-        : (current + 1) % items.length;
-      event.preventDefault();
-      items[next].focus();
-    };
-    if (trapTabs) root.addEventListener("keydown", trap);
-    return () => {
-      cancelAnimationFrame(frame);
-      if (trapTabs) root.removeEventListener("keydown", trap);
-      previous?.focus();
-    };
-  }, [trapTabs]);
-  return ref;
-}
-function StatusBar({
-  label,
-  value,
-  max,
-}: {
-  label: string;
-  value: number;
-  max: number;
-}) {
-  const percent = Math.max(0, Math.min(100, (value / Math.max(1, max)) * 100));
-  return (
-    <label>
-      <span>
-        {label}{" "}
-        <em>
-          {value.toLocaleString("zh-CN")}/{max.toLocaleString("zh-CN")}
-        </em>
-      </span>
-      <i>
-        <b style={{ width: `${percent}%` }} />
-      </i>
-    </label>
-  );
-}
-function Arcade({
-  game,
-  actor,
-}: {
-  game: ArcadeState;
-  actor: SceneActorState;
-}) {
-  const dialogRef = useDialogFocus<HTMLElement>();
-  if (game.kind === "select")
-    return (
-      <section ref={dialogRef} tabIndex={-1} className="arcade-panel" role="dialog" aria-modal="true" aria-label="平安镇游戏厅">
-        <h2>平安镇游戏厅</h2>
-        {["跳舞毯", "投铅球", "离开"].map((name, index) => (
-          <b className={game.index === index ? "active" : ""} key={name}>
-            {name}
-          </b>
-        ))}
-        <small>W/S 选择 · E/Enter 确认 · X/Esc 返回</small>
-      </section>
-    );
-  if (game.kind === "dance") {
-    const arrows = ["", "↑", "←", "↓", "→"];
-    return (
-      <section ref={dialogRef} tabIndex={-1} className="arcade-panel dance-panel" role="dialog" aria-modal="true" aria-label="跳舞毯">
-        <h2>跳舞毯</h2>
-        <div className="arcade-score">
-          SCORE {String(game.score).padStart(5, "0")} · TOP{" "}
-          {String(actor.dance || 100).padStart(5, "0")}
-        </div>
-        <strong>{arrows[game.dir]}</strong>
-        <div className="dance-pad">
-          ↑<i>← →</i>↓
-        </div>
-        <small>按对应方向或 WASD；踏错即结束 · X/Esc 离开</small>
-      </section>
-    );
-  }
-  const shotX = game.step === 3 ? 155 + Math.min(224, game.flight * 2) : 155,
-    shotY =
-      game.step === 3
-        ? 105 + Math.floor((379 - shotX) ** 2 * 0.004162330905)
-        : 290;
-  return (
-    <section ref={dialogRef} tabIndex={-1} className="arcade-panel ball-panel" role="dialog" aria-modal="true" aria-label="投铅球">
-      <h2>投铅球</h2>
-      <div className="arcade-score">
-        SCORE {String(game.score).padStart(5, "0")} · TOP{" "}
-        {String(actor.ball || 100).padStart(5, "0")} · MISS {game.fail}/7
-      </div>
-      <div className="aim-track">
-        <i style={{ left: game.x - 52 }} />
-      </div>
-      <div className="hoop">
-        ┐<span style={{ left: shotX - 90, top: shotY - 80 }}>●</span>
-      </div>
-      <small>
-        E/Enter 开始游标，再按一次投球 · 命中区 110–128 · X/Esc 离开
-      </small>
-    </section>
-  );
-}
-
-function LifeMenu({
-  menu,
-  actor,
-}: {
-  menu: LifeState;
-  actor: SceneActorState;
-}) {
-  const dialogRef = useDialogFocus<HTMLElement>();
-  const items =
-    menu.kind === "forge"
-      ? [
-          ...swordTypes.map((name, type) => {
-            const sword = actor.swords?.[type];
-            return sword?.forged
-              ? `重铸「${sword.name || `${name}器`}」`
-              : `铸造${name}`;
-          }),
-          "离开",
-        ]
-      : [
-          `翻修房屋（当前 ${actor.roomLevel || 0}/3）`,
-          ...furnitureNames.map(
-            (name, index) =>
-              `${name} / 已有 ${actor.jiajuList?.[index] || 0}`,
-          ),
-          "销毁全部家具",
-          "离开",
-        ];
-  return (
-    <section ref={dialogRef} tabIndex={-1} className="arcade-panel life-panel" role="dialog" aria-modal="true" aria-label={menu.kind === "forge" ? "铸剑谷" : "桃花源管家"}>
-      <h2>{menu.kind === "forge" ? "铸剑谷" : "桃花源管家"}</h2>
-      {items.map((item, index) => (
-        <b className={menu.index === index ? "active" : ""} key={item}>
-          {item}
-        </b>
-      ))}
-      <small>
-        {menu.kind === "forge"
-          ? `经验 ${actor.exp} · 银两 ${actor.gold} · 武器名可在 JSON 中修改`
-          : `银两 ${actor.gold} · 家具每件 60000`}
-      </small>
-      {menu.kind === "forge" && (
-        <p className="life-hint">
-          {menu.index < 4
-            ? (() => {
-                const sword = actor.swords?.[menu.index];
-                return sword?.forged
-                  ? `当前「${sword.name || "无名兵器"}」：${customSwordBonus(sword)}。重铸品质受福缘 ${actor.luck} 影响。`
-                  : `铸造${swordTypes[menu.index]}：中缀(闪避/命中)与后缀(四维)品质受福缘 ${actor.luck} 影响，福缘越高越容易出好词缀。`;
-              })()
-            : "选择要铸造或重铸的兵器类型，按 E/Enter 确认。"}
-        </p>
-      )}
-    </section>
-  );
-}
-
-function Choice({
-  title,
-  items,
-  index,
-  choose,
-  progress,
-  message,
-  wide = false,
-  columns,
-  hint,
-}: {
-  title: string;
-  items: string[];
-  index: number;
-  choose: (index: number) => void;
-  progress?: { label: string; value: number; max: number; detail: string };
-  message?: string;
-  wide?: boolean;
-  columns?: number;
-  hint?: string;
-}) {
-  const dialogRef = useDialogFocus<HTMLDivElement>();
-  const density = columns
-    ? " choice-grid"
-    : items.length > 18
-      ? " three-column dense"
-      : items.length > 8
-        ? " two-column"
-        : "";
-  return (
-    <div ref={dialogRef} tabIndex={-1} role="dialog" aria-modal="true" aria-label={title} className={`world-choice large${wide ? " wide" : ""}${density}`}>
-      <b>{title}</b>
-      <div
-        className="choice-items"
-        style={
-          columns
-            ? { gridTemplateColumns: `repeat(${columns}, minmax(0, 1fr))` }
-            : undefined
-        }
-      >
-        {items.map((item, i) => (
-          <button
-            className={i === index ? "active" : ""}
-            onClick={() => choose(i)}
-            key={`${item}-${i}`}
-          >
-            <span>{item}</span>
-            {i === index && <i>◆</i>}
-          </button>
-        ))}
-      </div>
-      {progress && (
-        <div className="training-progress">
-          <span>
-            <b>{progress.label}</b>
-            <em>
-              {progress.value.toLocaleString("zh-CN")} /{" "}
-              {progress.max.toLocaleString("zh-CN")}
-            </em>
-          </span>
-          <i>
-            <b
-              style={{
-                width: `${Math.max(0, Math.min(100, (progress.value / Math.max(1, progress.max)) * 100))}%`,
-              }}
-            />
-          </i>
-          <small>{progress.detail}</small>
-        </div>
-      )}
-      {message && <p className="training-message">{message}</p>}
-      <small>{hint || "W/S 选择 · E/Enter 确认 · X/Esc 返回"}</small>
-    </div>
-  );
-}
-function BattleView({
-  battle,
-  narratives,
-  actor,
-  hp,
-  maxHp,
-  fight,
-  leave,
-  openSpecial,
-  openItem,
-  flee,
-}: {
-  battle: OriginalBattle;
-  narratives: BattleNarrative[];
-  actor: SceneActorState;
-  hp: number;
-  maxHp: number;
-  fight: () => void;
-  leave: () => void;
-  openSpecial: () => void;
-  openItem: () => void;
-  flee: () => void;
-}) {
-  const dialogRef = useDialogFocus<HTMLDivElement>();
-  const logRef = useRef<HTMLDivElement>(null);
-  const latestNarrative = narratives.at(-1);
-  useEffect(() => {
-    const log = logRef.current;
-    if (!log) return;
-    log.scrollTo({
-      top: log.scrollHeight,
-      behavior: latestNarrative?.loading ? "auto" : "smooth",
-    });
-  }, [battle.log.length, latestNarrative?.loading, latestNarrative?.text.length]);
-  return (
-    <div ref={dialogRef} tabIndex={-1} className="battle" role="dialog" aria-modal="true" aria-label={`与${battle.enemyName}战斗`}>
-      <div className="battle-stage">
-        <div className="fighter hero">
-          <CharacterPortrait
-            playerGender={actor.gender}
-            name={actor.name || "少侠"}
-            className="battle-portrait"
-          />
-          <span>{actor.name || "少侠"}</span>
-        </div>
-        <b>
-          {battle.mode === "spar" ? "切磋" : "生死战"} · 第 {battle.turn + 1}{" "}
-          回合
-          {battle.enemyId === 149 && !actor.swordBattle && (
-            <>
-              {" "}
-              · 铸剑挑战 第{" "}
-              {Math.min(actor.forgeChallengeStep || 0, 3) + 1}/4 轮 · 用{" "}
-              {["钢刀", "长剑", "钢杖", "长鞭"][
-                Math.min(actor.forgeChallengeStep || 0, 3)
-              ]}
-            </>
-          )}
-        </b>
-        <div className="fighter enemy">
-          <CharacterPortrait
-            npcId={battle.enemyId}
-            name={battle.enemyName}
-            className="battle-portrait"
-          />
-          <span>{battle.enemyName}</span>
-        </div>
-      </div>
-      <div className="battle-bars">
-        <label>
-          你 <meter min="0" max={maxHp} value={hp} />
-          <em>
-            {hp}/{maxHp}
-          </em>
-        </label>
-        <label>
-          {battle.enemyName}{" "}
-          <meter min="0" max={battle.enemyMaxHp} value={battle.enemyHp} />
-          <em>
-            {battle.enemyHp}/{battle.enemyMaxHp}
-          </em>
-        </label>
-      </div>
-      <div
-        className="battle-log"
-        ref={logRef}
-        role="log"
-        aria-live="polite"
-        aria-relevant="additions"
-      >
-        <header><span>战况实录</span><i>LIVE</i></header>
-        {!narratives.length && <p className="battle-opening"><span>{battle.log[0]}</span></p>}
-        {narratives.map((item, index) => (
-          <article className={index === narratives.length - 1 ? "latest" : ""} key={`${item.turn}-${index}`}>
-            <header><time>第 {item.turn} 回合</time><small>{item.facts.join(" · ")}</small></header>
-            <div>{item.text || "风声骤紧，正在演绎这一回合……"}</div>
-            {item.error && <em>小说战报生成中断，已保留真实结算：{item.error}</em>}
-          </article>
-        ))}
-        <div className="battle-log-anchor" aria-hidden="true" />
-      </div>
-      <nav>
-        <button onClick={battle.finished ? leave : fight}>
-          {battle.finished ? "处理战果" : "普通攻击"} <kbd>E</kbd>
-        </button>
-        <button onClick={openSpecial} disabled={Boolean(battle.finished)}>
-          绝招 <kbd>Q</kbd>
-        </button>
-        <button onClick={openItem} disabled={Boolean(battle.finished)}>
-          物品 <kbd>I</kbd>
-        </button>
-        <button
-          onClick={battle.mode === "spar" ? leave : flee}
-          disabled={Boolean(battle.finished)}
-        >
-          {battle.mode === "spar" ? "退出" : "逃跑"}{" "}
-          <kbd>{battle.mode === "spar" ? "X" : "G"}</kbd>
-        </button>
-      </nav>
-    </div>
-  );
-}
-function SpecialPicker({
-  actor,
-  battle,
-  index,
-  choose,
-}: {
-  actor: SceneActorState;
-  battle: OriginalBattle;
-  index: number;
-  choose: (id?: number) => void;
-}) {
-  const dialogRef = useDialogFocus<HTMLDivElement>();
-  const list = battleSpecials(actor, battle.cooldowns);
-  return (
-    <div ref={dialogRef} tabIndex={-1} className="special-picker" role="dialog" aria-modal="true" aria-label="选择绝招">
-      <b>选择绝招</b>
-      {list.length ? (
-        list.map((special, i) => (
-          <button
-            className={index === i ? "active" : ""}
-            disabled={!special.enabled}
-            onClick={() => choose(special.id)}
-            key={special.id}
-          >
-            <span>
-              {special.name}
-              <small>{special.description}</small>
-            </span>
-            <em>
-              {special.enabled
-                ? `内力 ${special.fpCost}${special.mpCost ? ` · 法力 ${special.mpCost}` : ""}`
-                : special.reason}
-            </em>
-          </button>
-        ))
-      ) : (
-        <p>当前装配的功夫没有可用绝招。</p>
-      )}
-      <footer>W/S 选择 · E/Enter 施展 · X/Esc 返回</footer>
-    </div>
-  );
-}
-function GameMenu({
-  actor,
-  tasks,
-  menu,
-  setMenu,
-  activate,
-  discard,
-  activateKf,
-  quickAction,
-  changeStat,
-  changeSkill,
-  maxStat,
-  maxSkill,
-  mutate,
-}: {
-  actor: SceneActorState;
-  tasks: TaskState;
-  menu: { tab: number; index: number; sub: number };
-  setMenu: (value: { tab: number; index: number; sub: number } | null) => void;
-  activate: (entry?: BagEntry) => void;
-  discard: (entry?: BagEntry) => void;
-  activateKf: (id?: number, parry?: boolean) => void;
-  quickAction: (action: CheatQuickAction) => void;
-  changeStat: (index: number, direction: -1 | 1) => void;
-  changeSkill: (index: number, direction: -1 | 1) => void;
-  maxStat: (index: number) => void;
-  maxSkill: (index: number) => void;
-  mutate: (mutation: (draft: WorldSave) => string) => void;
-}) {
-  const dialogRef = useDialogFocus<HTMLDivElement>(false);
-  const tabs = ["行囊", "状态", "功夫", "秘技"],
-    entries = organizedBagEntries(actor),
-    stats = derivedStats(actor),
-    profile = actorStatusProfile(actor);
-  return (
-    <div ref={dialogRef} tabIndex={-1} className="game-menu" role="dialog" aria-modal="true" aria-label="主菜单">
-      <nav>
-        {tabs.map((tab, i) => (
-          <button
-            key={tab}
-            className={`${menu.tab === i ? "active" : ""}${i === 3 ? " cheat-entry" : ""}`}
-            onClick={() => setMenu({ tab: i, index: 0, sub: menu.sub })}
-          >
-            {tab}
-          </button>
-        ))}
-      </nav>
-      {menu.tab === 3 ? (
-        <CheatInner
-          actor={actor}
-          tasks={tasks}
-          sub={menu.sub}
-          cursor={menu.index}
-          setMenu={setMenu}
-          quickAction={quickAction}
-          changeStat={changeStat}
-          changeSkill={changeSkill}
-          maxStat={maxStat}
-          maxSkill={maxSkill}
-          mutate={mutate}
-        />
-      ) : menu.tab === 0 ? (
-        <section className="bag-list">
-          {entries.length ? (
-            entries.map((entry, i) => (
-              <div className="inventory-fragment" key={entry.key}>
-                {(i === 0 || entries[i - 1].category !== entry.category) && (
-                  <header className="equipment-category">
-                    <span>{entry.category}</span>
-                    <small>
-                      {entry.kind === 3 ? "同槽择一 · " : ""}
-                      {entries.filter((item) => item.category === entry.category).length} 件
-                    </small>
-                  </header>
-                )}
-              <div
-                className={`bag-row${menu.index === i ? " active" : ""}${entry.equipped ? " equipped" : ""}`}
-                onMouseEnter={() => setMenu({ tab: 0, index: i, sub: 0 })}
-              >
-                <button
-                  className="bag-main"
-                  onClick={() => activate(entry)}
-                >
-                  <i className={`item-pixel kind-${entry.kind}`} />
-                  <span>
-                    <small className="item-slot">{entry.slot}</small>
-                    <b>
-                      {entry.name}
-                      {entry.equipped ? "〔装备中〕" : ""}
-                    </b>
-                    <small className="item-desc">{entry.description}</small>
-                    <em className="item-bonuses">{entry.bonuses}</em>
-                  </span>
-                  <em>×{entry.amount}</em>
-                </button>
-                <button
-                  className="bag-drop"
-                  onClick={() => discard(entry)}
-                  title="丢掉"
-                >
-                  丢掉
-                </button>
-              </div>
-              </div>
-            ))
-          ) : (
-            <p>行囊空空如也。</p>
-          )}
-        </section>
-      ) : menu.tab === 1 ? (
-        <section className="actor-status-panel">
-          <header>
-            <CharacterPortrait
-              playerGender={actor.gender}
-              name={actor.name || "江湖少侠"}
-              className="status-portrait"
-            />
-            <div className="status-identity">
-              <b>{profile.school} · {actor.name || "江湖少侠"}</b>
-              <small>{actor.age} 岁 · {profile.gender} · 师承 {profile.teacher}</small>
-              <strong>武艺看起来「{profile.realm}」，出手似乎「{profile.attackWeight}」</strong>
-              <em>{profile.appearance}</em>
-            </div>
-            <div className="ladder-summary">
-              <span>
-                综合武境 <b>{profile.realmTier}/50 阶</b>
-              </span>
-              <span>
-                出手劲道 <b>{profile.attackTier}/6 阶</b>
-              </span>
-              <span>
-                容貌评价 <b>{profile.appearanceTier}/8 阶</b>
-              </span>
-            </div>
-          </header>
-          <div className="status-cards">
-          <fieldset>
-            <legend>精气状态</legend>
-            <span>
-              气血{" "}
-              <b>
-                {actor.hp}/{actor.maxHp}
-              </b>
-            </span>
-            <span>
-              伤势上限{" "}
-              <b>
-                {actor.maxHp}/{fullHp(actor)}
-              </b>
-            </span>
-            <span>
-              内力{" "}
-              <b>
-                {actor.fp}/{actor.maxFp}（加力 {actor.fpPlus}）
-              </b>
-            </span>
-            <span>
-              法力{" "}
-              <b>
-                {actor.mp}/{actor.maxMp}（法点 {actor.mpPlus}）
-              </b>
-            </span>
-            <span>
-              饱食{" "}
-              <b>
-                {actor.food}/{maxFood(actor)}
-              </b>
-            </span>
-            <span>
-              饮水{" "}
-              <b>
-                {actor.water}/{maxWater(actor)}
-              </b>
-            </span>
-          </fieldset>
-          <fieldset>
-            <legend>先天与实战属性</legend>
-            <span>
-              膂力{" "}
-              <b>
-                {stats.str}/{actor.baseStr}
-              </b>
-            </span>
-            <span>
-              敏捷{" "}
-              <b>
-                {stats.agi}/{actor.baseAgi}
-              </b>
-            </span>
-            <span>
-              悟性{" "}
-              <b>
-                {stats.int}/{actor.baseInt}
-              </b>
-            </span>
-            <span>
-              根骨{" "}
-              <b>
-                {stats.bon}/{actor.baseBon}
-              </b>
-            </span>
-            <span>
-              装备攻击 <b>{stats.atk}</b>
-            </span>
-            <span>
-              装备防御 <b>{stats.pdef}</b>
-            </span>
-            <span>
-              装备命中 <b>{stats.hit}</b>
-            </span>
-            <span>
-              装备闪避 <b>{stats.eva}</b>
-            </span>
-          </fieldset>
-          <fieldset>
-            <legend>江湖履历</legend>
-            <span>
-              经验 <b>{actor.exp.toLocaleString("zh-CN")}</b>
-            </span>
-            <span>
-              潜能 <b>{actor.potential.toLocaleString("zh-CN")}</b>
-            </span>
-            <span>
-              银两 <b>{actor.gold.toLocaleString("zh-CN")}</b>
-            </span>
-            <span>
-              名声/道德 <b>{actor.morals}</b>
-            </span>
-            <span className="status-explain">
-              <span>
-                福缘<small>请教速度、任务奖励、铸剑词缀与随机事件</small>
-              </span>
-              <b>{actor.luck}</b>
-            </span>
-            <span className="status-explain">
-              <span>
-                容貌<small>人物评价、部分拜师条件与结局判定</small>
-              </span>
-              <b>{actor.face}</b>
-            </span>
-            <span>
-              击杀 NPC <b>{actor.killList?.length || 0}</b>
-            </span>
-            <span>
-              追杀恶人 <b>{actor.badmanKill || 0}</b>
-            </span>
-            <span>
-              杀手任务 <b>{actor.taskKill || 0}</b>
-            </span>
-            <span>
-              坛位 <b>{actor.tanId}/8</b>
-            </span>
-          </fieldset>
-          <fieldset>
-            <legend>装备与战斗功夫</legend>
-            <span>
-              兵刃 <b>{profile.weapon}</b>
-            </span>
-            <span>
-              防具 <b>{profile.armor}</b>
-            </span>
-            <span>
-              攻击功夫 <b>{profile.combat.attack}</b>
-            </span>
-            <span>
-              轻功 <b>{profile.combat.dodge}</b>
-            </span>
-            <span>
-              招架 <b>{profile.combat.parry}</b>
-            </span>
-            <span>
-              已学功夫 <b>{Object.keys(actor.skills).length}</b>
-            </span>
-            <span>
-              综合武境进度 <b>{profile.realmValue}/245</b>
-            </span>
-          </fieldset>
-          </div>
-        </section>
-      ) : (
-        <SkillRows
-          actor={actor}
-          index={menu.index}
-          setMenu={setMenu}
-          activate={activateKf}
-        />
-      )}
-      <footer>
-        W/A/S/D 或方向键选择 · Tab/数字键切页 · E/Enter 装配 · C/R 设为招架 · X/Esc 关闭
-      </footer>
-    </div>
-  );
-}
-function CheatInner({
-  actor,
-  tasks,
-  sub,
-  cursor,
-  setMenu,
-  quickAction,
-  changeStat,
-  changeSkill,
-  maxStat,
-  maxSkill,
-  mutate,
-}: {
-  actor: SceneActorState;
-  tasks: TaskState;
-  sub: number;
-  cursor: number;
-  setMenu: (value: { tab: number; index: number; sub: number } | null) => void;
-  quickAction: (action: CheatQuickAction) => void;
-  changeStat: (index: number, direction: -1 | 1) => void;
-  changeSkill: (index: number, direction: -1 | 1) => void;
-  maxStat: (index: number) => void;
-  maxSkill: (index: number) => void;
-  mutate: (mutation: (draft: WorldSave) => string) => void;
-}) {
-  const tabs = ["快捷", "人物数值", "物品装备", "全部武功", "身份师承", "世界进度"],
-    [inventoryTab, setInventoryTab] = useState<
-      "food" | "medicine" | "book" | "misc" | "weapon" | "armor" | "owned"
-    >("food"),
-    [amounts, setAmounts] = useState<Record<string, number>>({}),
-    killed = (actor.killList || []).filter((id) => originalTables.enemies[id]);
-  const commitNumber = (valueIndex: number, value: string) =>
-    mutate((draft) => setCheatStat(draft.actor, valueIndex, Number(value)));
-  return (
-    <section className="cheat-inner">
-      <nav className="cheat-subnav">
-        {tabs.map((tab, tabIndex) => (
-          <button
-            key={tab}
-            className={sub === tabIndex ? "active" : ""}
-            onClick={() => setMenu({ tab: 3, sub: tabIndex, index: 0 })}
-          >
-            {tab}
-          </button>
-        ))}
-      </nav>
-      <div className="cheat-list">
-        {sub === 0 &&
-          cheatQuickOptions.map((option, optionIndex) => (
-            <button
-              key={option.id}
-              className={`${cursor === optionIndex ? "active" : ""} ${option.dangerous ? "danger" : ""}`}
-              onMouseEnter={() => setMenu({ tab: 3, sub: 0, index: optionIndex })}
-              onClick={() => quickAction(option.id)}
-            >
-              <span>
-                <b>{option.name}</b>
-                <small>{option.detail}</small>
-              </span>
-              <em>{option.dangerous ? "需确认" : "施展"}</em>
-            </button>
-          ))}
-        {sub === 1 &&
-          cheatStats.map((stat, index) => (
-            <div
-              key={stat.key}
-              className={cursor === index ? "active" : ""}
-              onMouseEnter={() => setMenu({ tab: 3, sub: 1, index })}
-            >
-              <span>
-                <b>{stat.name}</b>
-                <small>
-                  {stat.group} · 步进 {stat.step.toLocaleString("zh-CN")} · 可修改范围{" "}
-                  {("min" in stat ? stat.min : 0).toLocaleString("zh-CN")}–
-                  {cheatStatMaximum(actor, index).toLocaleString("zh-CN")}
-                </small>
-              </span>
-              <input
-                className="cheat-number"
-                type="number"
-                min={"min" in stat ? stat.min : 0}
-                max={cheatStatMaximum(actor, index)}
-                defaultValue={Number(actor[stat.key] || 0)}
-                key={`${stat.key}:${Number(actor[stat.key] || 0)}`}
-                onBlur={(event) => commitNumber(index, event.target.value)}
-                onKeyDown={(event) => { if (event.key === "Enter") event.currentTarget.blur(); }}
-              />
-              <div>
-                <button onClick={() => changeStat(index, -1)}>−</button>
-                <button onClick={() => changeStat(index, 1)}>＋</button>
-                <button className="max" onClick={() => maxStat(index)}>
-                  MAX
-                </button>
-              </div>
-            </div>
-          ))}
-        {sub === 2 && (
-          <div className="cheat-editor-stack cheat-inventory">
-            <nav className="cheat-kind-buttons">
-              {([
-                ["food", "食物"],
-                ["medicine", "丹药"],
-                ["book", "秘籍"],
-                ["misc", "杂物"],
-                ["weapon", "武器"],
-                ["armor", "防具/工具"],
-                ["owned", "已有"],
-              ] as const).map(([kind, label]) => (
-                <button
-                  key={kind}
-                  className={inventoryTab === kind ? "active" : ""}
-                  onClick={() => setInventoryTab(kind)}
-                >
-                  {label}
-                </button>
-              ))}
-            </nav>
-            {inventoryTab === "owned" ? (
-              <div className="cheat-owned-list">
-                <p className="cheat-capacity">
-                  当前持有 {Object.keys(actor.inventory).length} 种物品。移除已装备的武器或防具时会自动卸下。
-                </p>
-                {Object.entries(actor.inventory)
-                  .filter(([, amount]) => amount > 0)
-                  .map(([key, amount]) => {
-                    const [kind, id] = key.split(":").map(Number),
-                      table =
-                        kind === 1
-                          ? originalTables.items
-                          : kind === 2
-                            ? originalTables.weapons
-                            : originalTables.armors;
-                    return (
-                      <div className="cheat-owned-row" key={key}>
-                        <span>
-                          <b>{table[id]?.name || key}</b>
-                          <small>
-                            {kind === 1 ? "物品" : kind === 2 ? "武器" : "防具"} · ID{" "}
-                            {id}
-                          </small>
-                        </span>
-                        <strong>× {amount}</strong>
-                        <button
-                          onClick={() =>
-                            mutate((draft) =>
-                              setCheatInventory(
-                                draft.actor,
-                                kind as CheatInventoryKind,
-                                id,
-                                0,
-                              ),
-                            )
-                          }
-                        >
-                          移除
-                        </button>
-                      </div>
-                    );
-                  })}
-                {!Object.values(actor.inventory).some((amount) => amount > 0) && (
-                  <p className="cheat-empty">当前没有物品。</p>
-                )}
-              </div>
-            ) : (
-              <div className="cheat-catalog">
-                {(() => {
-                  const inventoryKind: CheatInventoryKind =
-                      inventoryTab === "weapon" ? 2 : inventoryTab === "armor" ? 3 : 1,
-                    itemGroup =
-                      inventoryTab === "food"
-                        ? "食物"
-                        : inventoryTab === "medicine"
-                          ? "丹药"
-                          : inventoryTab === "book"
-                            ? "秘籍"
-                            : inventoryTab === "misc"
-                              ? "杂物"
-                              : null,
-                    groups = cheatCatalogGroups(
-                      inventoryKind,
-                      inventoryKind === 2
-                        ? actor.weaponId
-                          ? [actor.weaponId]
-                          : []
-                        : inventoryKind === 3
-                          ? actor.armorIds
-                          : [],
-                    ).filter((group) => !itemGroup || group.name === itemGroup);
-                  return groups.map((group) => (
-                  <div
-                    className={`cheat-catalog-group${group.name === "已装备" ? " equipped-group" : ""}`}
-                    key={group.name}
-                  >
-                    <header className="cheat-group-header">
-                      <b>{group.name}</b>
-                      <small>
-                        {inventoryKind === 3 ? "同槽择一 · " : ""}
-                        {group.items.length} 件
-                      </small>
-                    </header>
-                    {group.items.map((entry) => {
-                      const amountKey = `${inventoryKind}:${entry.id}`,
-                        value = amounts[amountKey] ?? 1,
-                        owned = actor.inventory[amountKey] || 0;
-                      return (
-                        <div
-                          key={entry.id}
-                          className={`cheat-catalog-row${entry.equipped ? " is-equipped" : ""}`}
-                        >
-                          <div className="cheat-catalog-info">
-                            <span>
-                              <b>
-                                {entry.name}
-                                <small>ID {entry.id}</small>
-                                {entry.equipped && <i>已装备</i>}
-                              </b>
-                              <em>{entry.bonus}</em>
-                            </span>
-                            <small className="cheat-catalog-desc">
-                              {entry.description}
-                            </small>
-                          </div>
-                          <strong className="cheat-owned-count">已有 × {owned}</strong>
-                          <div className="cheat-acquire-controls">
-                            <label>
-                              <span>数量</span>
-                              <input
-                                className="cheat-number cheat-amount"
-                                aria-label={`${entry.name}获得数量`}
-                                type="number"
-                                min={1}
-                                max={inventoryKind === 1 ? 255 : 1}
-                                value={value}
-                                onChange={(event) =>
-                                  setAmounts({
-                                    ...amounts,
-                                    [amountKey]: Math.max(
-                                      1,
-                                      Math.min(
-                                        inventoryKind === 1 ? 255 : 1,
-                                        Number(event.target.value) || 1,
-                                      ),
-                                    ),
-                                  })
-                                }
-                              />
-                            </label>
-                            <button
-                              className="cheat-obtain"
-                              onClick={() =>
-                                mutate((draft) =>
-                                  addCheatInventory(
-                                    draft.actor,
-                                    inventoryKind,
-                                    entry.id,
-                                    value,
-                                  ),
-                                )
-                              }
-                            >
-                              获得
-                            </button>
-                          </div>
-                        </div>
-                      );
-                    })}
-                  </div>
-                  ));
-                })()}
-              </div>
-            )}
-          </div>
-        )}
-        {sub === 3 &&
-          (allCheatSkills.length ? (
-            allCheatSkills.map((skill, index) => {
-              const learned = actor.skills[String(skill.id)],
-                schoolId = kungfuSchoolId(skill.id),
-                showHeader =
-                  index === 0 ||
-                  kungfuSchoolId(allCheatSkills[index - 1].id) !== schoolId;
-              return (
-              <div className="cheat-skill-wrap" key={skill.id}>
-                {showHeader && (
-                  <div className="cheat-group-header">
-                    <b>{kungfuSchoolName(skill.id)}</b>
-                    <small>
-                      {allCheatSkills.filter(
-                        (item) => kungfuSchoolId(item.id) === schoolId,
-                      ).length}{" "}
-                      门
-                    </small>
-                  </div>
-                )}
-                <div
-                  className={`cheat-skill-row ${cursor === index ? "active" : ""}`}
-                  onMouseEnter={() => setMenu({ tab: 3, sub: 3, index })}
-                >
-                  <span>
-                    <b>{skill.name}</b>
-                    <small>{learned ? "已习得" : "未习得"} · 可修改范围 1–255 · 类型 {skill.type}</small>
-                  </span>
-                  <input className="cheat-number" type="number" min={1} max={255}
-                    disabled={!learned} defaultValue={learned?.level || 1}
-                    key={`${skill.id}:${learned?.level || 0}`}
-                    onBlur={(event) => learned && mutate((draft) => setCheatSkill(draft.actor, skill.id, Number(event.target.value)))}
-                    onKeyDown={(event) => { if (event.key === "Enter") event.currentTarget.blur(); }} />
-                  <div>
-                    {learned ? <>
-                      <button onClick={() => changeSkill(index, -1)}>−</button>
-                      <button onClick={() => changeSkill(index, 1)}>＋</button>
-                      <button className="max" onClick={() => maxSkill(index)}>MAX</button>
-                      <button className="remove" onClick={() => mutate((draft) => removeCheatSkill(draft.actor, skill.id))}>移除</button>
-                    </> : <button className="add" onClick={() => mutate((draft) => setCheatSkill(draft.actor, skill.id, 1))}>习得</button>}
-                  </div>
-                </div>
-              </div>
-              );
-            })
-          ) : (
-            <p>功夫数据库为空。</p>
-          ))}
-        {sub === 4 && (
-          <div className="cheat-editor-stack identity-editor">
-            <label>姓名（1–8 字符）
-              <input defaultValue={actor.name || "江湖少侠"} maxLength={8} onBlur={(event) => mutate((draft) => {
-                const name = event.target.value.trim().slice(0, 8);
-                if (!name) return "姓名不能为空。";
-                draft.actor.name = name; return `姓名修改为${name}。`;
-              })} />
-            </label>
-            <label>性别
-              <select value={actor.gender} onChange={(event) => mutate((draft) => { draft.actor.gender = Math.max(0, Math.min(2, Number(event.target.value))); return "性别已经修改。"; })}>
-                <option value={0}>男</option><option value={1}>女</option><option value={2}>其他</option>
-              </select>
-            </label>
-            <label>门派
-              <select value={actor.classId} onChange={(event) => mutate((draft) => setCheatIdentity(draft.actor, Number(event.target.value), draft.actor.teacherId))}>
-                {cheatSchools.map((school, id) => <option key={id} value={id}>{id} · {school}</option>)}
-              </select>
-            </label>
-            <label>师父
-              <select value={actor.teacherId} onChange={(event) => mutate((draft) => {
-                return setCheatIdentity(draft.actor, draft.actor.classId, Number(event.target.value));
-              })}>
-                <option value={0}>0 · 无师父</option>
-                {cheatTeachers.map((teacher) => <option key={teacher.id} value={teacher.id}>{teacher.id} · {teacher.name}{teacher.schoolId ? `（${cheatSchools[teacher.schoolId]}）` : ""}</option>)}
-              </select>
-            </label>
-            <p>修改器中的门派与师父可以独立任意组合；正常拜师仍遵守门派限制。</p>
-          </div>
-        )}
-        {sub === 5 && (
-          <div className="cheat-editor-stack world-editor">
-            <section className="cheat-toggle-grid">
-              {([
-                ["haveNewHome", "拥有桃花源家园"], ["swordBattle", "通过铸剑挑战"], ["xue6", "特殊武学标记"],
-              ] as const).map(([key, label]) => <label key={key}>
-                <input type="checkbox" checked={Boolean(actor[key])} onChange={(event) => mutate((draft) => {
-                  (draft.actor as unknown as Record<string, unknown>)[key] = event.target.checked;
-                  return `${label}${event.target.checked ? "已开启" : "已关闭"}。`;
-                })} /> {label}
-              </label>)}
-            </section>
-            <h3>复活已杀死 NPC</h3>
-            {killed.length ? killed.map((id) => <div className="cheat-owned-row" key={id}>
-              <span><b>{originalTables.enemies[id]?.name || id}</b><small>NPC ID {id} · 复活后恢复地图人物与互动</small></span>
-              <button onClick={() => mutate((draft) => reviveCheatNpc(draft.actor, id))}>复活</button>
-            </div>) : <p>当前没有可复活的 NPC。</p>}
-            <h3>任务时钟</h3>
-            <label>世界时间（秒）· 0–4,294,967,295
-              <input type="number" min={0} max={4294967295} defaultValue={tasks.clock}
-                key={`clock:${tasks.clock}`} onBlur={(event) => mutate((draft) => {
-                  draft.tasks.clock = Math.max(0, Math.min(4294967295, Math.floor(Number(event.target.value) || 0)));
-                  return `世界时间调整为 ${draft.tasks.clock} 秒。`;
-                })} />
-            </label>
-            <section className="cheat-toggle-grid">
-              <label><input type="checkbox" checked={tasks.finishFlag} onChange={(event) => mutate((draft) => { draft.tasks.finishFlag = event.target.checked; return "主任务领奖标记已经修改。"; })} /> 主任务奖励待领取</label>
-              <label><input type="checkbox" checked={tasks.stoneStarted} onChange={(event) => mutate((draft) => { draft.tasks.stoneStarted = event.target.checked; return "石料任务状态已经修改。"; })} /> 石料任务进行中</label>
-            </section>
-            <button className="danger-action" onClick={() => mutate((draft) => {
-              const clock = draft.tasks.clock;
-              draft.tasks = { ...freshTaskState(), clock };
-              return "全部任务状态已重置，并保留当前世界时间。";
-            })}>重置全部任务状态</button>
-          </div>
-        )}
-      </div>
-    </section>
-  );
-}
-function SkillRows({
-  actor,
-  index,
-  setMenu,
-  activate,
-}: {
-  actor: SceneActorState;
-  index: number;
-  setMenu: (value: { tab: number; index: number; sub: number }) => void;
-  activate: (id?: number, parry?: boolean) => void;
-}) {
-  const skills = organizedSkills(actor);
-  return (
-    <section className="kungfu-list">
-      {skills.length ? (
-        skills.map((skill, i) => (
-          <div className="kungfu-fragment" key={skill.id}>
-            {(i === 0 || skills[i - 1].category !== skill.category) && (
-              <header className="kungfu-category">
-                <span>{skill.category}</span>
-                <small>
-                  {skills.filter((item) => item.category === skill.category).length} 门
-                </small>
-              </header>
-            )}
-          <button
-            className={`${index === i ? "active" : ""}${skill.equipped ? " equipped" : ""}${skill.parrying ? " parrying" : ""}`}
-            onMouseEnter={() => setMenu({ tab: 2, index: i, sub: 0 })}
-            onClick={() => activate(skill.id)}
-          >
-            <b>
-              <small>{skill.category}</small>
-              <span>{skill.name}</span>
-            </b>
-            <span>{skill.level} 级</span>
-            <em>
-              {levelTitle(skill.level)} · 第 {levelTier(skill.level)}/50 阶 ·{" "}
-              {skill.points} 点 · {skill.school}
-            </em>
-            <i className="skill-tags">
-              {skill.equipped && <span className="tag-equipped">当前运用</span>}
-              {skill.parrying && <span className="tag-parrying">用于招架</span>}
-              {!skill.equipped && !skill.parrying && <span>已习得</span>}
-            </i>
-          </button>
-          </div>
-        ))
-      ) : (
-        <p>尚未学会任何功夫，可向江湖人物拜师请教。</p>
-      )}
-    </section>
-  );
-}
-
-function conversationSessionKey(npc: AmbientNpc, player: AmbientPlayerState) {
-  if (npc.bubbleKind === "action") return "";
-  if (npc.groupId) return `group:${npc.groupId}`;
-  if (npc.partnerId) return `pair:${Math.min(npc.eventId, npc.partnerId)}:${Math.max(npc.eventId, npc.partnerId)}`;
-  if (player.npcIds.includes(npc.eventId) && npc.speechTargetName)
-    return `player:${[...player.npcIds].sort((a, b) => a - b).join(":")}`;
-  const routed = npc.bubble.match(/^(?:群聊\s*·\s*)?(.+?)\s+to\s+(.+?)：/);
-  if (routed) return `route:${[routed[1], routed[2]].sort().join(":")}`;
-  return "";
-}
-
-function collectConversationCards(ambient: AmbientWorld, player: AmbientPlayerState, sx: number, sy: number, playerName: string) {
-  const sessions = new Map<string, AmbientNpc[]>();
-  for (const npc of ambient.npcs) {
-    const key = conversationSessionKey(npc, player);
-    if (!key) continue;
-    sessions.set(key, [...(sessions.get(key) || []), npc]);
-  }
-  return [...sessions.values()].flatMap((members) => {
-    const contexts = members.map((member) => member.conversationContext).sort((a, b) => b.length - a.length),
-      active = members.filter((member) => member.bubble).sort((a, b) => a.bubbleShownAt - b.bubbleShownAt).map((member) => member.bubble),
-      includesPlayer = members.some((member) => player.npcIds.includes(member.eventId)),
-      history = [...(contexts[0] || []), ...active, ...(includesPlayer && player.bubble ? [player.bubble] : [])]
-        .filter((line, index, all) => line && all.indexOf(line) === index)
-        .slice(-3);
-    const live = members.some((member) =>
-      Boolean(member.bubble || member.queuedBubble || member.generationPending),
-    );
-    // conversationContext is prompt history, not visible UI state. Once the
-    // live turn has ended (or movement has detached the player), history must
-    // not resurrect a card or keep it anchored above the protagonist.
-    if (!history.length || (!live && !(includesPlayer && player.bubble))) return [];
-    return [{
-      x: members.reduce((sum, member) => sum + (member.x - sx) * T + 16, 0) / members.length,
-      y: Math.min(...members.map((member) => (member.y - sy) * T - 18)),
-      lines: history,
-      playerInvolved: includesPlayer,
-      playerName,
-    }];
-  });
-}
-
-function draw(ctx: CanvasRenderingContext2D, state: WorldSave, ambient: AmbientWorld, playerAmbient: AmbientPlayerState) {
-  const pos = state.position,
-    map = getOriginalMap(pos.mapId),
-    viewport = ambientViewportBounds(map.width, map.height, pos.x, pos.y),
-    sx = viewport.left,
-    sy = viewport.top,
-    roamingByEvent = new Map(ambient.npcs.map((npc) => [npc.eventId, npc])),
-    ambientBubbles: Array<{ x: number; y: number; text: string; kind: AmbientBubbleKind | "player"; shownAt: number }> = [];
-  ctx.fillStyle = "#0c1410";
-  ctx.fillRect(0, 0, W, H);
-  const staticMap = staticMapCanvas(map);
-  ctx.drawImage(staticMap, sx * T, sy * T, W, H, 0, 0, W, H);
-  drawMapStructures(ctx, map, state, sx, sy);
-  for (const e of map.events) {
-    const visual = eventVisual(e, state),
-      roaming = visual.kind === "npc" ? roamingByEvent.get(e.id) : undefined,
-      eventX = roaming?.x ?? e.x,
-      eventY = roaming?.y ?? e.y;
-    if (eventX < sx || eventY < sy || eventX >= sx + 20 || eventY >= sy + 15) continue;
-    const near = Math.abs(eventX - pos.x) + Math.abs(eventY - pos.y) <= 2;
-    if (visual.kind === "npc") {
-      drawActor(
-        ctx,
-        (eventX - sx) * T + 16,
-        (eventY - sy) * T + 23,
-        hash(visual.label),
-        false,
-        npcCharacterSprite(visual.npcId || 0, visual.label),
-        roaming?.direction || 2,
-      );
-      drawNpcMarker(
-        ctx,
-        (eventX - sx) * T + 16,
-        (eventY - sy) * T + 23,
-        visual.label,
-        near,
-        // 当前坛主与主任务杀人目标标记红色，让玩家一眼知道该杀谁。
-        isCurrentKillTarget(visual.npcId, {
-          tanId: state.actor.tanId,
-          killId: state.tasks.killId,
-        }),
-      );
-      if (roaming?.bubble && !conversationSessionKey(roaming, playerAmbient)) ambientBubbles.push({
-        x: (eventX - sx) * T + 16,
-        y: (eventY - sy) * T - 13,
-        text: roaming.bubble,
-        kind: roaming.bubbleKind,
-        shownAt: roaming.bubbleShownAt,
-      });
-    } else if (visual.kind === "door")
-      drawDoorMarker(
-        ctx,
-        (e.x - sx) * T + 16,
-        (e.y - sy) * T + 21,
-        visual.label,
-        near,
-        visual.locked,
-      );
-    else if (visual.kind === "object")
-      drawObjectMarker(
-        ctx,
-        (e.x - sx) * T + 16,
-        (e.y - sy) * T + 21,
-        visual.label,
-        near,
-      );
-    else if (visual.kind === "corpse")
-      drawCorpseMarker(
-        ctx,
-        (e.x - sx) * T + 16,
-        (e.y - sy) * T + 23,
-        visual.label,
-        near,
-      );
-  }
-  if (
-    state.tasks.wantedPlace === pos.mapId &&
-    state.tasks.wantedX >= sx &&
-    state.tasks.wantedY >= sy &&
-    state.tasks.wantedX < sx + 20 &&
-    state.tasks.wantedY < sy + 15
-  ) {
-    const wx = (state.tasks.wantedX - sx) * T + 16,
-      wy = (state.tasks.wantedY - sy) * T + 23,
-      near =
-        Math.abs(state.tasks.wantedX - pos.x) +
-          Math.abs(state.tasks.wantedY - pos.y) <=
-        2;
-    drawActor(
-      ctx,
-      wx,
-      wy,
-      state.tasks.wantedGender ? "#e45d6d" : "#c44f45",
-      false,
-      state.tasks.wantedGender ? { sheet: 4, row: 0 } : { sheet: 3, row: 1 },
-    );
-    drawNpcMarker(ctx, wx, wy, "通缉犯", near, true);
-  }
-  drawActor(
-    ctx,
-    (pos.x - sx) * T + 16,
-    (pos.y - sy) * T + 23,
-    "#dce8ec",
-    true,
-    { sheet: 0, row: state.actor.gender ? 1 : 0 },
-    pos.direction,
-  );
-  const conversationCards = collectConversationCards(
-    ambient,
-    playerAmbient,
-    sx,
-    sy,
-    state.actor.name || "少侠",
-  )
-      .map((card) => card.playerInvolved ? {
-        ...card,
-        x: (pos.x - sx) * T + 16,
-        y: (pos.y - sy) * T - 13,
-      } : card)
-      .map((card) => layoutConversationCard(ctx, card)),
-    playerGrouped = conversationCards.length > 0 && playerAmbient.npcIds.length > 0;
-  if (playerAmbient.bubble && !playerGrouped) ambientBubbles.push({
-    x: (pos.x - sx) * T + 16,
-    y: (pos.y - sy) * T - 13,
-    text: playerAmbient.bubble,
-    kind: "player",
-    shownAt: playerAmbient.bubbleShownAt,
-  });
-  // 玩家气泡永远最后绘制(最上层)；所有气泡再统一做碰撞错开布局。
-  const placedBubbles = resolveAmbientBubbleLayout(
-    ctx,
-    ambientBubbles.sort((first, second) =>
-      first.kind === "player" && second.kind !== "player"
-        ? 1
-        : second.kind === "player" && first.kind !== "player"
-          ? -1
-          : first.shownAt - second.shownAt,
-    ),
-    conversationCards,
-  );
-  conversationCards.filter((card) => !card.playerInvolved).forEach((card) => drawConversationCard(ctx, card));
-  placedBubbles.forEach((bubble) => drawAmbientBubble(ctx, bubble));
-  // 主角参与的会话固定在屏幕顶部，并最后绘制，避免被任何环境气泡遮挡。
-  conversationCards.filter((card) => card.playerInvolved).forEach((card) => drawConversationCard(ctx, card));
-  let shade = shadeCache.get(ctx);
-  if (!shade) {
-    shade = ctx.createRadialGradient(W / 2, H / 2, 120, W / 2, H / 2, 430);
-    shade.addColorStop(0, "rgba(0,0,0,0)");
-    shade.addColorStop(1, "rgba(2,7,4,.34)");
-    shadeCache.set(ctx, shade);
-  }
-  ctx.fillStyle = shade;
-  ctx.fillRect(0, 0, W, H);
-  ctx.fillStyle = "rgba(5,10,7,.72)";
-  ctx.fillRect(8, 7, Math.min(150, map.name.length * 18 + 24), 25);
-  ctx.fillStyle = "#eadcae";
-  ctx.font = "bold 14px serif";
-  ctx.textAlign = "left";
-  ctx.fillText(map.name, 17, 24);
-  ctx.fillStyle = "rgba(5,10,7,.62)";
-  ctx.fillRect(W - 107, 8, 99, 22);
-  ctx.textAlign = "right";
-  ctx.font = "10px monospace";
-  ctx.fillStyle = "#9aaa9e";
-  ctx.fillText(`MAP ${map.id} · ${pos.x},${pos.y}`, W - 15, 23);
-}
-type EventVisual = {
-  kind: "npc" | "object" | "door" | "corpse" | "none";
-  label: string;
-  npcId?: number;
-  /** 入口因缺少物品或进度门槛暂时锁住，仍标记在地图上但无法进入 */
-  locked?: boolean;
-};
-const sceneLabels: Record<number, string> = {
-  1: "菜花宝典",
-  2: "可拾取物",
-  3: "宝物",
-  4: "钓鱼点",
-  5: "水源",
-  6: "游戏设施",
-  7: "工作点",
-  8: "挑战入口",
-  9: "告示牌",
-  10: "绳索",
-  11: "酒坛",
-  12: "对战入口",
-  13: "坛入口",
-  14: "铸剑台",
-  15: "桃花源",
-  16: "房间入口",
-};
-function npcDisplayName(id: number, fallback = "江湖人物") {
-  return String(npcRecord(id).name || fallback);
-}
-// 坛入口(type 13)显示目标坛的名称，其余场景入口沿用场景标签。
-function entranceLabel(
-  scene: { type: number; id?: number } | undefined,
-  cleanName: string,
-): string {
-  if (scene?.type === 13 && scene.id !== undefined)
-    return getOriginalMap(scene.id).name || cleanName || sceneLabels[13];
-  return cleanName || (scene ? sceneLabels[scene.type] : "通往别处");
-}
-function eventVisual(event: MapEvent, state: WorldSave): EventVisual {
-  const page = activePage(event),
-    result = executeMapCommands(page.commands),
-    scene = selectSceneEvent(result.source, {
-      inventory: state.actor.inventory,
-      tanId: state.actor.tanId,
-      freeWork: state.tasks.freeWork,
-      canGetItem: true,
-      canGetCaihua: canObtainCaihua(state.actor),
-    }),
-    graphic = String(page.graphic?.character_name || ""),
-    cleanName = friendlyEventName(event.name, result.transfer?.mapId);
-  if (scene?.type === 0 && scene.id !== undefined) {
-    // 原版：无对应令牌不生成娜可露(132)/茅盈(144)。
-    if (!npcVisibleWithInventory(scene.id, state.actor.inventory))
-      return { kind: "none", label: "" };
-    if ((state.actor.killList || []).includes(scene.id))
-      return scene.id >= 173 && scene.id <= 194
-        ? { kind: "none", label: "" }
-        : {
-            kind: "corpse",
-            label: `${String(npcRecord(scene.id).name || cleanName || "江湖人物")}遗骸`,
-          };
-    return {
-      kind: "npc",
-      label: String(npcRecord(scene.id).name || cleanName || "江湖人物"),
-      npcId: scene.id,
-    };
-  }
-  if (graphic) return { kind: "npc", label: cleanName || "江湖人物" };
-  if (result.transfer || (scene && [13, 15, 16].includes(scene.type)))
-    return { kind: "door", label: entranceLabel(scene, cleanName) };
-  if (scene)
-    return {
-      kind: "object",
-      label: cleanName || sceneLabels[scene.type] || "可互动",
-    };
-  // 条件不满足时，被物品/进度门槛锁住的入口仍然标记在地图上。
-  const gate = parseSceneGate(result.source);
-  if (gate?.scene && [8, 13, 15, 16].includes(gate.scene.type))
-    return {
-      kind: "door",
-      label: entranceLabel(gate.scene, cleanName),
-      locked: true,
-    };
-  return { kind: "none", label: "" };
-}
-type MapTheme = "town" | "indoor" | "grassland" | "forest" | "desert" | "mountain" | "snow" | "water" | "altar" | "mystic" | "scifi";
-const roadCache = new Map<number, Set<string>>();
-const eventCellCache = new Map<number, Set<string>>();
-const furnitureCache = new Map<number, Map<string, number>>();
-const staticMapCache = new Map<number, { revision: number; canvas: HTMLCanvasElement }>();
-const shadeCache = new WeakMap<CanvasRenderingContext2D, CanvasGradient>();
-
-function staticMapCanvas(map: OriginalMap) {
-  const cached = staticMapCache.get(map.id);
-  if (cached?.revision === artRevision) return cached.canvas;
-  const canvas = document.createElement("canvas");
-  canvas.width = map.width * T;
-  canvas.height = map.height * T;
-  const context = canvas.getContext("2d");
-  if (!context) return canvas;
-  context.imageSmoothingEnabled = true;
-  for (let my = 0; my < map.height; my += 1)
-    for (let mx = 0; mx < map.width; mx += 1)
-      drawAuthoredTerrain(context, map, mx, my, mx * T, my * T);
-  drawFactionLandmarks(context, map, 0, 0);
-  drawPinganTownPlan(context, map, 0, 0);
-  staticMapCache.set(map.id, { revision: artRevision, canvas });
-  return canvas;
-}
-
-function mapTheme(map: OriginalMap): MapTheme {
-  if (/家中|家$|店|当铺|武馆|衙门|大厅|二楼|客房|西厢$|东厢$|房屋|室内|客栈|兵器行/.test(map.name)) return "indoor";
-  if (/时空的尽头/.test(map.name)) return "scifi";
-  if (/失落的世界|铸剑谷/.test(map.name)) return "desert";
-  if (/桃花源|花园/.test(map.name)) return "forest";
-  if (/大雪山|长白山|冰火岛/.test(map.name)) return "snow";
-  if (/东海|南海|渡口|岛$/.test(map.name)) return "water";
-  if (/坛$/.test(map.name)) return "altar";
-  if (/时空|失落|桃花源|铸剑谷/.test(map.name)) return "mystic";
-  if (/山|峰|谷/.test(map.name)) return "mountain";
-  if (/郊|盆地/.test(map.name)) return "grassland";
-  return "town";
-}
-
-function authoredRoads(map: OriginalMap) {
-  const cached = roadCache.get(map.id);
-  if (cached) return cached;
-  const anchors = map.events
-    .filter((event) => executeMapCommands(activePage(event).commands).transfer)
-    .map((event) => ({ x: event.x, y: event.y }));
-  const cells = new Set<string>(),
-    hub = anchors.length
-      ? {
-          x: Math.round(anchors.reduce((sum, point) => sum + point.x, 0) / anchors.length),
-          y: Math.round(anchors.reduce((sum, point) => sum + point.y, 0) / anchors.length),
-        }
-      : { x: Math.floor(map.width / 2), y: Math.floor(map.height / 2) };
-  const add = (x: number, y: number) => {
-    if (x >= 0 && y >= 0 && x < map.width && y < map.height) cells.add(`${x},${y}`);
-  };
-  for (const anchor of anchors.length ? anchors : [hub]) {
-    for (let y = Math.min(anchor.y, hub.y); y <= Math.max(anchor.y, hub.y); y++) add(anchor.x, y);
-    for (let x = Math.min(anchor.x, hub.x); x <= Math.max(anchor.x, hub.x); x++) add(x, hub.y);
-  }
-  roadCache.set(map.id, cells);
-  return cells;
-}
-
-function eventCells(map: OriginalMap) {
-  const cached = eventCellCache.get(map.id);
-  if (cached) return cached;
-  const cells = new Set(map.events.map((event) => `${event.x},${event.y}`));
-  eventCellCache.set(map.id, cells);
-  return cells;
-}
-
-const factionMapIds = new Set([23, 25, 27, 36, 42, 52, 54, 59, 60, 61, 62, 63, 64, 65, 66]);
-const pinganUrbanMapIds = new Set([2, 3, 5, 15]);
-
-function drawCleanBaseTile(
-  ctx: CanvasRenderingContext2D,
-  theme: ReturnType<typeof mapTheme>,
-  road: boolean,
-  faction: boolean,
-  pingan: boolean,
-  mx: number,
-  my: number,
-  x: number,
-  y: number,
-) {
-  const stone = faction || pingan || theme === "altar";
-  const color = road
-    ? stone ? "#77776f" : "#8b7859"
-    : theme === "indoor" ? "#896746"
-    : theme === "water" ? "#39747c"
-    : theme === "snow" ? "#cbd4d2"
-    : theme === "forest" ? "#4f7448"
-    : theme === "grassland" ? "#799553"
-    : theme === "desert" ? "#b89a63"
-    : theme === "scifi" ? "#303d4d"
-    : theme === "mountain" || theme === "mystic" ? "#87755b"
-    : stone ? "#7d817b"
-    : "#718852";
-  ctx.fillStyle = color;
-  ctx.fillRect(x, y, T, T);
-  ctx.lineWidth = 1;
-  if (theme === "indoor") {
-    ctx.strokeStyle = "rgba(55,35,22,.23)";
-    ctx.beginPath();
-    ctx.moveTo(x, y + T - .5);
-    ctx.lineTo(x + T, y + T - .5);
-    if ((my & 1) === 0) {
-      ctx.moveTo(x + T / 2, y);
-      ctx.lineTo(x + T / 2, y + T);
-    }
-    ctx.stroke();
-    ctx.fillStyle = (mx + my) % 3 === 0 ? "rgba(255,235,190,.025)" : "rgba(30,18,10,.018)";
-    ctx.fillRect(x, y, T, T);
-  } else if (theme === "water" && !road) {
-    ctx.strokeStyle = "rgba(197,230,225,.18)";
-    ctx.beginPath();
-    ctx.moveTo(x + 5, y + 10); ctx.lineTo(x + 19, y + 10);
-    ctx.moveTo(x + 13, y + 23); ctx.lineTo(x + 28, y + 23);
-    ctx.stroke();
-  } else if (theme === "scifi") {
-    ctx.strokeStyle = "rgba(91,205,220,.22)";
-    ctx.strokeRect(x + 2.5, y + 2.5, T - 5, T - 5);
-    if ((mx + my) % 4 === 0) { ctx.fillStyle = "rgba(111,226,232,.18)"; ctx.fillRect(x + 6, y + 6, 3, 3); }
-  } else if (theme === "desert") {
-    ctx.strokeStyle = "rgba(105,77,42,.13)";
-    ctx.beginPath(); ctx.moveTo(x + 4, y + 22); ctx.quadraticCurveTo(x + 16, y + 17, x + 29, y + 21); ctx.stroke();
-  } else if (stone || road) {
-    ctx.strokeStyle = "rgba(38,40,37,.16)";
-    ctx.strokeRect(x + .5, y + .5, T - 1, T - 1);
-    if ((my & 1) === 0) {
-      ctx.beginPath(); ctx.moveTo(x + T / 2, y); ctx.lineTo(x + T / 2, y + T); ctx.stroke();
-    }
-  } else {
-    ctx.fillStyle = (mx * 3 + my * 5) % 7 === 0 ? "rgba(213,224,151,.035)" : "rgba(27,48,24,.025)";
-    ctx.fillRect(x, y, T, T);
-  }
-}
-
-function drawAuthoredTerrain(
-  ctx: CanvasRenderingContext2D,
-  map: OriginalMap,
-  mx: number,
-  my: number,
-  x: number,
-  y: number,
-) {
-  const theme = mapTheme(map),
-    roads = authoredRoads(map),
-    road = roads.has(`${mx},${my}`),
-    faction = factionMapIds.has(map.id),
-    pingan = pinganUrbanMapIds.has(map.id);
-  drawCleanBaseTile(ctx, theme, road, faction, pingan, mx, my, x, y);
-  if (road && theme !== "indoor") {
-    ctx.strokeStyle = theme === "mountain" ? "rgba(83,59,35,.42)" : "rgba(38,49,39,.35)";
-    ctx.lineWidth = 1;
-    if (!roads.has(`${mx - 1},${my}`)) { ctx.beginPath(); ctx.moveTo(x, y); ctx.lineTo(x, y + T); ctx.stroke(); }
-    if (!roads.has(`${mx + 1},${my}`)) { ctx.beginPath(); ctx.moveTo(x + T, y); ctx.lineTo(x + T, y + T); ctx.stroke(); }
-    if (!roads.has(`${mx},${my - 1}`)) { ctx.beginPath(); ctx.moveTo(x, y); ctx.lineTo(x + T, y); ctx.stroke(); }
-    if (!roads.has(`${mx},${my + 1}`)) { ctx.beginPath(); ctx.moveTo(x, y + T); ctx.lineTo(x + T, y + T); ctx.stroke(); }
-  }
-  if (theme === "snow") {
-    ctx.fillStyle = "rgba(221,235,235,.22)";
-    ctx.fillRect(x, y, T, T);
-  }
-  if (theme === "indoor") {
-    const furniture = indoorFurniture(map).get(`${mx},${my}`);
-    if (furniture !== undefined) drawOverlayCell(ctx, furniture, x, y);
-    return;
-  }
-  if (road || eventCells(map).has(`${mx},${my}`)) return;
-  const seed = (Math.imul(map.id + 17, 73856093) ^ Math.imul(mx + 11, 19349663) ^ Math.imul(my + 7, 83492791)) >>> 0;
-  const besideRoad = roads.has(`${mx - 1},${my}`) || roads.has(`${mx + 1},${my}`) || roads.has(`${mx},${my - 1}`) || roads.has(`${mx},${my + 1}`),
-    vegetationBorder = theme !== "water" && theme !== "desert" && theme !== "scifi" &&
-      (mx === 2 || my === 2 || mx === map.width - 3 || my === map.height - 3);
-  if (besideRoad && (mx + my + map.id) % 4 === 0) {
-    drawOverlayCell(ctx, theme === "snow" ? 5 : theme === "forest" ? 2 : [3, 4, 8, 9, 10][seed % 5], x, y);
-    return;
-  }
-  if (vegetationBorder && (mx * 3 + my + map.id) % 4 === 0) {
-    drawOverlayCell(ctx, theme === "forest" ? [0, 2, 3][seed % 3] : [2, 3, 4][seed % 3], x, y);
-    return;
-  }
-  const landscapedEdge = faction && (mx < 3 || my < 3 || mx >= map.width - 3 || my >= map.height - 3);
-  if (landscapedEdge && seed % 11 === 0) {
-    const factionDecoration = map.id === 23 ? 4 : map.id === 25 ? 9 : map.id === 36 || map.id === 42 || map.id === 54 ? 5 : [3, 4, 12, 13][seed % 4];
-    drawOverlayCell(ctx, factionDecoration, x, y);
-    return;
-  }
-  if (seed % (faction ? 37 : 31) !== 0) return;
-  const decoration =
-    theme === "water" ? 6 :
-    theme === "altar" || theme === "scifi" ? 13 :
-    theme === "desert" ? [12, 13, 15][seed % 3] :
-    theme === "forest" ? [0, 2, 3, 4, 5, 6][seed % 6] :
-    theme === "mountain" || theme === "snow" ? [5, 12, 13, 14, 15][seed % 5] :
-    [0, 2, 3, 4, 8, 9, 10][seed % 7];
-  drawOverlayCell(ctx, decoration, x, y);
-}
-
-function indoorFurniture(map: OriginalMap) {
-  const cached = furnitureCache.get(map.id);
-  if (cached) return cached;
-  const cells = new Map<string, number>(),
-    occupied = eventCells(map),
-    add = (x: number, y: number, source: number) => {
-      if (x > 0 && y > 0 && x < map.width - 1 && y < map.height - 1 && !occupied.has(`${x},${y}`) && !cells.has(`${x},${y}`))
-        cells.set(`${x},${y}`, source);
-    },
-    cx = Math.floor(map.width / 2),
-    cy = Math.floor(map.height / 2),
-    row = (y: number, start: number, end: number, step: number, source: number) => {
-      for (let x = start; x <= end; x += step) add(x, y, source);
-    },
-    tableSet = (x: number, y: number) => {
-      add(x, y, 16); add(x - 1, y, 17); add(x + 1, y, 17);
-    };
-  if (/客房|家中|家$|房屋|西厢|东厢/.test(map.name)) {
-    add(3, 3, 18); add(map.width - 4, 3, 19); add(map.width - 4, 6, 23);
-    tableSet(cx, cy); add(3, map.height - 4, 24); add(map.width - 4, map.height - 4, 22);
-  } else if (/药店/.test(map.name)) {
-    row(3, 3, map.width - 4, 3, 19);
-    row(6, 4, map.width - 5, 4, 26);
-    add(cx, 8, 20); add(cx - 2, 8, 23); add(cx + 2, 8, 23);
-  } else if (/裁缝店/.test(map.name)) {
-    row(3, 3, map.width - 4, 4, 25);
-    row(6, 4, map.width - 5, 5, 19);
-    add(cx, 8, 20); tableSet(5, map.height - 4);
-  } else if (/杂货店|豆腐店|当铺/.test(map.name)) {
-    row(3, 3, map.width - 4, 3, 19);
-    row(6, 4, map.width - 5, 4, /当铺/.test(map.name) ? 21 : /豆腐/.test(map.name) ? 27 : 26);
-    add(cx, 9, 20); add(cx - 3, 9, 24); add(cx + 3, 9, 23);
-  } else if (/兵器行|武馆/.test(map.name)) {
-    row(3, 3, map.width - 4, 4, 30);
-    row(6, 4, map.width - 5, 5, 21);
-    tableSet(cx, cy + 2);
-  } else if (/客栈/.test(map.name)) {
-    for (let y = 5; y < map.height - 4; y += 4)
-      for (let x = 4; x < map.width - 3; x += 5) tableSet(x, y);
-    row(3, 3, map.width - 4, 5, 24); add(map.width - 4, 3, 22);
-  } else if (/衙门|大厅|二楼/.test(map.name)) {
-    row(3, 3, map.width - 4, 5, 29);
-    add(cx, 5, 20); add(cx - 2, 7, 17); add(cx + 2, 7, 17);
-    add(3, map.height - 4, 22); add(map.width - 4, map.height - 4, 22);
-  } else {
-    add(3, 3, 19); add(map.width - 4, 3, 21); add(cx, cy, 16); add(cx - 1, cy + 1, 17);
-  }
-  // A restrained repeated furnishing rhythm makes every room feel occupied
-  // without returning to random clutter or embedding props in the floor.
-  for (let x = 3; x < map.width - 3; x += 6) {
-    add(x, map.height - 3, (x + map.id) % 3 ? 23 : 22);
-    add(x + 2, map.height - 3, (x + map.id) % 2 ? 8 : 10);
-  }
-  furnitureCache.set(map.id, cells);
-  return cells;
-}
-
-function drawOverlayCell(
-  ctx: CanvasRenderingContext2D,
-  source: number,
-  x: number,
-  y: number,
-) {
-  const interior = source >= 16,
-    atlas = interior ? wuxiaArt.interiorOverlays : wuxiaArt.natureOverlays,
-    atlasSource = interior ? source - 16 : source;
-  if (!atlas?.complete || !atlas.naturalWidth) return;
-  const cellWidth = atlas.naturalWidth / 4,
-    cellHeight = atlas.naturalHeight / 4,
-    tree = source <= 5,
-    size = tree ? 44 : 36,
-    offsetX = (T - size) / 2,
-    offsetY = tree ? T - size : (T - size) / 2;
-  ctx.drawImage(
-    atlas,
-    (atlasSource % 4) * cellWidth,
-    Math.floor(atlasSource / 4) * cellHeight,
-    cellWidth,
-    cellHeight,
-    x + offsetX,
-    y + offsetY,
-    size,
-    size,
-  );
-}
-
-function drawMapStructures(
-  ctx: CanvasRenderingContext2D,
-  map: OriginalMap,
-  state: WorldSave,
-  sx: number,
-  sy: number,
-) {
-  // Interior maps use furniture and interior walls only. A transfer back to a
-  // street is an exit, not permission to place that street's facade indoors.
-  if (mapTheme(map) === "indoor") return;
-  const outdoorWords = /山|郊|峰|海|岛|谷|林|坛|渡口|桃花源|时空|世界/;
-  const occupied: Array<{ x: number; y: number }> = [];
-  for (const event of map.events) {
-    const visual = eventVisual(event, state);
-    if (visual.kind !== "door") continue;
-    if (outdoorWords.test(visual.label)) {
-      // Outdoor transfers keep the same clean terrain. A symmetric flower pair
-      // signals the entrance without replacing its base tile with a cave/rock.
-      drawOverlayCell(ctx, hashIndex(visual.label, 2) ? 9 : 10, (event.x - sx - 1) * T, (event.y - sy) * T);
-      drawOverlayCell(ctx, hashIndex(visual.label, 2) ? 10 : 9, (event.x - sx + 1) * T, (event.y - sy) * T);
-      continue;
-    }
-    if (event.x < sx - 3 || event.x >= sx + 23 || event.y < sy || event.y >= sy + 16)
-      continue;
-    if (occupied.some((point) => Math.abs(point.x - event.x) < 4 && Math.abs(point.y - event.y) < 3))
-      continue;
-    occupied.push({ x: event.x, y: event.y });
-    const widthTiles = hashIndex(visual.label, 2) ? 5 : 4,
-      leftTile = event.x - Math.floor(widthTiles / 2),
-      topTile = event.y - 3;
-    drawCleanBuilding(ctx, (leftTile - sx) * T, (topTile - sy) * T, widthTiles, event.x - leftTile, hashIndex(visual.label, 3));
-  }
-}
-
-function drawCleanBuilding(ctx: CanvasRenderingContext2D, x: number, y: number, widthTiles: number, doorColumn: number, style: number) {
-  const width = widthTiles * T,
-    roof = style === 1 ? "#354650" : style === 2 ? "#59413a" : "#343936",
-    wall = style === 1 ? "#bdc7c3" : style === 2 ? "#c6aa82" : "#d2c7aa",
-    timber = style === 2 ? "#58372c" : "#4b4540";
-  ctx.fillStyle = "rgba(25,28,25,.24)"; ctx.fillRect(x + 4, y + T * 3 - 2, width - 8, 5);
-  ctx.fillStyle = wall; ctx.fillRect(x + 5, y + T, width - 10, T * 2);
-  ctx.fillStyle = roof; ctx.fillRect(x, y + 5, width, T - 6);
-  ctx.fillStyle = "rgba(235,240,226,.14)"; ctx.fillRect(x + 6, y + 9, width - 12, 3);
-  ctx.fillStyle = timber;
-  for (let column = 0; column <= widthTiles; column++) ctx.fillRect(x + column * T - 2, y + T, 4, T * 2);
-  ctx.fillRect(x + 3, y + T, width - 6, 5); ctx.fillRect(x + 3, y + T * 2 - 3, width - 6, 5);
-  for (let column = 0; column < widthTiles; column++) {
-    if (column === doorColumn) continue;
-    ctx.fillStyle = "#51483e"; ctx.fillRect(x + column * T + 10, y + T + 10, 12, 10);
-    ctx.fillStyle = "#9dbea8"; ctx.fillRect(x + column * T + 12, y + T + 12, 8, 6);
-  }
-  ctx.fillStyle = "#492e25"; ctx.fillRect(x + doorColumn * T + 7, y + T * 2 - 1, 18, T + 1);
-  ctx.fillStyle = "#c89b55"; ctx.fillRect(x + doorColumn * T + 22, y + T * 2 + 13, 2, 2);
-}
-
-function drawStoneFoundation(ctx: CanvasRenderingContext2D, x: number, y: number, widthTiles: number, heightTiles: number) {
-  ctx.fillStyle = "#929b9b"; ctx.fillRect(x, y, widthTiles * T, heightTiles * T);
-  ctx.strokeStyle = "rgba(50,58,60,.25)"; ctx.lineWidth = 1;
-  for (let row = 0; row <= heightTiles; row++) { ctx.beginPath(); ctx.moveTo(x, y + row * T); ctx.lineTo(x + widthTiles * T, y + row * T); ctx.stroke(); }
-  for (let column = 0; column <= widthTiles; column++) { ctx.beginPath(); ctx.moveTo(x + column * T, y); ctx.lineTo(x + column * T, y + heightTiles * T); ctx.stroke(); }
-}
-
-function drawFactionLandmarks(
-  ctx: CanvasRenderingContext2D,
-  map: OriginalMap,
-  sx: number,
-  sy: number,
-) {
-  if (!factionMapIds.has(map.id)) return;
-  const width = map.id >= 59 ? 9 : Math.min(11, map.width - 2),
-    left = Math.max(1, Math.floor(map.width / 2 - width / 2)),
-    top = Math.max(1, Math.min(4, Math.floor(map.height * 0.16))),
-    x = (left - sx) * T,
-    y = (top - sy) * T;
-  if (mapTheme(map) === "snow") {
-    drawStoneFoundation(ctx, x, y + T, width, 3);
-  } else {
-    drawStoneFoundation(ctx, x, y + T * 3, width, 2);
-    drawCleanBuilding(ctx, x, y, width, Math.floor(width / 2), map.id % 3);
-  }
-  drawOverlayCell(ctx, map.id === 23 ? 3 : 4, x - T, y + T * 3);
-  drawOverlayCell(ctx, map.id === 23 ? 3 : 4, x + width * T, y + T * 3);
-}
-
-function drawPinganTownPlan(
-  ctx: CanvasRenderingContext2D,
-  map: OriginalMap,
-  sx: number,
-  sy: number,
-) {
-  if (!pinganUrbanMapIds.has(map.id) || mapTheme(map) === "indoor") return;
-  const occupied = eventCells(map),
-    draw = (mx: number, my: number, source: number) => {
-      if (occupied.has(`${mx},${my}`)) return;
-      const x = (mx - sx) * T, y = (my - sy) * T;
-      if (x <= -T || y <= -T || x >= W || y >= H) return;
-      drawOverlayCell(ctx, source, x, y);
-    };
-  // Repeated planting is an overlay, never part of the terrain base.
-  for (let x = 2; x < map.width - 2; x += 5) { draw(x, 2, 2); draw(x, map.height - 3, 3); }
-  for (let y = 5; y < map.height - 5; y += 5) { draw(2, y, 4); draw(map.width - 3, y, 4); }
-  if (map.id === 15) {
-    for (let x = 4; x < map.width - 4; x += 5) {
-      draw(x, 4, 8); draw(x + 2, 4, 10);
-      draw(x, map.height - 5, 8); draw(x + 2, map.height - 5, 10);
-    }
-  }
-}
-function drawActor(
-  ctx: CanvasRenderingContext2D,
-  x: number,
-  y: number,
-  color: string,
-  hero: boolean,
-  sprite: CharacterSprite = { sheet: 0, row: 0 },
-  direction = 2,
-) {
-  const atlas = wuxiaArt.characters[sprite.sheet];
-  if (!atlas) ensureCharacterSheet(sprite.sheet);
-  if (atlas?.complete && atlas.naturalWidth) {
-    const cellWidth = atlas.naturalWidth / 4,
-      cellHeight = atlas.naturalHeight / 4,
-      // Generated profiles are named by their visible screen-facing direction.
-      // RMXP direction 4 means travel left, so it uses the left-facing profile.
-      column = direction === 4 ? 2 : direction === 6 ? 1 : direction === 8 ? 3 : 0,
-      width = 44,
-      height = 44;
-    ctx.fillStyle = "rgba(0,0,0,.35)";
-    ctx.beginPath();
-    ctx.ellipse(x, y + 9, 10, 4, 0, 0, Math.PI * 2);
-    ctx.fill();
-    ctx.drawImage(
-      atlas,
-      column * cellWidth,
-      (sprite.row % 4) * cellHeight,
-      cellWidth,
-      cellHeight,
-      x - width / 2,
-      y - 34,
-      width,
-      height,
-    );
-    return;
-  }
-  ctx.fillStyle = "rgba(0,0,0,.5)";
-  ctx.fillRect(x - 10, y + 5, 20, 5);
-  ctx.fillStyle = hero ? "#d8f3ff" : "#fff0b0";
-  ctx.fillRect(x - 8, y - 14, 16, 10);
-  ctx.fillRect(x - 9, y - 8, 18, 16);
-  ctx.fillStyle = "#26221d";
-  ctx.fillRect(x - 7, y - 13, 14, 8);
-  ctx.fillStyle = "#dfb78d";
-  ctx.fillRect(x - 5, y - 15, 10, 9);
-  ctx.fillStyle = color;
-  ctx.fillRect(x - 8, y - 7, 16, 14);
-  ctx.fillStyle = hero ? "#657f97" : "#40362e";
-  ctx.fillRect(x - 8, y + 7, 6, 7);
-  ctx.fillRect(x + 2, y + 7, 6, 7);
-}
-function drawNpcMarker(
-  ctx: CanvasRenderingContext2D,
-  x: number,
-  y: number,
-  name: string,
-  near: boolean,
-  hostile = false,
-) {
-  const pulse = Math.sin(Date.now() / 180) > 0,
-    accent = hostile ? "#ff6a63" : "#ffd866";
-  ctx.strokeStyle = near ? accent : "rgba(255,216,102,.72)";
-  ctx.lineWidth = near ? 3 : 2;
-  ctx.strokeRect(x - 11, y + 8, 22, near ? 5 : 3);
-  ctx.fillStyle = accent;
-  ctx.fillRect(x - 2, y - 47 - (pulse ? 2 : 0), 5, 7);
-  ctx.fillRect(x - 2, y - 38 - (pulse ? 2 : 0), 5, 3);
-  if (!near) return;
-  const label = name.length > 7 ? `${name.slice(0, 7)}…` : name;
-  ctx.font = "bold 10px sans-serif";
-  ctx.textAlign = "center";
-  const width = Math.ceil(ctx.measureText(label).width) + 8;
-  ctx.fillStyle = "rgba(7,12,9,.92)";
-  ctx.fillRect(x - width / 2, y - 62, width, 13);
-  ctx.fillStyle = accent;
-  ctx.fillText(label, x, y - 52);
-}
-function drawObjectMarker(
-  ctx: CanvasRenderingContext2D,
-  x: number,
-  y: number,
-  name: string,
-  near: boolean,
-) {
-  const pulse = Math.sin(Date.now() / 220) > 0,
-    accent = "#70e0d0";
-  ctx.fillStyle = "rgba(7,22,20,.85)";
-  ctx.fillRect(x - 10, y - 8, 20, 15);
-  ctx.strokeStyle = near ? accent : "rgba(112,224,208,.72)";
-  ctx.lineWidth = near ? 3 : 2;
-  ctx.strokeRect(x - 11, y - 9, 22, 17);
-  ctx.fillStyle = accent;
-  ctx.fillRect(x - 3, y - 5, 6, 6);
-  ctx.fillRect(x - 1, y - 9 - (pulse ? 2 : 0), 2, 2);
-  drawMarkerLabel(ctx, x, y - 18, name, accent, near);
-}
-function drawCorpseMarker(
-  ctx: CanvasRenderingContext2D,
-  x: number,
-  y: number,
-  name: string,
-  near: boolean,
-) {
-  const accent = "#9d9481";
-  ctx.fillStyle = "rgba(12,10,8,.78)";
-  ctx.fillRect(x - 10, y + 1, 20, 7);
-  ctx.fillStyle = "#d6cfba";
-  ctx.fillRect(x - 5, y - 4, 10, 8);
-  ctx.fillStyle = "#342e28";
-  ctx.fillRect(x - 3, y - 1, 2, 2);
-  ctx.fillRect(x + 2, y - 1, 2, 2);
-  ctx.strokeStyle = accent;
-  ctx.strokeRect(x - 11, y, 22, 9);
-  drawMarkerLabel(ctx, x, y - 12, name, accent, near);
-}
-function drawDoorMarker(
-  ctx: CanvasRenderingContext2D,
-  x: number,
-  y: number,
-  name: string,
-  near: boolean,
-  locked = false,
-) {
-  const pulse = Math.sin(Date.now() / 250) > 0,
-    accent = locked ? "#d08a5e" : "#8ee28f";
-  ctx.fillStyle = locked ? "rgba(20,12,6,.86)" : "rgba(6,20,12,.84)";
-  ctx.fillRect(x - 11, y - 14, 22, 23);
-  ctx.strokeStyle = near ? accent : "rgba(208,138,94,.55)";
-  ctx.lineWidth = near ? 3 : 2;
-  ctx.strokeRect(x - 12, y - 15, 24, 25);
-  ctx.fillStyle = accent;
-  ctx.fillRect(x - 7, y - 10, 14, 3);
-  ctx.fillRect(x - 7, y - 7, 3, 12);
-  ctx.fillRect(x + 4, y - 7, 3, 12);
-  if (locked) {
-    // 锁住的入口在门闩处画一把小锁，提示暂不可进入。
-    ctx.fillStyle = "#f0cfa0";
-    ctx.fillRect(x - 4, y - 6, 8, 6);
-    ctx.fillRect(x - 2, y - 9, 4, 3);
-  } else {
-    ctx.beginPath();
-    ctx.moveTo(x - 4, y - 20 - (pulse ? 1 : 0));
-    ctx.lineTo(x + 4, y - 20 - (pulse ? 1 : 0));
-    ctx.lineTo(x, y - 16 - (pulse ? 1 : 0));
-    ctx.fill();
-  }
-  drawMarkerLabel(ctx, x, y - 27, name, accent, near, true);
-}
-function drawMarkerLabel(
-  ctx: CanvasRenderingContext2D,
-  x: number,
-  y: number,
-  name: string,
-  accent: string,
-  visible: boolean,
-  always = false,
-) {
-  if (!visible && !always) return;
-  const label = name.length > 8 ? `${name.slice(0, 8)}…` : name;
-  ctx.font = `bold ${visible ? 10 : 9}px sans-serif`;
-  ctx.textAlign = "center";
-  const width = Math.ceil(ctx.measureText(label).width) + 8;
-  ctx.fillStyle = visible ? "rgba(6,13,9,.94)" : "rgba(6,13,9,.78)";
-  ctx.fillRect(x - width / 2, y - 11, width, 13);
-  ctx.fillStyle = accent;
-  ctx.fillText(label, x, y - 1);
-}
-function hash(text: string) {
-  let n = 0;
-  for (const c of text) n = (n * 31 + c.charCodeAt(0)) % 360;
-  return `hsl(${n} 45% 58%)`;
-}
-function hashIndex(text: string, max: number) {
-  let n = 0;
-  for (const c of text) n = (n * 31 + c.charCodeAt(0)) >>> 0;
-  return n % max;
-}

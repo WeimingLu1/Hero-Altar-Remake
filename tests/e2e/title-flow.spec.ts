@@ -1,0 +1,127 @@
+import { expect, test } from "@playwright/test";
+import AxeBuilder from "@axe-core/playwright";
+
+const heavyRuntimeChunk = /\/(?:original-world|game-(?:maps|characters|items))-[^/]+\.js(?:\?|$)/;
+const lmRuntimeChunk = /\/lm-studio-[^/]+\.js(?:\?|$)/;
+const lmRequest = /\/api\/lm-studio(?:\?|$)|127\.0\.0\.1:1234\/api\/v1\/(?:chat|models)/;
+
+test("标题页保持轻量，并且不会自动探测本地模型", async ({ page }) => {
+  const requested: string[] = [];
+  page.on("request", (request) => requested.push(request.url()));
+
+  await page.goto("/");
+  await expect(page.getByRole("heading", { name: "英雄坛说" })).toBeVisible();
+  await expect(page.getByRole("navigation", { name: "开始游戏" })).toBeVisible();
+  await expect(page.getByText("完整游戏将在选择后载入")).toBeVisible();
+
+  // Give post-hydration effects time to run; title rendering must remain local.
+  await page.waitForTimeout(500);
+  expect(requested.filter((url) => heavyRuntimeChunk.test(url))).toEqual([]);
+  expect(requested.filter((url) => lmRuntimeChunk.test(url))).toEqual([]);
+  expect(requested.filter((url) => lmRequest.test(url))).toEqual([]);
+});
+
+test("标题页通过基础无障碍扫描", async ({ page }) => {
+  await page.goto("/");
+  const titleResults = await new AxeBuilder({ page }).analyze();
+  expect(titleResults.violations).toEqual([]);
+
+  await page.getByRole("button", { name: "模型设置" }).click();
+  await expect(page.getByRole("dialog", { name: "本地模型设置" })).toBeVisible();
+  const settingsResults = await new AxeBuilder({ page }).analyze();
+  expect(settingsResults.violations).toEqual([]);
+});
+
+test("标题页可以查看操作说明并返回", async ({ page }) => {
+  await page.goto("/");
+  await page.getByRole("button", { name: "操作说明" }).click();
+
+  await expect(page.getByRole("heading", { name: "操作说明" })).toBeVisible();
+  await expect(page.getByText(/移动：WASD/)).toBeVisible();
+  await expect(page.getByText(/互动与确认：E \/ Enter/)).toBeVisible();
+
+  await page.getByRole("button", { name: "返回标题" }).click();
+  await expect(page.getByRole("heading", { name: "英雄坛说" })).toBeVisible();
+});
+
+test("模型设置仅在玩家主动检测时访问受控端点", async ({ page }) => {
+  const modelRequests: string[] = [];
+  page.on("request", (request) => {
+    if (lmRequest.test(request.url())) modelRequests.push(request.url());
+  });
+  await page.route("**/api/lm-studio", (route) =>
+    route.fulfill({
+      status: 503,
+      contentType: "application/json",
+      body: JSON.stringify({ error: "test endpoint unavailable" }),
+    }),
+  );
+  await page.route("http://127.0.0.1:1234/**", (route) =>
+    route.fulfill({
+      status: 503,
+      contentType: "application/json",
+      body: JSON.stringify({ error: "test endpoint unavailable" }),
+    }),
+  );
+
+  await page.goto("/");
+  await page.getByRole("button", { name: "模型设置" }).click();
+  await expect(page.getByRole("heading", { name: "本地模型设置" })).toBeVisible();
+  await expect(page.getByLabel("服务地址")).toHaveValue("http://127.0.0.1:1234");
+  await expect(page.getByLabel("服务地址")).toBeFocused();
+  expect(modelRequests).toEqual([]);
+
+  await page.getByRole("button", { name: "仅检测连接", exact: true }).click();
+  await expect.poll(() => modelRequests.length).toBe(1);
+  await expect(page.getByText(/本地模型未连接|连接失败|检测失败/)).toBeVisible();
+  await page.keyboard.press("Escape");
+  await expect(page.getByRole("heading", { name: "英雄坛说" })).toBeVisible();
+});
+
+test("开始新游戏后才载入完整世界", async ({ page }) => {
+  const requested: string[] = [];
+  page.on("request", (request) => requested.push(request.url()));
+
+  await page.goto("/");
+  expect(requested.some((url) => heavyRuntimeChunk.test(url))).toBe(false);
+
+  await page.getByRole("button", { name: "开始新游戏", exact: true }).click();
+  await expect(page.getByRole("heading", { name: "序 · 时空转换" })).toBeVisible();
+  expect(requested.some((url) => /\/original-world-[^/]+\.js(?:\?|$)/.test(url))).toBe(true);
+  expect(requested.some((url) => /\/game-maps-[^/]+\.js(?:\?|$)/.test(url))).toBe(true);
+});
+
+test("损坏的本地存档会保留并给出可恢复提示", async ({ page }) => {
+  await page.addInitScript(() => {
+    window.localStorage.setItem("rmxp-original-world-v1", "{broken-json");
+  });
+  await page.goto("/");
+  await expect(page.getByRole("button", { name: "继续游戏" })).toBeVisible();
+  await page.getByRole("button", { name: "继续游戏" }).click();
+  await expect(page.getByRole("alert")).toContainText("本地存档已损坏");
+  await expect.poll(() =>
+    page.evaluate(() => window.localStorage.getItem("rmxp-original-world-v1")),
+  ).toBe("{broken-json");
+});
+
+test("JSON 存档可导入并进入完整世界", async ({ page }) => {
+  await page.goto("/");
+  await page.locator('input[type="file"]').setInputFiles({
+    name: "save.json",
+    mimeType: "application/json",
+    buffer: Buffer.from(JSON.stringify({
+      format: "rmxp-hero-original-world-save",
+      version: 2,
+      savedAt: "",
+      position: { mapId: 1, x: 9, y: 7, direction: 2 },
+      actor: {},
+      tasks: {},
+      flags: {},
+      variables: {},
+    })),
+  });
+  await expect(page.getByRole("img", { name: /地图，主角位于/ })).toBeVisible();
+  await expect.poll(() =>
+    page.evaluate(() => Boolean(window.localStorage.getItem("rmxp-original-world-v1"))),
+  ).toBe(true);
+});

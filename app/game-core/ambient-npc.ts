@@ -18,6 +18,8 @@ export type AmbientNpc = {
   generationPending: boolean;
   queuedAt: number;
   speechTargetName: string;
+  /** Exact runtime target when multiple visible events share one display name. */
+  speechTargetEventId?: number;
   nextBehaviorAt: number;
   partnerId: number;
   conversationTurn: number;
@@ -36,7 +38,65 @@ export type AmbientNpc = {
 export type AmbientWorld = {
   mapId: number;
   npcs: AmbientNpc[];
+  /** Runtime-only indexes. They point at the mutable NPC objects in `npcs`. */
+  byEventId?: Map<number, AmbientNpc>;
+  byName?: Map<string, AmbientNpc[]>;
 };
+
+function ensureAmbientIndexes(world: AmbientWorld) {
+  if (!world.byEventId)
+    world.byEventId = new Map(world.npcs.map((npc) => [npc.eventId, npc]));
+  if (!world.byName) {
+    world.byName = new Map();
+    for (const npc of world.npcs) {
+      const matches = world.byName.get(npc.name) || [];
+      matches.push(npc);
+      world.byName.set(npc.name, matches);
+    }
+  }
+}
+
+export function ambientNpcByEventId(world: AmbientWorld, eventId: number) {
+  ensureAmbientIndexes(world);
+  return world.byEventId?.get(eventId);
+}
+
+export function ambientNpcsByName(world: AmbientWorld, name: string) {
+  ensureAmbientIndexes(world);
+  return world.byName?.get(name) || [];
+}
+
+export function ambientNpcByName(
+  world: AmbientWorld,
+  name: string,
+  options: {
+    preferredEventIds?: readonly number[];
+    near?: { x: number; y: number };
+    excludeEventId?: number;
+  } = {},
+) {
+  const matches = ambientNpcsByName(world, name).filter(
+    (npc) => npc.eventId !== options.excludeEventId,
+  );
+  if (!matches.length) return undefined;
+  if (!options.preferredEventIds?.length && !options.near) return matches[0];
+  const preferredOrder = new Map(
+    (options.preferredEventIds || []).map((eventId, index) => [eventId, index]),
+  );
+  const distance = (npc: AmbientNpc) => options.near
+    ? Math.max(Math.abs(npc.x - options.near.x), Math.abs(npc.y - options.near.y))
+    : 0;
+  return [...matches].sort((first, second) => {
+    const firstPreferred = preferredOrder.get(first.eventId),
+      secondPreferred = preferredOrder.get(second.eventId);
+    if (firstPreferred !== undefined || secondPreferred !== undefined) {
+      if (firstPreferred === undefined) return 1;
+      if (secondPreferred === undefined) return -1;
+      if (firstPreferred !== secondPreferred) return firstPreferred - secondPreferred;
+    }
+    return distance(first) - distance(second) || first.eventId - second.eventId;
+  })[0];
+}
 
 export type AmbientViewport = { left: number; top: number; right: number; bottom: number };
 
@@ -55,7 +115,7 @@ export function resetAmbientSessions(world: AmbientWorld, resumeAt: number) {
     npc.partnerId = 0; npc.groupId = 0; npc.groupMembers = []; npc.groupTurn = -1; npc.groupNextAt = 0;
     npc.conversationTurn = 0; npc.conversationRound = 0; npc.lastPartnerId = 0;
     npc.bubble = ""; npc.queuedBubble = ""; npc.generationPending = false; npc.llmRequested = true;
-    npc.speechTargetName = ""; npc.conversationContext = []; npc.nextBehaviorAt = resumeAt;
+    npc.speechTargetName = ""; npc.speechTargetEventId = 0; npc.conversationContext = []; npc.nextBehaviorAt = resumeAt;
   }
 }
 
@@ -71,7 +131,7 @@ export function createAmbientWorld(
   now: number,
   entries: Array<{ eventId: number; npcId: number; name: string; identity: string; x: number; y: number }>,
 ): AmbientWorld {
-  return {
+  const world: AmbientWorld = {
     mapId,
     npcs: entries.map((entry, index) => ({
       ...entry,
@@ -86,6 +146,7 @@ export function createAmbientWorld(
       generationPending: false,
       queuedAt: 0,
       speechTargetName: "",
+      speechTargetEventId: 0,
       nextBehaviorAt: now + 700 + (hash(mapId * 97 + entry.eventId * 31 + index) % 2400),
       partnerId: 0,
       conversationTurn: 0,
@@ -101,6 +162,8 @@ export function createAmbientWorld(
       groupNextAt: 0,
     })),
   };
+  ensureAmbientIndexes(world);
+  return world;
 }
 
 export function ambientNpcAt(world: AmbientWorld, x: number, y: number) {
@@ -159,7 +222,7 @@ export function tickAmbientWorld(options: {
   const clearGroup = (member: AmbientNpc, resumeAt: number) => {
     const memberIds = new Set([...member.groupMembers, member.eventId]);
     for (const item of world.npcs.filter((candidate) => memberIds.has(candidate.eventId))) {
-      item.bubble = ""; item.queuedBubble = ""; item.generationPending = false; item.speechTargetName = ""; item.groupId = 0; item.groupMembers = [];
+      item.bubble = ""; item.queuedBubble = ""; item.generationPending = false; item.speechTargetName = ""; item.speechTargetEventId = 0; item.groupId = 0; item.groupMembers = [];
       item.groupTurn = -1; item.groupNextAt = 0; item.nextBehaviorAt = resumeAt; item.conversationContext = [];
       item.partnerCooldownUntil = now + 30000;
     }
@@ -167,15 +230,15 @@ export function tickAmbientWorld(options: {
   for (const npc of world.npcs.filter((item) => !isActive(item))) {
     if (npc.groupId) clearGroup(npc, now + 700);
     if (npc.partnerId) {
-      const partner = world.npcs.find((item) => item.eventId === npc.partnerId);
+      const partner = ambientNpcByEventId(world, npc.partnerId);
       if (partner) {
         partner.partnerId = 0; partner.conversationTurn = 0; partner.conversationRound = 0;
-        partner.conversationContext = []; partner.bubble = ""; partner.queuedBubble = ""; partner.generationPending = false; partner.speechTargetName = "";
+        partner.conversationContext = []; partner.bubble = ""; partner.queuedBubble = ""; partner.generationPending = false; partner.speechTargetName = ""; partner.speechTargetEventId = 0;
         partner.nextBehaviorAt = now + 700;
       }
     }
     npc.x = npc.homeX; npc.y = npc.homeY; npc.partnerId = 0; npc.conversationTurn = 0; npc.conversationRound = 0; npc.conversationContext = [];
-    npc.bubble = ""; npc.queuedBubble = ""; npc.generationPending = false; npc.speechTargetName = ""; npc.waitingForPlayer = false; npc.nextBehaviorAt = now + 700;
+    npc.bubble = ""; npc.queuedBubble = ""; npc.generationPending = false; npc.speechTargetName = ""; npc.speechTargetEventId = 0; npc.waitingForPlayer = false; npc.nextBehaviorAt = now + 700;
   }
   for (const npc of world.npcs) {
     if (!isActive(npc)) continue;
@@ -190,7 +253,7 @@ export function tickAmbientWorld(options: {
       npc.nextBehaviorAt = now + 450;
     }
     if (npc.groupId) {
-      const members = npc.groupMembers.map((id) => world.npcs.find((item) => item.eventId === id)).filter((item): item is AmbientNpc => Boolean(item)),
+      const members = npc.groupMembers.map((id) => ambientNpcByEventId(world, id)).filter((item): item is AmbientNpc => Boolean(item)),
         leader = members.reduce((first, item) => item.eventId < first.eventId ? item : first, members[0] || npc);
       if (members.length < 2 || !members.some((item) => item.eventId === npc.eventId)) {
         clearGroup(npc, now + 700);
@@ -211,7 +274,7 @@ export function tickAmbientWorld(options: {
       if (leader.groupTurn < 0) {
         leader.groupTurn = 0;
         const target = members.find((item) => item.eventId !== leader.eventId) || leader;
-        leader.bubble = ""; leader.speechTargetName = target.name; leader.generationPending = true; leader.queuedAt = now;
+        leader.bubble = ""; leader.speechTargetName = target.name; leader.speechTargetEventId = target.eventId; leader.generationPending = true; leader.queuedAt = now;
         leader.conversationContext = [];
         leader.bubbleKind = "speech"; leader.bubbleUntil = now + 12000; leader.groupNextAt = leader.bubbleUntil; leader.llmRequested = false;
         faceToward(leader, target); faceToward(target, leader);
@@ -240,7 +303,7 @@ export function tickAmbientWorld(options: {
           leader.groupNextAt = now + 500;
           continue;
         }
-        speaker.bubble = ""; speaker.speechTargetName = targetName; speaker.generationPending = true; speaker.queuedAt = now;
+        speaker.bubble = ""; speaker.speechTargetName = targetName; speaker.speechTargetEventId = target?.eventId || 0; speaker.generationPending = true; speaker.queuedAt = now;
         speaker.bubbleKind = "speech"; speaker.bubbleUntil = now + 12000; speaker.llmRequested = false;
         if (target) { faceToward(speaker, target); faceToward(target, speaker); }
         leader.groupTurn = nextTurn; leader.groupNextAt = speaker.bubbleUntil;
@@ -249,9 +312,9 @@ export function tickAmbientWorld(options: {
     }
     if (npc.partnerId && npc.conversationTurn === 0) {
       if (pausedConversationNpcIds.has(npc.eventId)) continue;
-      const partner = world.npcs.find((item) => item.eventId === npc.partnerId);
+      const partner = ambientNpcByEventId(world, npc.partnerId);
       if (!partner) {
-        npc.partnerId = 0; npc.speechTargetName = ""; npc.conversationTurn = 0; npc.conversationRound = 0;
+        npc.partnerId = 0; npc.speechTargetName = ""; npc.speechTargetEventId = 0; npc.conversationTurn = 0; npc.conversationRound = 0;
         npc.conversationContext = []; npc.generationPending = false; npc.nextBehaviorAt = now + 700;
         continue;
       }
@@ -273,7 +336,7 @@ export function tickAmbientWorld(options: {
           const members = candidates, ids = members.map((item) => item.eventId), groupId = Math.min(...ids);
           for (const member of members) {
             member.groupId = groupId; member.groupMembers = ids; member.groupTurn = -1; member.groupNextAt = 0;
-            member.partnerId = 0; member.conversationTurn = 0; member.bubble = ""; member.nextBehaviorAt = now + 300;
+            member.partnerId = 0; member.conversationTurn = 0; member.bubble = ""; member.speechTargetName = ""; member.speechTargetEventId = 0; member.nextBehaviorAt = now + 300;
           }
           continue;
         }
@@ -281,8 +344,8 @@ export function tickAmbientWorld(options: {
         npc.conversationRound = partner.conversationRound = 1;
         npc.conversationContext = partner.conversationContext = [];
         partner.conversationTurn = 2;
-        npc.bubble = ""; npc.speechTargetName = partner.name; npc.generationPending = true; npc.queuedAt = now;
-        partner.queuedBubble = ""; partner.speechTargetName = npc.name;
+        npc.bubble = ""; npc.speechTargetName = partner.name; npc.speechTargetEventId = partner.eventId; npc.generationPending = true; npc.queuedAt = now;
+        partner.queuedBubble = ""; partner.speechTargetName = npc.name; partner.speechTargetEventId = npc.eventId;
         npc.bubbleKind = partner.bubbleKind = "speech";
         npc.bubbleUntil = now + 12000;
         partner.bubbleUntil = now + 20000;
@@ -294,9 +357,9 @@ export function tickAmbientWorld(options: {
     if (npc.partnerId && npc.conversationTurn === 1 && npc.bubbleUntil <= now) {
       if (pausedConversationNpcIds.has(npc.eventId)) continue;
       if (npc.generationPending) continue;
-      const partner = world.npcs.find((item) => item.eventId === npc.partnerId);
+      const partner = ambientNpcByEventId(world, npc.partnerId);
       if (!partner) {
-        npc.partnerId = 0; npc.speechTargetName = ""; npc.conversationTurn = 0; npc.conversationRound = 0;
+        npc.partnerId = 0; npc.speechTargetName = ""; npc.speechTargetEventId = 0; npc.conversationTurn = 0; npc.conversationRound = 0;
         npc.conversationContext = []; npc.generationPending = false; npc.nextBehaviorAt = now + 700;
         continue;
       }
@@ -316,21 +379,21 @@ export function tickAmbientWorld(options: {
     if (npc.partnerId && npc.conversationTurn === 2 && npc.bubbleUntil <= now) {
       if (pausedConversationNpcIds.has(npc.eventId)) continue;
       if (npc.generationPending) continue;
-      const partner = world.npcs.find((item) => item.eventId === npc.partnerId);
+      const partner = ambientNpcByEventId(world, npc.partnerId);
       if (partner && npc.conversationRound < 3) {
         partner.conversationRound = npc.conversationRound = npc.conversationRound + 1;
         partner.conversationTurn = 1; npc.conversationTurn = 2;
-        partner.bubble = ""; partner.speechTargetName = npc.name; partner.generationPending = true; partner.queuedAt = now;
-        npc.bubble = ""; npc.queuedBubble = ""; npc.speechTargetName = partner.name;
+        partner.bubble = ""; partner.speechTargetName = npc.name; partner.speechTargetEventId = npc.eventId; partner.generationPending = true; partner.queuedAt = now;
+        npc.bubble = ""; npc.queuedBubble = ""; npc.speechTargetName = partner.name; npc.speechTargetEventId = partner.eventId;
         partner.bubbleUntil = now + 12000; npc.bubbleUntil = now + 20000;
         partner.llmRequested = false; npc.llmRequested = true;
         continue;
       }
       const formerPartnerId = npc.partnerId;
-      npc.bubble = ""; npc.partnerId = 0; npc.speechTargetName = ""; npc.conversationTurn = 0; npc.conversationRound = 0; npc.conversationContext = [];
+      npc.bubble = ""; npc.partnerId = 0; npc.speechTargetName = ""; npc.speechTargetEventId = 0; npc.conversationTurn = 0; npc.conversationRound = 0; npc.conversationContext = [];
       npc.lastPartnerId = formerPartnerId; npc.partnerCooldownUntil = now + 30000; npc.nextBehaviorAt = now + 400;
       if (partner) {
-        partner.bubble = ""; partner.partnerId = 0; partner.speechTargetName = ""; partner.conversationTurn = 0; partner.conversationRound = 0; partner.conversationContext = [];
+        partner.bubble = ""; partner.partnerId = 0; partner.speechTargetName = ""; partner.speechTargetEventId = 0; partner.conversationTurn = 0; partner.conversationRound = 0; partner.conversationContext = [];
         partner.lastPartnerId = npc.eventId; partner.partnerCooldownUntil = now + 30000; partner.nextBehaviorAt = now + 400;
       }
       continue;
@@ -361,6 +424,7 @@ export function tickAmbientWorld(options: {
     if (seed % 3 === 0) {
       npc.bubble = "";
       npc.speechTargetName = "";
+      npc.speechTargetEventId = 0;
       npc.bubbleKind = "action";
       npc.bubbleUntil = now + 12000;
       npc.llmRequested = false; npc.generationPending = true; npc.queuedAt = now;
@@ -370,6 +434,7 @@ export function tickAmbientWorld(options: {
     if (seed % 4 === 0) {
       npc.bubble = "";
       npc.speechTargetName = "";
+      npc.speechTargetEventId = 0;
       npc.bubbleKind = "speech";
       npc.bubbleUntil = now + 12000;
       npc.llmRequested = false; npc.generationPending = true; npc.queuedAt = now;

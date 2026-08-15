@@ -5,8 +5,16 @@ on:
     branches: [main]
   pull_request:
 
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
 jobs:
-  check:
+  static-analysis:
+    name: TypeScript and ESLint
     runs-on: ubuntu-latest
     timeout-minutes: 15
     steps:
@@ -16,4 +24,104 @@ jobs:
           node-version: 22.13.0
           cache: npm
       - run: npm ci
-      - run: npm run check
+      - run: npm run audit
+      - run: npm run typecheck
+      - run: npm run lint
+
+  unit-tests:
+    name: Unit tests with coverage
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22.13.0
+          cache: npm
+      - run: npm ci
+      - run: npm run test:coverage
+
+  build:
+    name: Build, budgets, and SSR
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22.13.0
+          cache: npm
+      - run: npm ci
+      - run: npm run build
+      - run: npm run budgets
+      - run: npm run test:ssr
+      - uses: actions/upload-artifact@v4
+        with:
+          name: production-build
+          path: dist
+          include-hidden-files: true
+          retention-days: 1
+
+  e2e-pr:
+    name: Browser tests (Chromium)
+    if: github.event_name == 'pull_request'
+    needs: build
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22.13.0
+          cache: npm
+      - run: npm ci
+      - uses: actions/download-artifact@v4
+        with:
+          name: production-build
+          path: dist
+      - run: npx playwright install --with-deps chromium
+      - run: npm run test:e2e -- --project=chromium
+      - name: Upload browser report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: playwright-report-chromium-pr
+          path: |
+            coverage/playwright-report
+            coverage/playwright-results
+          if-no-files-found: ignore
+          retention-days: 7
+
+  e2e-main:
+    name: Browser tests (${{ matrix.browser }})
+    if: github.event_name == 'push'
+    needs: build
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    strategy:
+      fail-fast: false
+      matrix:
+        browser: [chromium, firefox, webkit]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22.13.0
+          cache: npm
+      - run: npm ci
+      - uses: actions/download-artifact@v4
+        with:
+          name: production-build
+          path: dist
+      - run: npx playwright install --with-deps ${{ matrix.browser }}
+      - run: npm run test:e2e -- --project=${{ matrix.browser }}
+      - name: Upload browser report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: playwright-report-${{ matrix.browser }}-main
+          path: |
+            coverage/playwright-report
+            coverage/playwright-results
+          if-no-files-found: ignore
+          retention-days: 7

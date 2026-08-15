@@ -1,11 +1,50 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { ambientCanHear, ambientNpcAt, ambientNpcInPlayerRange, ambientNpcInViewport, ambientViewportBounds, createAmbientWorld, resetAmbientSessions, tickAmbientWorld } from "../app/game-core/ambient-npc";
+import { ambientCanHear, ambientNpcAt, ambientNpcByEventId, ambientNpcByName, ambientNpcsByName, ambientNpcInPlayerRange, ambientNpcInViewport, ambientViewportBounds, createAmbientWorld, resetAmbientSessions, tickAmbientWorld } from "../app/game-core/ambient-npc";
 
 test("ambient NPCs exist only in the initialized current map", () => {
   const world = createAmbientWorld(2, 0, [{ eventId: 1, npcId: 3, name: "捕快", identity: "官差", x: 4, y: 4 }]);
   assert.equal(world.mapId, 2);
   assert.equal(ambientNpcAt(world, 4, 4)?.npcId, 3);
+});
+
+test("ambient runtime keeps stable event and name indexes", () => {
+  const world = createAmbientWorld(2, 0, [
+    { eventId: 1, npcId: 3, name: "捕快", identity: "官差", x: 4, y: 4 },
+    { eventId: 2, npcId: 4, name: "掌柜", identity: "商人", x: 5, y: 4 },
+  ]);
+  const guard = ambientNpcByEventId(world, 1);
+  assert.equal(guard, world.npcs[0]);
+  assert.equal(ambientNpcByName(world, "掌柜"), world.npcs[1]);
+  guard!.x = 8;
+  assert.equal(ambientNpcByEventId(world, 1)?.x, 8);
+});
+
+test("ambient name indexes retain duplicates and resolve within the active session", () => {
+  const world = createAmbientWorld(61, 0, [
+    { eventId: 8, npcId: 163, name: "朱雀喽猡", identity: "坛众", x: 2, y: 2 },
+    { eventId: 3, npcId: 163, name: "朱雀喽猡", identity: "坛众", x: 8, y: 8 },
+    { eventId: 11, npcId: 164, name: "坛主", identity: "坛主", x: 7, y: 8 },
+  ]);
+  assert.deepEqual(
+    ambientNpcsByName(world, "朱雀喽猡").map((npc) => npc.eventId),
+    [8, 3],
+  );
+  // The two-argument API retains its original first-match behaviour.
+  assert.equal(ambientNpcByName(world, "朱雀喽猡")?.eventId, 8);
+  // A recorded event target wins inside a partner/group/player session.
+  assert.equal(
+    ambientNpcByName(world, "朱雀喽猡", {
+      preferredEventIds: [3],
+      near: world.npcs[2],
+    })?.eventId,
+    3,
+  );
+  // Without an exact session target, the nearest duplicate is selected.
+  assert.equal(
+    ambientNpcByName(world, "朱雀喽猡", { near: world.npcs[2] })?.eventId,
+    3,
+  );
 });
 
 test("ambient simulation uses a player-centered screen range", () => {
