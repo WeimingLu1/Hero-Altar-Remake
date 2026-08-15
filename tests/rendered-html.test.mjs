@@ -44,9 +44,13 @@ test("local saves are restored only after hydration", async () => {
     new URL("../app/original/original-world.tsx", import.meta.url),
     "utf8",
   );
-  assert.match(source, /useState<WorldSave>\(fresh\)/);
+  assert.match(source, /useState<WorldSave>\(\(\) => initialSave \|\| fresh\(\)\)/);
   assert.match(source, /setTimeout\(\(\) => \{/);
   assert.match(source, /if \(exists\) sync\(loadLocalSave\(\)\)/);
   assert.doesNotMatch(source, /useState<WorldSave>\(loadLocalSave\)/);
-  assert.match(source, /savedAt: ""/);
+  const saveSource = await readFile(
+    new URL("../app/game-core/save-system.ts", import.meta.url),
+    "utf8",
+  );
+  assert.match(saveSource, /savedAt: ""/);
 });

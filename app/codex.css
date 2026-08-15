@@ -1,7 +1,0 @@
-.codex > p { margin-top: 0; color: #d9c58d; }
-.codex-counts { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; }
-.codex-counts span { background: #202b23; padding: 10px; color: #829086; font-size: 12px; }
-.codex-counts b { display: block; color: #d8bd74; font-size: 20px; margin-top: 4px; }
-.codex h3 { font-size: 13px; color: #9ba89e; }
-.codex-list { display: grid; grid-template-columns: repeat(3, 1fr); gap: 4px; max-height: 210px; overflow: auto; }
-.codex-list span { padding: 5px 7px; background: #151c17; color: #bbc5bc; font-size: 11px; }

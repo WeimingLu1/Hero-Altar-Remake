@@ -8,28 +8,28 @@ RPG Maker XP project.
 The following assets were generated specifically for this Web adaptation with
 OpenAI Image Generation and then prepared locally for use as sprite atlases:
 
-- `public/game-assets/generated/wuxia-characters-v1.png`: player and general
+- `public/game-assets/generated/wuxia-characters-v1.webp`: player and general
   wandering-character directions.
-- `public/game-assets/generated/wuxia-characters-ages-v1.png`: children and
+- `public/game-assets/generated/wuxia-characters-ages-v1.webp`: children and
   elderly character directions.
-- `public/game-assets/generated/wuxia-characters-townsfolk-v1.png`: official,
+- `public/game-assets/generated/wuxia-characters-townsfolk-v1.webp`: official,
   merchant, scholar, and worker directions.
-- `public/game-assets/generated/wuxia-characters-factions-v1.png`: swordsman,
+- `public/game-assets/generated/wuxia-characters-factions-v1.webp`: swordsman,
   bandit, monk, and Taoist directions.
-- `public/game-assets/generated/wuxia-characters-women-v1.png`: swordswoman,
+- `public/game-assets/generated/wuxia-characters-women-v1.webp`: swordswoman,
   merchant, Buddhist nun, and worker directions.
-- `public/game-assets/generated/wuxia-portrait-atlas-v1.png`: 5 × 4 matching
+- `public/game-assets/generated/wuxia-portrait-atlas-v1.webp`: 5 × 4 matching
   character portraits used by dialogue, status, free-chat, and battle UI.
-- `public/game-assets/generated/wuxia-characters-faction-signatures-v1.png`:
+- `public/game-assets/generated/wuxia-characters-faction-signatures-v1.webp`:
   directional Flower School, Red Lotus, Wudang, and Snow Mountain sprites.
-- `public/game-assets/generated/wuxia-faction-portraits-v1.png`: 4 × 4 named
+- `public/game-assets/generated/wuxia-faction-portraits-v1.webp`: 4 × 4 named
   Flower School, Red Lotus, Wudang, Snow Mountain, and Ice-Fire portraits.
-- `public/game-assets/generated/wuxia-characters-flower-variants-v1.png`: four
+- `public/game-assets/generated/wuxia-characters-flower-variants-v1.webp`: four
   distinct directional Flower School women matching named portraits.
-- `public/game-assets/generated/wuxia-indoor-furniture-v1.png`: 8 × 8 modular
+- `public/game-assets/generated/wuxia-indoor-furniture-v1.webp`: 8 × 8 modular
   ancient Chinese furniture and interior-prop atlas.
-- `public/game-assets/redrawn/overlay-nature-v3.png` and
-  `public/game-assets/redrawn/overlay-interior-v3.png`: two 4 × 4 transparent
+- `public/game-assets/redrawn/overlay-nature-v3.webp` and
+  `public/game-assets/redrawn/overlay-interior-v3.webp`: two 4 × 4 transparent
   prop atlases. Each cell contains one complete object with verified transparent
   padding on every edge; nature and interior props are kept in separate images
   so no object crosses a crop boundary.

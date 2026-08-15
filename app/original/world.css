@@ -197,7 +197,7 @@
   gap: 3px;
 }
 .character-portrait {
-  background-image: url("/game-assets/generated/wuxia-portrait-atlas-v1.png");
+  background-image: url("/game-assets/generated/wuxia-portrait-atlas-v1.webp");
   background-repeat: no-repeat;
   background-size: 500% 400%;
   background-color: #111711;
@@ -667,4 +667,49 @@
   .world-shell header > div span {
     display: none;
   }
+}
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    animation-duration: 0.001ms !important;
+    animation-iteration-count: 1 !important;
+    scroll-behavior: auto !important;
+  }
+}
+
+.llm-health {
+  display: block;
+  margin-top: 12px;
+  color: #c9bfa6;
+  font-size: 13px;
+}
+
+.llm-health.online {
+  color: #86d69b;
+}
+
+.llm-settings {
+  display: grid;
+  gap: 16px;
+  width: min(560px, calc(100vw - 32px));
+}
+
+.llm-settings label {
+  display: grid;
+  gap: 6px;
+  color: #d8cda9;
+  text-align: left;
+}
+
+.llm-settings input {
+  width: 100%;
+  padding: 10px 12px;
+  border: 1px solid #8e7747;
+  background: #0c130e;
+  color: #f1e4bd;
+}
+
+.llm-settings > div {
+  display: flex;
+  gap: 10px;
+  justify-content: center;
 }

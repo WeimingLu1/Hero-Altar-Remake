@@ -5,13 +5,27 @@ import {
 } from "../../game-core/lm-studio";
 
 const LM_STUDIO_URL = "http://127.0.0.1:1234/api/v1/chat";
+const LM_STUDIO_MODELS_URL = "http://127.0.0.1:1234/api/v1/models";
 
 type ProxyPayload = {
   system?: string;
   transcript?: string;
   nextSpeaker?: string;
   maxOutputTokens?: number;
+  model?: string;
 };
+
+export async function GET(request: Request) {
+  try {
+    const response = await fetch(LM_STUDIO_MODELS_URL, {
+      signal: AbortSignal.any([request.signal, AbortSignal.timeout(2_500)]),
+      cache: "no-store",
+    });
+    return Response.json({ ok: response.ok }, { status: response.ok ? 200 : 503 });
+  } catch {
+    return Response.json({ ok: false }, { status: 503 });
+  }
+}
 
 export async function POST(request: Request) {
   try {
@@ -19,6 +33,7 @@ export async function POST(request: Request) {
     const system = payload.system?.trim() || "";
     const transcript = payload.transcript?.trim() || "";
     const nextSpeaker = payload.nextSpeaker?.trim().slice(0, 12) || "NPC";
+    const model = payload.model?.trim().slice(0, 160) || LM_STUDIO_MODEL;
     const maxOutputTokens = Math.max(64, Math.min(NPC_MAX_OUTPUT_TOKENS, Number(payload.maxOutputTokens) || NPC_MAX_OUTPUT_TOKENS));
     if (!system || !transcript || system.length > 16_000 || transcript.length > NPC_TRANSCRIPT_CHAR_BUDGET)
       return Response.json({ error: "对话上下文无效" }, { status: 400 });
@@ -27,7 +42,7 @@ export async function POST(request: Request) {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
-        model: LM_STUDIO_MODEL,
+        model,
         system_prompt: system,
         input: `${transcript}\n${nextSpeaker}：`,
         stream: true,

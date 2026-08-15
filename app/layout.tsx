@@ -1,6 +1,5 @@
 import type { Metadata } from "next";
 import "./globals.css";
-import "./codex.css";
 
 export const metadata: Metadata = {
   title: "英雄坛说：云游志",

@@ -37,7 +37,7 @@ test or runtime check. Data extraction alone is not implementation evidence.
 | Combat rebalance layer   | Static NPCs scale from genuine combat kungfu while civilians and dynamic wanted enemies retain intended balance; masters gain vitality, energy, innate stats, hit and affordable offensive specials; spell resources use diminishing inputs and corrected burn coefficients | Implemented |
 | Movement policy          | Product design intentionally ignores RMXP tile passage flags across all 69 maps; rectangular bounds and live character occupancy remain                                                                                                   | Implemented |
 | Modifier limits          | Experience caps at 10,000,000, innate player stats at 30, force/magic boosts use equipped-skill caps, MAX preserves age, and modifier-only school/teacher fields are independent                                                            | Implemented |
-| Production               | Production build plus 181 logic/visual and 3 server-render tests pass (184 total, 0 failures)                                                                                                                                               | Implemented |
+| Production               | TypeScript, ESLint, production build, automated bundle/asset budgets, logic/visual tests and server-render tests are enforced locally and in CI                                                                                              | Implemented |
 
 ## Completion gate
 

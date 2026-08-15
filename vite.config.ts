@@ -44,6 +44,25 @@ export default defineConfig(async () => {
   const { cloudflare } = await import("@cloudflare/vite-plugin");
 
   return {
+    build: {
+      rolldownOptions: {
+        output: {
+          codeSplitting: {
+            groups: [
+              { name: "game-maps", test: /game-data\/maps\.json$/ },
+              {
+                name: "game-characters",
+                test: /game-data\/(enemies|enemies_plus|kungfus|skills)\.json$/,
+              },
+              {
+                name: "game-items",
+                test: /game-data\/(items|weapons|armors|tasks|core|config)\.json$/,
+              },
+            ],
+          },
+        },
+      },
+    },
     server: isCodexSeatbeltSandbox
       ? { watch: { useFsEvents: false, usePolling: true } }
       : undefined,

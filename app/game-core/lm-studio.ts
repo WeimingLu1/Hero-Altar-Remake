@@ -1,14 +1,74 @@
 export const LM_STUDIO_ENDPOINT = "http://127.0.0.1:1234";
 export const LM_STUDIO_MODEL = "qwen3.6-35b-a3b-uncensored-hauhaucs-aggressive";
-export const NPC_MAX_OUTPUT_TOKENS = 2048;
-export const NPC_TRANSCRIPT_CHAR_BUDGET = 72_000;
+export const NPC_MAX_OUTPUT_TOKENS = 512;
+export const NPC_TRANSCRIPT_CHAR_BUDGET = 12_000;
+export const NPC_TRANSCRIPT_MESSAGE_BUDGET = 10;
+export const LLM_REQUEST_TIMEOUT_MS = 15_000;
+export const LLM_SETTINGS_KEY = "rmxp-hero-llm-settings-v1";
+
+export type LlmSettings = {
+  provider: "lm-studio" | "openai-compatible";
+  endpoint: string;
+  model: string;
+  timeoutMs: number;
+  concurrency: number;
+};
+
+export const DEFAULT_LLM_SETTINGS: LlmSettings = {
+  provider: "lm-studio",
+  endpoint: LM_STUDIO_ENDPOINT,
+  model: LM_STUDIO_MODEL,
+  timeoutMs: LLM_REQUEST_TIMEOUT_MS,
+  concurrency: 3,
+};
+
+export function normalizeLlmSettings(value: unknown): LlmSettings {
+  const source = value && typeof value === "object" ? value as Partial<LlmSettings> : {};
+  let endpoint = typeof source.endpoint === "string" ? source.endpoint.trim() : "";
+  try {
+    const url = new URL(endpoint || LM_STUDIO_ENDPOINT);
+    if (url.protocol !== "http:" && url.protocol !== "https:") throw new Error();
+    endpoint = url.origin + url.pathname.replace(/\/$/, "");
+  } catch {
+    endpoint = LM_STUDIO_ENDPOINT;
+  }
+  return {
+    provider: source.provider === "openai-compatible" ? source.provider : "lm-studio",
+    endpoint,
+    model: typeof source.model === "string" && source.model.trim()
+      ? source.model.trim().slice(0, 160)
+      : LM_STUDIO_MODEL,
+    timeoutMs: Math.max(3_000, Math.min(60_000, Number(source.timeoutMs) || LLM_REQUEST_TIMEOUT_MS)),
+    concurrency: Math.max(1, Math.min(3, Math.trunc(Number(source.concurrency) || 3))),
+  };
+}
+
+export function loadLlmSettings(): LlmSettings {
+  if (typeof localStorage === "undefined") return DEFAULT_LLM_SETTINGS;
+  try {
+    return normalizeLlmSettings(JSON.parse(localStorage.getItem(LLM_SETTINGS_KEY) || "null"));
+  } catch {
+    return DEFAULT_LLM_SETTINGS;
+  }
+}
+
+export function saveLlmSettings(value: unknown) {
+  const settings = normalizeLlmSettings(value);
+  if (typeof localStorage !== "undefined")
+    localStorage.setItem(LLM_SETTINGS_KEY, JSON.stringify(settings));
+  return settings;
+}
 
 export type ChatMessage = { role: "user" | "assistant"; content: string };
 
 export function messagesWithinContext(messages: ChatMessage[]) {
   let remaining = NPC_TRANSCRIPT_CHAR_BUDGET;
   const kept: ChatMessage[] = [];
-  for (let index = messages.length - 1; index >= 0; index -= 1) {
+  for (
+    let index = messages.length - 1;
+    index >= 0 && kept.length < NPC_TRANSCRIPT_MESSAGE_BUDGET;
+    index -= 1
+  ) {
     const message = messages[index];
     const cost = message.content.length + 8;
     if (cost > remaining && kept.length) break;
@@ -27,6 +87,27 @@ export function lmStudioTransportUrl(hostname?: string) {
     : `${LM_STUDIO_ENDPOINT}/api/v1/chat`;
 }
 
+export async function probeLlmHealth(signal?: AbortSignal, supplied?: LlmSettings) {
+  const settings = supplied || loadLlmSettings();
+  const localPage = typeof location !== "undefined" &&
+    (location.hostname === "localhost" || location.hostname === "127.0.0.1");
+  const useProxy = localPage && settings.endpoint === LM_STUDIO_ENDPOINT;
+  const url = useProxy ? "/api/lm-studio" : `${settings.endpoint}/api/v1/models`;
+  const controller = new AbortController();
+  const forwardAbort = () => controller.abort(signal?.reason);
+  signal?.addEventListener("abort", forwardAbort, { once: true });
+  const timeout = globalThis.setTimeout(() => controller.abort(), 2_500);
+  try {
+    const response = await fetch(url, { signal: controller.signal, cache: "no-store" });
+    return response.ok;
+  } catch {
+    return false;
+  } finally {
+    globalThis.clearTimeout(timeout);
+    signal?.removeEventListener("abort", forwardAbort);
+  }
+}
+
 export async function streamNpcReply(options: {
   system: string;
   messages: ChatMessage[];
@@ -37,63 +118,91 @@ export async function streamNpcReply(options: {
   model?: string;
   nextSpeaker?: string;
   maxOutputTokens?: number;
+  timeoutMs?: number;
 }) {
-  const endpoint = (options.endpoint || LM_STUDIO_ENDPOINT).replace(/\/$/, "");
+  const settings = loadLlmSettings();
+  const endpoint = (options.endpoint || settings.endpoint).replace(/\/$/, "");
   const transcript = messagesWithinContext(options.messages).map((message) =>
     `${message.role === "user" ? "玩家" : "NPC"}：${message.content}`,
   ).join("\n");
   const transportUrl = options.transportUrl ||
-    (options.endpoint ? `${endpoint}/api/v1/chat` : lmStudioTransportUrl());
+    (options.endpoint || settings.endpoint !== LM_STUDIO_ENDPOINT
+      ? `${endpoint}/api/v1/chat`
+      : lmStudioTransportUrl());
   const proxy = transportUrl.startsWith("/");
   const nextSpeaker = options.nextSpeaker?.trim() || "NPC";
-  const response = await fetch(transportUrl, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify(proxy ? {
-      system: options.system,
-      transcript,
-      nextSpeaker,
-      maxOutputTokens: options.maxOutputTokens,
-    } : {
-        model: options.model || LM_STUDIO_MODEL,
-        system_prompt: options.system,
-        input: `${transcript}\n${nextSpeaker}：`,
-        stream: true,
-        reasoning: "off",
-        store: false,
-        temperature: 0.8,
-        top_p: 0.9,
-        max_output_tokens: options.maxOutputTokens || NPC_MAX_OUTPUT_TOKENS,
-      }),
-    signal: options.signal,
-  });
-  if (!response.ok) {
-    let detail = "";
-    try {
-      const body = await response.json() as { error?: string };
-      detail = body.error ? `：${body.error}` : "";
-    } catch { /* non-JSON upstream error */ }
-    throw new Error(`LM Studio 返回 ${response.status}${detail}`);
-  }
-  if (!response.body) throw new Error("浏览器没有收到流式响应");
-  const reader = response.body.getReader(), decoder = new TextDecoder();
-  let pending = "", answer = "";
-  while (true) {
-    const { value, done } = await reader.read();
-    pending += decoder.decode(value, { stream: !done });
-    const lines = pending.split("\n");
-    pending = lines.pop() || "";
-    for (const raw of lines) {
-      const line = raw.trim();
-      if (!line.startsWith("data:") || line === "data: [DONE]") continue;
+  const controller = new AbortController();
+  const abortFromCaller = () => controller.abort(options.signal?.reason);
+  options.signal?.addEventListener("abort", abortFromCaller, { once: true });
+  const timeout = globalThis.setTimeout(
+    () => controller.abort(new Error("LM Studio 请求超时")),
+    options.timeoutMs ?? settings.timeoutMs,
+  );
+  try {
+    const response = await fetch(transportUrl, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(proxy ? {
+        system: options.system,
+        transcript,
+        nextSpeaker,
+        maxOutputTokens: options.maxOutputTokens,
+        model: options.model || settings.model,
+      } : {
+          model: options.model || settings.model,
+          system_prompt: options.system,
+          input: `${transcript}\n${nextSpeaker}：`,
+          stream: true,
+          reasoning: "off",
+          store: false,
+          temperature: 0.8,
+          top_p: 0.9,
+          max_output_tokens: options.maxOutputTokens || NPC_MAX_OUTPUT_TOKENS,
+        }),
+      signal: controller.signal,
+    });
+    if (!response.ok) {
+      let detail = "";
       try {
-        const json = JSON.parse(line.slice(5)) as { type?: string; content?: string };
-        const token = json.type === "message.delta" ? json.content || "" : "";
-        if (token) { answer += token; options.onToken(token); }
-      } catch { /* tolerate split/non-JSON keepalive lines */ }
+        const body = await response.json() as { error?: string };
+        detail = body.error ? `：${body.error}` : "";
+      } catch { /* non-JSON upstream error */ }
+      throw new Error(`LM Studio 返回 ${response.status}${detail}`);
     }
-    if (done) break;
+    if (!response.body) throw new Error("浏览器没有收到流式响应");
+    const reader = response.body.getReader(), decoder = new TextDecoder();
+    let pending = "", answer = "";
+    const acceptLine = (raw: string) => {
+      const line = raw.trim();
+      if (!line.startsWith("data:") || line === "data: [DONE]") return;
+      try {
+        const json = JSON.parse(line.slice(5)) as {
+          type?: string;
+          content?: string;
+          choices?: Array<{ delta?: { content?: string } }>;
+        };
+        const token = json.type === "message.delta"
+          ? json.content || ""
+          : json.choices?.[0]?.delta?.content || "";
+        if (token) {
+          answer += token;
+          options.onToken(token);
+        }
+      } catch { /* tolerate split/non-JSON keepalive lines */ }
+    };
+    while (true) {
+      const { value, done } = await reader.read();
+      pending += decoder.decode(value, { stream: !done });
+      const lines = pending.split("\n");
+      pending = lines.pop() || "";
+      lines.forEach(acceptLine);
+      if (done) break;
+    }
+    if (pending) acceptLine(pending);
+    if (!answer.trim()) throw new Error("模型没有返回正文");
+    return answer.trim();
+  } finally {
+    globalThis.clearTimeout(timeout);
+    options.signal?.removeEventListener("abort", abortFromCaller);
   }
-  if (!answer.trim()) throw new Error("模型没有返回正文");
-  return answer.trim();
 }

@@ -3,7 +3,7 @@ import test from "node:test";
 import type { SceneActorState } from "../app/game-core/scene-event";
 import { settleVictoryLoot } from "../app/game-core/battle-settlement";
 
-const actor = () =>
+const actor = (): SceneActorState =>
   ({
     inventory: {},
     gold: 0,
@@ -40,7 +40,7 @@ const actor = () =>
     fpPlus: 0,
     mpPlus: 0,
     xue6: false,
-  }) satisfies SceneActorState;
+  });
 
 test("战利品结算发放原作敌人金钱和全部物品", () => {
   const a = actor();

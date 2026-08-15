@@ -216,7 +216,7 @@ test("named adult women remain distinct after strict child and elder guards", ()
   assert.match(source, /阿绣: 20/);
   assert.match(source, /李青照: 21/);
   assert.doesNotMatch(source, /age >= 35 \|\|/);
-  assert.match(source, /wuxia-characters-faction-signatures-v1\.png/);
+  assert.match(source, /wuxia-characters-faction-signatures-v1\.webp/);
   assert.ok(source.indexOf("if (age >= 55)") < source.indexOf("if (/花间派"));
 });
 
@@ -228,7 +228,7 @@ test("major factions receive authored landmark compounds", () => {
 
 test("Flower School named women use distinct directional sprites", () => {
   assert.match(source, /阿绣: 0, 李青照: 1, 柳如是: 2, 聂隐娘: 3/);
-  assert.match(source, /wuxia-characters-flower-variants-v1\.png/);
+  assert.match(source, /wuxia-characters-flower-variants-v1\.webp/);
 });
 
 test("indoor rooms receive type-specific furniture away from events", () => {
@@ -244,8 +244,8 @@ test("indoor rooms receive type-specific furniture away from events", () => {
 });
 
 test("maps render a clean base before sparse transparent overlays", () => {
-  assert.match(source, /overlay-nature-v3\.png/);
-  assert.match(source, /overlay-interior-v3\.png/);
+  assert.match(source, /overlay-nature-v3\.webp/);
+  assert.match(source, /overlay-interior-v3\.webp/);
   assert.match(source, /atlasSource = interior \? source - 16 : source/);
   assert.match(source, /atlas\.naturalWidth \/ 4/);
   assert.match(source, /function drawOverlayCell/);

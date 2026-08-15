@@ -4,7 +4,7 @@ import { executeMapCommands, type RmxpCommand } from "./rmxp-events";
 export type MapPage = {
   graphic: Record<string, unknown>;
   trigger: number;
-  through: boolean;
+  through: boolean | null;
   commands: RmxpCommand[];
 };
 export type MapEvent = {
@@ -30,7 +30,7 @@ export type WorldPosition = {
   direction: number;
 };
 
-const maps = (mapsJson as { maps: OriginalMap[] }).maps;
+const maps = (mapsJson as unknown as { maps: OriginalMap[] }).maps;
 const mapIndex = new Map(maps.map((map) => [map.id, map]));
 export const originalMaps = maps;
 export const originalStart: WorldPosition = {
@@ -40,6 +40,7 @@ export const originalStart: WorldPosition = {
   direction: 2,
 };
 export const getOriginalMap = (id: number) => mapIndex.get(id) || maps[0];
+export const hasOriginalMap = (id: number) => mapIndex.has(id);
 
 export function friendlyEventName(name: string, transferMapId?: number) {
   const value = name.trim(),

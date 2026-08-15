@@ -38,6 +38,7 @@ yarn-error.log*
 /.wrangler/
 /outputs/
 /work/
+/tsconfig.tsbuildinfo
 
 # Local agent instructions and workspace automation state
 AGENTS.md

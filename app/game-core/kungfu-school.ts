@@ -21,7 +21,10 @@ for (const enemy of originalTables.enemies) {
   if (!enemy) continue;
   const schoolId = Number(enemy.type || 0);
   if (schoolId < 1 || schoolId > KUNGFU_SCHOOLS.length - 1) continue;
-  for (const [kungfuId] of enemy.skill_list || []) {
+  const skillList = Array.isArray(enemy.skill_list)
+    ? (enemy.skill_list as Array<[number, number]>)
+    : [];
+  for (const [kungfuId] of skillList) {
     if (kungfuId >= 12) schoolById.set(kungfuId, schoolId);
   }
 }

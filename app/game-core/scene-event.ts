@@ -139,7 +139,7 @@ export function resolveSceneEvent(
       );
     return {
       lines: [template],
-      gain: { kind: type, id, amount: Math.max(1, call.extra || 1) },
+      gain: { kind: type as 1 | 2 | 3, id, amount: Math.max(1, call.extra || 1) },
       tag: `gain:${type}:${id}`,
     };
   }

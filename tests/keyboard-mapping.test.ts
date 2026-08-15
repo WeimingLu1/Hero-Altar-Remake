@@ -1,6 +1,14 @@
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import test from "node:test";
+import {
+  isCancelKey,
+  isConfirmKey,
+  isMainMenuKey,
+  isMenuTabKey,
+  KEYBOARD_HELP,
+  menuTabFromKey,
+} from "../app/original/keybindings";
 
 const source = readFileSync(
   new URL("../app/original/original-world.tsx", import.meta.url),
@@ -8,9 +16,22 @@ const source = readFileSync(
 );
 
 test("正式版只用 E 或 Enter 进行互动和确认", () => {
-  assert.match(source, /const confirm = \["e", "enter"\]\.includes\(k\)/);
-  assert.doesNotMatch(source, /\["z",\s*"enter"/);
-  assert.doesNotMatch(source, /"enter",\s*" "/);
+  assert.equal(isConfirmKey("e"), true);
+  assert.equal(isConfirmKey("enter"), true);
+  assert.equal(isConfirmKey("z"), false);
+  assert.equal(isConfirmKey(" "), false);
+  assert.equal(isCancelKey("x"), true);
+  assert.equal(isCancelKey("escape"), true);
+});
+
+test("主菜单和四页签使用唯一键位配置", () => {
+  assert.equal(isMainMenuKey("c"), true);
+  assert.equal(isMainMenuKey("m"), true);
+  assert.equal(isMenuTabKey("4"), true);
+  assert.equal(isMenuTabKey("k"), false);
+  assert.equal(menuTabFromKey("4"), 3);
+  assert.match(KEYBOARD_HELP.join("\n"), /秘技 4/);
+  assert.doesNotMatch(KEYBOARD_HELP.join("\n"), /秘技.*K/);
 });
 
 test("正式版不绑定字母 F 或 F1-F12 功能键", () => {

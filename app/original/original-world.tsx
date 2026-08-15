@@ -5,12 +5,10 @@ import {
   canMoveBetween,
   friendlyEventName,
   getOriginalMap,
-  originalStart,
   passable,
   triggerEvent,
   type MapEvent,
   type OriginalMap,
-  type WorldPosition,
 } from "../game-core/original-world";
 import {
   ambientNpcAt,
@@ -170,6 +168,13 @@ import {
   type ChatMessage,
 } from "../game-core/lm-studio";
 import { MAX_PLAYER_EXP } from "../game-core/progression-limits";
+import {
+  fresh,
+  LOCAL_SAVE_KEY,
+  newActor,
+  parseSave,
+  type WorldSave,
+} from "../game-core/save-system";
 import { isCurrentKillTarget } from "../game-core/kill-target";
 import {
   npcVisibleWithInventory,
@@ -180,6 +185,14 @@ import {
   kungfuSchoolId,
   kungfuSchoolName,
 } from "../game-core/kungfu-school";
+import {
+  isCancelKey,
+  isConfirmKey,
+  isMainMenuKey,
+  isMenuTabKey,
+  KEYBOARD_HELP,
+  menuTabFromKey,
+} from "./keybindings";
 import "./world.css";
 import "./choice.css";
 import "./battle.css";
@@ -201,6 +214,17 @@ const wuxiaArt: WuxiaArt = {
   natureOverlays: null,
   interiorOverlays: null,
 };
+const characterSheetNames = [
+  "wuxia-characters-v1.webp",
+  "wuxia-characters-ages-v1.webp",
+  "wuxia-characters-townsfolk-v1.webp",
+  "wuxia-characters-factions-v1.webp",
+  "wuxia-characters-women-v1.webp",
+  "wuxia-characters-faction-signatures-v1.webp",
+  "wuxia-characters-flower-variants-v1.webp",
+] as const;
+const loadingCharacterSheets = new Set<number>();
+let artRevision = 0;
 
 function loadWuxiaArt() {
   const load = (src: string, ready: (image: HTMLImageElement) => void) => {
@@ -209,26 +233,33 @@ function loadWuxiaArt() {
     image.onload = () => ready(image);
     image.src = src;
   };
-  [
-    "wuxia-characters-v1.png",
-    "wuxia-characters-ages-v1.png",
-    "wuxia-characters-townsfolk-v1.png",
-    "wuxia-characters-factions-v1.png",
-    "wuxia-characters-women-v1.png",
-    "wuxia-characters-faction-signatures-v1.png",
-    "wuxia-characters-flower-variants-v1.png",
-  ].forEach((name, index) =>
-    load(`/game-assets/generated/${name}`, (image) => {
+  const loadCharacterSheet = (index: number) => {
+    if (wuxiaArt.characters[index] || loadingCharacterSheets.has(index)) return;
+    loadingCharacterSheets.add(index);
+    load(`/game-assets/generated/${characterSheetNames[index]}`, (image) => {
       wuxiaArt.characters[index] = image;
-    }),
-  );
-  load("/game-assets/redrawn/overlay-nature-v3.png", (image) => {
+      loadingCharacterSheets.delete(index);
+      artRevision += 1;
+      staticMapCache.clear();
+    });
+  };
+  ensureCharacterSheet = loadCharacterSheet;
+  // The player sheet is required immediately. NPC sheets are requested only
+  // when a visible character actually uses them.
+  loadCharacterSheet(0);
+  load("/game-assets/redrawn/overlay-nature-v3.webp", (image) => {
     wuxiaArt.natureOverlays = image;
+    artRevision += 1;
+    staticMapCache.clear();
   });
-  load("/game-assets/redrawn/overlay-interior-v3.png", (image) => {
+  load("/game-assets/redrawn/overlay-interior-v3.webp", (image) => {
     wuxiaArt.interiorOverlays = image;
+    artRevision += 1;
+    staticMapCache.clear();
   });
 }
+
+let ensureCharacterSheet: (index: number) => void = () => {};
 
 function npcCharacterSprite(id: number, fallbackName = ""): CharacterSprite {
   const npc = id > 0 ? npcRecord(id) : {},
@@ -314,7 +345,7 @@ function CharacterPortrait({
       aria-label={`${name || "人物"}立绘`}
       style={{
         backgroundImage: factionPortrait
-          ? 'url("/game-assets/generated/wuxia-faction-portraits-v1.png")'
+          ? 'url("/game-assets/generated/wuxia-faction-portraits-v1.webp")'
           : undefined,
         backgroundSize: factionPortrait ? "400% 400%" : undefined,
         backgroundPosition: `${(column / (columns - 1)) * 100}% ${(row / 3) * 100}%`,
@@ -425,16 +456,6 @@ const cheatCatalogGroups = (
     items,
   }));
 };
-type WorldSave = {
-  format: "rmxp-hero-original-world-save";
-  version: 1;
-  savedAt: string;
-  position: WorldPosition;
-  flags: Record<string, boolean>;
-  variables: Record<string, number>;
-  actor: SceneActorState;
-  tasks: TaskState;
-};
 type ArcadeState =
   | { kind: "select"; index: number }
   | { kind: "dance"; dir: number; count: number; score: number }
@@ -448,7 +469,7 @@ type ArcadeState =
       flight: number;
     };
 type LifeState = { kind: "forge" | "home"; index: number };
-type LaunchScreen = "title" | "intro" | "create" | "help" | "play";
+export type LaunchScreen = "title" | "intro" | "create" | "help" | "play";
 type CreatorState = {
   step: 1 | 2;
   index: number;
@@ -485,134 +506,12 @@ type AmbientPlayerState = {
   // 群聊时：玩家说完一句后，队列里还等待回应玩家的 NPC eventId(按 eventId 升序)
   responderQueue?: number[];
 };
-const newActor = (): SceneActorState => ({
-  name: "江湖少侠",
-  inventory: {},
-  gold: 100,
-  hp: 100,
-  maxHp: 100,
-  fp: 0,
-  maxFp: 0,
-  food: 100,
-  water: 100,
-  exp: 0,
-  potential: 100,
-  morals: 128,
-  tanId: 0,
-  teacherId: 0,
-  classId: 0,
-  gender: 0,
-  face: 20,
-  mp: 0,
-  maxMp: 0,
-  age: 14,
-  baseBon: 20,
-  baseInt: 20,
-  baseAgi: 20,
-  baseStr: 20,
-  bon: 20,
-  int: 20,
-  agi: 20,
-  str: 20,
-  luck: 20,
-  skills: {},
-  weaponId: 0,
-  armorIds: [],
-  skillUse: [0, 0, 0, 0, 0, 0, 0],
-  fpPlus: 0,
-  mpPlus: 0,
-  xue6: false,
-  donateTimes: 0,
-  killList: [],
-  badmanKill: 0,
-  taskKill: 0,
-  killNum: 0,
-  dance: 100,
-  ball: 100,
-  swordBattle: false,
-  swordName: "",
-  swordType: -1,
-  sword1: 0,
-  sword2: 0,
-  sword3: 0,
-  swordTimes: 0,
-  swords: [
-    { forged: false, name: "", atk: 0, mid: 0, suf: 0, times: 0 },
-    { forged: false, name: "", atk: 0, mid: 0, suf: 0, times: 0 },
-    { forged: false, name: "", atk: 0, mid: 0, suf: 0, times: 0 },
-    { forged: false, name: "", atk: 0, mid: 0, suf: 0, times: 0 },
-  ],
-  forgeChallengeStep: 0,
-  haveNewHome: false,
-  roomLevel: 0,
-  jiajuList: [0, 0, 0, 0, 0],
-});
-const fresh = (): WorldSave => ({
-  format: "rmxp-hero-original-world-save",
-  version: 1,
-  savedAt: "",
-  position: { ...originalStart },
-  flags: {},
-  variables: {},
-  actor: newActor(),
-  tasks: freshTaskState(),
-});
-const normalize = (value: WorldSave): WorldSave => {
-  const swords = [...(value.actor?.swords || [])],
-    inventory = { ...(value.actor?.inventory || {}) };
-  // 旧版单把自制武器(swordType/swordName/sword1-3)迁移进 swords[swordType]，
-  // 并把行囊槽 2:31 移到对应类型槽 2:(31+type)。
-  const old = value.actor || {};
-  if (
-    swords.length === 0 &&
-    typeof old.swordType === "number" &&
-    old.swordType >= 0 &&
-    old.swordName
-  ) {
-    for (let type = 0; type < 4; type++) {
-      if (type === old.swordType) {
-        swords.push({
-          forged: true,
-          name: String(old.swordName || ""),
-          atk: Number(old.sword1 || 0),
-          mid: Number(old.sword2 || 0),
-          suf: Number(old.sword3 || 0),
-          times: Number(old.swordTimes || 0),
-        });
-      } else
-        swords.push({ forged: false, name: "", atk: 0, mid: 0, suf: 0, times: 0 });
-    }
-    const target = `2:${31 + old.swordType}`;
-    if (inventory["2:31"]) {
-      inventory[target] = Math.max(1, inventory[target] || 0);
-      delete inventory["2:31"];
-    }
-  }
-  while (swords.length < 4)
-    swords.push({ forged: false, name: "", atk: 0, mid: 0, suf: 0, times: 0 });
-  return {
-    ...value,
-    actor: {
-      ...newActor(),
-      ...(value.actor || {}),
-      skills: value.actor?.skills || {},
-      inventory,
-      exp: Math.min(Number(value.actor?.exp || 0), MAX_PLAYER_EXP),
-      skillUse: [
-        ...(value.actor?.skillUse || []),
-        0, 0, 0, 0, 0, 0, 0,
-      ].slice(0, 7),
-      swords,
-    },
-    flags: value.flags || {},
-    variables: value.variables || {},
-    tasks: { ...freshTaskState(), ...(value.tasks || {}) },
-  };
-};
 const loadLocalSave = (): WorldSave => {
   try {
-    const raw = localStorage.getItem("rmxp-original-world-v1");
-    return raw ? normalize(JSON.parse(raw)) : fresh();
+    const raw = localStorage.getItem(LOCAL_SAVE_KEY);
+    if (!raw) return fresh();
+    const parsed = parseSave(JSON.parse(raw));
+    return parsed.ok ? parsed.value : fresh();
   } catch {
     return fresh();
   }
@@ -698,12 +597,20 @@ const ambientPlayerFacts = (actor: SceneActorState) => {
   return `${actor.name || "少侠"}：${actor.age}岁，性别${profile.gender}，门派${profile.school}，师父${profile.teacher}，外貌${profile.appearance}（容貌第${profile.appearanceTier}/8阶），综合武境第${profile.realmTier}/50阶“${profile.realm}”，兵刃${profile.weapon}`;
 };
 
-export default function OriginalWorld() {
-  const [state, setState] = useState<WorldSave>(fresh),
+export default function OriginalWorld({
+  initialScreen = "title",
+  initialSave,
+  restoreLocalSave = true,
+}: {
+  initialScreen?: LaunchScreen;
+  initialSave?: WorldSave;
+  restoreLocalSave?: boolean;
+} = {}) {
+  const [state, setState] = useState<WorldSave>(() => initialSave || fresh()),
     [notice, setNotice] = useState("原版地图数据已载入"),
     [eventText, setEventText] = useState(""),
     [eventNpcId, setEventNpcId] = useState<number | null>(null);
-  const [screen, setScreen] = useState<LaunchScreen>("title");
+  const [screen, setScreen] = useState<LaunchScreen>(initialScreen);
   const [titleIndex, setTitleIndex] = useState(0);
   const [hasSave, setHasSave] = useState(false);
   const [creator, setCreator] = useState<CreatorState>({
@@ -788,18 +695,23 @@ export default function OriginalWorld() {
   }, []);
   useEffect(() => loadWuxiaArt(), []);
   useEffect(() => {
+    if (!restoreLocalSave) return;
     const id = window.setTimeout(() => {
-      const exists = localStorage.getItem("rmxp-original-world-v1") !== null;
+      const exists = localStorage.getItem(LOCAL_SAVE_KEY) !== null;
       setHasSave(exists);
       if (exists) sync(loadLocalSave());
     }, 0);
     return () => window.clearTimeout(id);
-  }, [sync]);
+  }, [restoreLocalSave, sync]);
   const save = useCallback(() => {
     const next = { ...stateRef.current, savedAt: new Date().toISOString() };
     sync(next);
-    localStorage.setItem("rmxp-original-world-v1", JSON.stringify(next));
-    setNotice("原版世界进度已保存");
+    try {
+      localStorage.setItem(LOCAL_SAVE_KEY, JSON.stringify(next));
+      setNotice("原版世界进度已保存");
+    } catch {
+      setNotice("保存失败：浏览器存储空间不可用，请先下载 JSON 备份。");
+    }
   }, [sync]);
   // 铸剑挑战：未通过则先打四轮墨邪(149)；已通过则打开铸剑界面。
   const startSwordChallenge = useCallback(() => {
@@ -1290,11 +1202,9 @@ export default function OriginalWorld() {
       });
     } catch (error) {
       if (controller.signal.aborted) {
-        updateEntry((item) => ({
-          ...item,
-          text: item.text || item.facts.join("\n"),
-          loading: false,
-        }));
+        setNpcChat((chat) =>
+          chat?.id === id ? { ...chat, loading: false, auto: false } : chat,
+        );
         return;
       }
       const detail = error instanceof Error ? error.message : "连接失败";
@@ -1343,11 +1253,11 @@ export default function OriginalWorld() {
       } : active);
     } catch (error) {
       if (controller.signal.aborted) {
-        updateEntry((item) => ({
-          ...item,
-          text: item.text || item.facts.join("\n"),
-          loading: false,
-        }));
+        setNpcChat((active) =>
+          active?.id === id
+            ? { ...active, loading: false, auto: false }
+            : active,
+        );
         return;
       }
       const detail = error instanceof Error ? error.message : "连接失败";
@@ -1997,7 +1907,11 @@ export default function OriginalWorld() {
     };
     next.savedAt = new Date().toISOString();
     sync(next);
-    localStorage.setItem("rmxp-original-world-v1", JSON.stringify(next));
+    try {
+      localStorage.setItem(LOCAL_SAVE_KEY, JSON.stringify(next));
+    } catch {
+      setNotice("保存失败：浏览器存储空间不可用，请下载 JSON 备份。");
+    }
     setHasSave(true);
     setNotice(`${name}踏入江湖。`);
     setScreen("play");
@@ -2095,8 +2009,8 @@ export default function OriginalWorld() {
         )
           e.preventDefault();
         keys.current.add(k);
-        const confirm = ["e", "enter"].includes(k),
-          cancel = ["x", "escape"].includes(k);
+        const confirm = isConfirmKey(k),
+          cancel = isCancelKey(k);
         if (screen !== "play") {
           if (screen === "title") {
             if (k === "arrowup" || k === "w")
@@ -2427,8 +2341,9 @@ export default function OriginalWorld() {
             gridLeft = (i: number) => (i - 1 + length) % length,
             gridRight = (i: number) => (i + 1) % length;
           // 页签切换只走 Tab/数字键或鼠标点击，方向键在页签内移动选择(#4)
-          if (k === "tab" || ["1", "2", "3", "4"].includes(k)) {
-            const target = k === "tab" ? (menu.tab + 1) % 4 : Number(k) - 1;
+          if (k === "tab" || isMenuTabKey(k)) {
+            const target =
+              k === "tab" ? (menu.tab + 1) % 4 : menuTabFromKey(k) ?? 0;
             setMenu({ tab: target, index: 0, sub: menu.sub });
             return;
           }
@@ -2476,7 +2391,7 @@ export default function OriginalWorld() {
             activateSkill(skills[menu.index]?.id);
           else if ((k === "c" || k === "r") && menu.tab === 2)
             activateSkill(skills[menu.index]?.id, true);
-          else if (cancel || ["c", "m"].includes(k)) setMenu(null);
+          else if (cancel || isMainMenuKey(k)) setMenu(null);
           return;
         }
         if (eventText && (confirm || cancel)) {
@@ -2545,9 +2460,9 @@ export default function OriginalWorld() {
           return;
         }
         if (confirm) interact();
-        else if (["c", "m"].includes(k)) setMenu({ tab: 0, index: 0, sub: 0 });
-        else if (["1", "2", "3", "4"].includes(k))
-          setMenu({ tab: Number(k) - 1, index: 0, sub: 0 });
+        else if (isMainMenuKey(k)) setMenu({ tab: 0, index: 0, sub: 0 });
+        else if (isMenuTabKey(k))
+          setMenu({ tab: menuTabFromKey(k) ?? 0, index: 0, sub: 0 });
         else if (k === "r") setCultivation(0);
         else if (k === "h") openFlyMenu();
         else if (k === "t")
@@ -2833,7 +2748,10 @@ export default function OriginalWorld() {
         nextSpeaker: "主角", maxOutputTokens: 120, signal: controller.signal, onToken: () => {},
       });
       if (ambientEpoch.current !== epoch || ambientPlayerEpoch.current !== playerEpoch || ambientPaused.current || !ambientPlayer.current.npcIds.length) return;
-      const playerLine = cleanAmbientSpeech(answer, [current.actor.name, ...participants.map((npc) => npc.name)]);
+      const playerLine = cleanAmbientSpeech(answer, [
+        current.actor.name || "少侠",
+        ...participants.map((npc) => npc.name),
+      ]);
       if (playerLine === "……") throw new Error("LM Studio returned no usable ambient player line");
       // 群聊时玩家气泡也标「群聊 · 」
       const groupMark = participants.length > 1 ? "群聊 · " : "";
@@ -2977,7 +2895,10 @@ ${mode}输出必须符合古代武侠世界，不推动正式任务，不改变�
               const playerName = stateRef.current.actor.name || "少侠";
               const peers = ambientPlayer.current.npcIds
                 .map((id) => ambientWorld.current.npcs.find((item) => item.eventId === id))
-                .filter((item): item is AmbientNpc => Boolean(item) && item.eventId !== next.eventId);
+                .filter(
+                  (item): item is AmbientNpc =>
+                    Boolean(item) && item?.eventId !== next.eventId,
+                );
               next.speechTargetName =
                 peers.length && Math.random() < 0.5
                   ? peers[Math.floor(Math.random() * peers.length)].name
@@ -3087,12 +3008,16 @@ ${mode}输出必须符合古代武侠世界，不推动正式任务，不改变�
     resizeCanvas();
     const observer = new ResizeObserver(resizeCanvas);
     observer.observe(target);
-    const frame = () => {
+    let lastFrame = 0;
+    const frame = (now: number) => {
       const ctx = target.getContext("2d");
-      if (ctx) draw(ctx, stateRef.current, ambientWorld.current, ambientPlayer.current);
+      if (!document.hidden && ctx && now - lastFrame >= 1000 / 30) {
+        lastFrame = now;
+        draw(ctx, stateRef.current, ambientWorld.current, ambientPlayer.current);
+      }
       raf = requestAnimationFrame(frame);
     };
-    frame();
+    raf = requestAnimationFrame(frame);
     return () => {
       observer.disconnect();
       cancelAnimationFrame(raf);
@@ -3114,16 +3039,10 @@ ${mode}输出必须符合古代武侠世界，不推动正式任务，不改变�
     if (!f) return;
     try {
       const x = JSON.parse(await f.text());
-      if (
-        x.format !== "rmxp-hero-original-world-save" ||
-        !getOriginalMap(x.position.mapId)
-      )
-        throw 0;
-      sync(normalize(x));
-      localStorage.setItem(
-        "rmxp-original-world-v1",
-        JSON.stringify(normalize(x)),
-      );
+      const parsed = parseSave(x);
+      if (!parsed.ok) throw new Error(parsed.error);
+      sync(parsed.value);
+      localStorage.setItem(LOCAL_SAVE_KEY, JSON.stringify(parsed.value));
       setHasSave(true);
       setScreen("play");
       setNotice("JSON 读取成功");
@@ -3243,11 +3162,7 @@ ${mode}输出必须符合古代武侠世界，不推动正式任务，不改变�
       <main className="launch-screen help-screen">
         <section>
           <h1>操作说明</h1>
-          <p>移动：WASD / 方向键 · 互动与确认：E / Enter</p>
-          <p>行囊与人物：M / Tab · 修炼：R · 轻功：H</p>
-          <p>任务簿：T · 保存：点击右上角按钮 · 战斗绝招：Q · 战斗物品：I</p>
-          <p>秘技菜单：K（可直接强化资源、数值和已学功夫）</p>
-          <p>返回与逃跑：X / Esc；生死战也可用 G 尝试逃跑。</p>
+          {KEYBOARD_HELP.map((line) => <p key={line}>{line}</p>)}
           <button onClick={() => setScreen("title")}>返回标题</button>
         </section>
       </main>
@@ -3351,7 +3266,15 @@ ${mode}输出必须符合古代武侠世界，不推动正式任务，不改变�
         </div>
       </header>
       <section className="world-frame">
-        <canvas ref={canvas} width={W} height={H} />
+        <canvas
+          ref={canvas}
+          width={W}
+          height={H}
+          role="img"
+          aria-label={`${map.name}地图，主角位于 ${state.position.x}, ${state.position.y}`}
+        >
+          当前浏览器不支持 Canvas。你仍可从标题页导入或导出 JSON 存档。
+        </canvas>
         {eventText && (
           <button
             className={`world-dialog${eventNpcId ? " with-portrait" : ""}`}
@@ -3390,7 +3313,12 @@ ${mode}输出必须符合古代武侠世界，不推动正式任务，不改变�
           />
         )}{" "}
         {npcChat && (
-          <section className="npc-chat" aria-label={`与${npcLore(npcChat.id).name}自由对话`}>
+          <section
+            className="npc-chat"
+            role="dialog"
+            aria-modal="true"
+            aria-label={`与${npcLore(npcChat.id).name}自由对话`}
+          >
             <header>
               <div>
                 <b>{npcLore(npcChat.id).name}</b>
@@ -3768,6 +3696,46 @@ const compactNumber = (value: number) =>
     notation: "compact",
     maximumFractionDigits: 1,
   }).format(value);
+
+function useDialogFocus<T extends HTMLElement>(trapTabs = true) {
+  const ref = useRef<T>(null);
+  useEffect(() => {
+    const root = ref.current;
+    if (!root) return;
+    const previous = document.activeElement instanceof HTMLElement
+      ? document.activeElement
+      : null;
+    const focusable = () => Array.from(
+      root.querySelectorAll<HTMLElement>(
+        'button:not([disabled]), input:not([disabled]), textarea:not([disabled]), select:not([disabled]), [tabindex]:not([tabindex="-1"])',
+      ),
+    );
+    const first = focusable()[0] || root;
+    const frame = requestAnimationFrame(() => first.focus());
+    const trap = (event: KeyboardEvent) => {
+      if (event.key !== "Tab") return;
+      const items = focusable();
+      if (!items.length) {
+        event.preventDefault();
+        root.focus();
+        return;
+      }
+      const current = items.indexOf(document.activeElement as HTMLElement);
+      const next = event.shiftKey
+        ? (current <= 0 ? items.length - 1 : current - 1)
+        : (current + 1) % items.length;
+      event.preventDefault();
+      items[next].focus();
+    };
+    if (trapTabs) root.addEventListener("keydown", trap);
+    return () => {
+      cancelAnimationFrame(frame);
+      if (trapTabs) root.removeEventListener("keydown", trap);
+      previous?.focus();
+    };
+  }, [trapTabs]);
+  return ref;
+}
 function StatusBar({
   label,
   value,
@@ -3799,9 +3767,10 @@ function Arcade({
   game: ArcadeState;
   actor: SceneActorState;
 }) {
+  const dialogRef = useDialogFocus<HTMLElement>();
   if (game.kind === "select")
     return (
-      <section className="arcade-panel">
+      <section ref={dialogRef} tabIndex={-1} className="arcade-panel" role="dialog" aria-modal="true" aria-label="平安镇游戏厅">
         <h2>平安镇游戏厅</h2>
         {["跳舞毯", "投铅球", "离开"].map((name, index) => (
           <b className={game.index === index ? "active" : ""} key={name}>
@@ -3814,7 +3783,7 @@ function Arcade({
   if (game.kind === "dance") {
     const arrows = ["", "↑", "←", "↓", "→"];
     return (
-      <section className="arcade-panel dance-panel">
+      <section ref={dialogRef} tabIndex={-1} className="arcade-panel dance-panel" role="dialog" aria-modal="true" aria-label="跳舞毯">
         <h2>跳舞毯</h2>
         <div className="arcade-score">
           SCORE {String(game.score).padStart(5, "0")} · TOP{" "}
@@ -3834,7 +3803,7 @@ function Arcade({
         ? 105 + Math.floor((379 - shotX) ** 2 * 0.004162330905)
         : 290;
   return (
-    <section className="arcade-panel ball-panel">
+    <section ref={dialogRef} tabIndex={-1} className="arcade-panel ball-panel" role="dialog" aria-modal="true" aria-label="投铅球">
       <h2>投铅球</h2>
       <div className="arcade-score">
         SCORE {String(game.score).padStart(5, "0")} · TOP{" "}
@@ -3860,6 +3829,7 @@ function LifeMenu({
   menu: LifeState;
   actor: SceneActorState;
 }) {
+  const dialogRef = useDialogFocus<HTMLElement>();
   const items =
     menu.kind === "forge"
       ? [
@@ -3881,7 +3851,7 @@ function LifeMenu({
           "离开",
         ];
   return (
-    <section className="arcade-panel life-panel">
+    <section ref={dialogRef} tabIndex={-1} className="arcade-panel life-panel" role="dialog" aria-modal="true" aria-label={menu.kind === "forge" ? "铸剑谷" : "桃花源管家"}>
       <h2>{menu.kind === "forge" ? "铸剑谷" : "桃花源管家"}</h2>
       {items.map((item, index) => (
         <b className={menu.index === index ? "active" : ""} key={item}>
@@ -3930,6 +3900,7 @@ function Choice({
   columns?: number;
   hint?: string;
 }) {
+  const dialogRef = useDialogFocus<HTMLDivElement>();
   const density = columns
     ? " choice-grid"
     : items.length > 18
@@ -3938,7 +3909,7 @@ function Choice({
         ? " two-column"
         : "";
   return (
-    <div className={`world-choice large${wide ? " wide" : ""}${density}`}>
+    <div ref={dialogRef} tabIndex={-1} role="dialog" aria-modal="true" aria-label={title} className={`world-choice large${wide ? " wide" : ""}${density}`}>
       <b>{title}</b>
       <div
         className="choice-items"
@@ -4006,6 +3977,7 @@ function BattleView({
   openItem: () => void;
   flee: () => void;
 }) {
+  const dialogRef = useDialogFocus<HTMLDivElement>();
   const logRef = useRef<HTMLDivElement>(null);
   const latestNarrative = narratives.at(-1);
   useEffect(() => {
@@ -4017,7 +3989,7 @@ function BattleView({
     });
   }, [battle.log.length, latestNarrative?.loading, latestNarrative?.text.length]);
   return (
-    <div className="battle">
+    <div ref={dialogRef} tabIndex={-1} className="battle" role="dialog" aria-modal="true" aria-label={`与${battle.enemyName}战斗`}>
       <div className="battle-stage">
         <div className="fighter hero">
           <CharacterPortrait
@@ -4115,9 +4087,10 @@ function SpecialPicker({
   index: number;
   choose: (id?: number) => void;
 }) {
+  const dialogRef = useDialogFocus<HTMLDivElement>();
   const list = battleSpecials(actor, battle.cooldowns);
   return (
-    <div className="special-picker">
+    <div ref={dialogRef} tabIndex={-1} className="special-picker" role="dialog" aria-modal="true" aria-label="选择绝招">
       <b>选择绝招</b>
       {list.length ? (
         list.map((special, i) => (
@@ -4174,12 +4147,13 @@ function GameMenu({
   maxSkill: (index: number) => void;
   mutate: (mutation: (draft: WorldSave) => string) => void;
 }) {
+  const dialogRef = useDialogFocus<HTMLDivElement>(false);
   const tabs = ["行囊", "状态", "功夫", "秘技"],
     entries = organizedBagEntries(actor),
     stats = derivedStats(actor),
     profile = actorStatusProfile(actor);
   return (
-    <div className="game-menu">
+    <div ref={dialogRef} tabIndex={-1} className="game-menu" role="dialog" aria-modal="true" aria-label="主菜单">
       <nav>
         {tabs.map((tab, i) => (
           <button
@@ -4931,22 +4905,16 @@ function draw(ctx: CanvasRenderingContext2D, state: WorldSave, ambient: AmbientW
     viewport = ambientViewportBounds(map.width, map.height, pos.x, pos.y),
     sx = viewport.left,
     sy = viewport.top,
+    roamingByEvent = new Map(ambient.npcs.map((npc) => [npc.eventId, npc])),
     ambientBubbles: Array<{ x: number; y: number; text: string; kind: AmbientBubbleKind | "player"; shownAt: number }> = [];
   ctx.fillStyle = "#0c1410";
   ctx.fillRect(0, 0, W, H);
-  for (let y = 0; y < 15; y++)
-    for (let x = 0; x < 20; x++) {
-      const mx = sx + x,
-        my = sy + y;
-      if (mx >= map.width || my >= map.height) continue;
-      drawAuthoredTerrain(ctx, map, mx, my, x * T, y * T);
-    }
-  drawFactionLandmarks(ctx, map, sx, sy);
-  drawPinganTownPlan(ctx, map, sx, sy);
+  const staticMap = staticMapCanvas(map);
+  ctx.drawImage(staticMap, sx * T, sy * T, W, H, 0, 0, W, H);
   drawMapStructures(ctx, map, state, sx, sy);
   for (const e of map.events) {
     const visual = eventVisual(e, state),
-      roaming = visual.kind === "npc" ? ambient.npcs.find((npc) => npc.eventId === e.id) : undefined,
+      roaming = visual.kind === "npc" ? roamingByEvent.get(e.id) : undefined,
       eventX = roaming?.x ?? e.x,
       eventY = roaming?.y ?? e.y;
     if (eventX < sx || eventY < sy || eventX >= sx + 20 || eventY >= sy + 15) continue;
@@ -5038,7 +5006,13 @@ function draw(ctx: CanvasRenderingContext2D, state: WorldSave, ambient: AmbientW
     { sheet: 0, row: state.actor.gender ? 1 : 0 },
     pos.direction,
   );
-  const conversationCards = collectConversationCards(ambient, playerAmbient, sx, sy, state.actor.name)
+  const conversationCards = collectConversationCards(
+    ambient,
+    playerAmbient,
+    sx,
+    sy,
+    state.actor.name || "少侠",
+  )
       .map((card) => card.playerInvolved ? {
         ...card,
         x: (pos.x - sx) * T + 16,
@@ -5069,9 +5043,13 @@ function draw(ctx: CanvasRenderingContext2D, state: WorldSave, ambient: AmbientW
   placedBubbles.forEach((bubble) => drawAmbientBubble(ctx, bubble));
   // 主角参与的会话固定在屏幕顶部，并最后绘制，避免被任何环境气泡遮挡。
   conversationCards.filter((card) => card.playerInvolved).forEach((card) => drawConversationCard(ctx, card));
-  const shade = ctx.createRadialGradient(W / 2, H / 2, 120, W / 2, H / 2, 430);
-  shade.addColorStop(0, "rgba(0,0,0,0)");
-  shade.addColorStop(1, "rgba(2,7,4,.34)");
+  let shade = shadeCache.get(ctx);
+  if (!shade) {
+    shade = ctx.createRadialGradient(W / 2, H / 2, 120, W / 2, H / 2, 430);
+    shade.addColorStop(0, "rgba(0,0,0,0)");
+    shade.addColorStop(1, "rgba(2,7,4,.34)");
+    shadeCache.set(ctx, shade);
+  }
   ctx.fillStyle = shade;
   ctx.fillRect(0, 0, W, H);
   ctx.fillStyle = "rgba(5,10,7,.72)";
@@ -5175,6 +5153,26 @@ type MapTheme = "town" | "indoor" | "grassland" | "forest" | "desert" | "mountai
 const roadCache = new Map<number, Set<string>>();
 const eventCellCache = new Map<number, Set<string>>();
 const furnitureCache = new Map<number, Map<string, number>>();
+const staticMapCache = new Map<number, { revision: number; canvas: HTMLCanvasElement }>();
+const shadeCache = new WeakMap<CanvasRenderingContext2D, CanvasGradient>();
+
+function staticMapCanvas(map: OriginalMap) {
+  const cached = staticMapCache.get(map.id);
+  if (cached?.revision === artRevision) return cached.canvas;
+  const canvas = document.createElement("canvas");
+  canvas.width = map.width * T;
+  canvas.height = map.height * T;
+  const context = canvas.getContext("2d");
+  if (!context) return canvas;
+  context.imageSmoothingEnabled = true;
+  for (let my = 0; my < map.height; my += 1)
+    for (let mx = 0; mx < map.width; mx += 1)
+      drawAuthoredTerrain(context, map, mx, my, mx * T, my * T);
+  drawFactionLandmarks(context, map, 0, 0);
+  drawPinganTownPlan(context, map, 0, 0);
+  staticMapCache.set(map.id, { revision: artRevision, canvas });
+  return canvas;
+}
 
 function mapTheme(map: OriginalMap): MapTheme {
   if (/家中|家$|店|当铺|武馆|衙门|大厅|二楼|客房|西厢$|东厢$|房屋|室内|客栈|兵器行/.test(map.name)) return "indoor";
@@ -5554,6 +5552,7 @@ function drawActor(
   direction = 2,
 ) {
   const atlas = wuxiaArt.characters[sprite.sheet];
+  if (!atlas) ensureCharacterSheet(sprite.sheet);
   if (atlas?.complete && atlas.naturalWidth) {
     const cellWidth = atlas.naturalWidth / 4,
       cellHeight = atlas.naturalHeight / 4,
