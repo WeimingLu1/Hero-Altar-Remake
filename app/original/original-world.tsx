@@ -89,6 +89,7 @@ import {
   generatedQuestEligibleKinds,
   generatedQuestInteraction,
   generatedQuestObjective,
+  generatedQuestOfferRoll,
   generatedQuestParticipant,
   generatedQuestPrompt,
   markGeneratedQuestBattleWin,
@@ -220,7 +221,6 @@ type NpcChatState = {
   questChoice: 0 | 1;
   questReady: boolean;
   started: boolean;
-  offerMisses: number;
   shownAt: number;
 };
 type NpcDialogueMessage =
@@ -766,7 +766,6 @@ export default function OriginalWorld({
       questChoice: 0,
       questReady: false,
       started: true,
-      offerMisses: 0,
       shownAt: Date.now(),
     });
   }, []);
@@ -816,7 +815,6 @@ export default function OriginalWorld({
       questChoice: 0,
       questReady: false,
       started: false,
-      offerMisses: 0,
       shownAt: Date.now(),
     });
     const cached = llmHealthCache.current,
@@ -889,7 +887,6 @@ export default function OriginalWorld({
         )
       ),
       started: !healthy,
-      offerMisses: 0,
       shownAt: Date.now(),
     });
   }, [fixedNpcDialogue, questTranscriptMessages, sync]);
@@ -1063,17 +1060,24 @@ export default function OriginalWorld({
       !issuer ||
       !generatedQuestEligibleKinds(issuer, current.actor, current.tasks).length
     ) return { draft: null, checked: false };
-    const random = seeded(
-        current.tasks.clock +
-          chat.id * 7919 +
-          (chat.replyCount + 1) * 131 +
-          current.tasks.generatedQuestSerial * 17
+    const failedAttempts = current.tasks.generatedQuestOfferMisses,
+      offerRoll = generatedQuestOfferRoll({
+        npcId: chat.id,
+        failedAttempts,
+        serial: current.tasks.generatedQuestSerial,
+        clock: current.tasks.clock,
+      }),
+      random = seeded(
+        Math.imul(chat.id + 1, 0x9e3779b1) ^
+          Math.imul(failedAttempts + 1, 0x85ebca6b) ^
+          Math.imul(current.tasks.generatedQuestSerial + 1, 0xc2b2ae35) ^
+          Math.floor(current.tasks.clock),
       );
     if (!shouldOfferGeneratedQuest({
-      failedAttempts: chat.offerMisses,
+      failedAttempts,
       offeredThisSession: chat.offeredThisSession,
       tasks: current.tasks,
-      random,
+      random: () => offerRoll,
     })) return { draft: null, checked: true };
     return {
       draft: createGeneratedQuestDraft({
@@ -1091,15 +1095,10 @@ export default function OriginalWorld({
     offerDraft: GeneratedQuestDraft | null = null,
     missedOffer = false,
   ) => {
-    const history: ChatMessage[] = dialogueHistory.slice(-10).map((message) => message.role === "user"
-      ? {
-          role: "user",
-          content: [message.action ? `行动：${message.action}` : "", message.speech ? `语言：${message.speech}` : ""].filter(Boolean).join("\n"),
-        }
-      : {
-          role: "assistant",
-          content: `${npcLore(message.npcId || id).name}\n状态：${message.state}\n动作：${message.action}\n语言：${message.speech}`,
-        });
+    const history: ChatMessage[] = dialogueHistory.slice(-10).map((message) => ({
+      role: message.role,
+      content: message.speech,
+    }));
     const controller = new AbortController();
     chatAbort.current?.abort();
     chatAbort.current = controller;
@@ -1109,7 +1108,6 @@ export default function OriginalWorld({
       loading: true,
       error: "",
       offeredThisSession: chat.offeredThisSession || Boolean(offerDraft),
-      offerMisses: chat.offerMisses + (missedOffer ? 1 : 0),
     } : chat);
     try {
       const current = stateRef.current;
@@ -1161,6 +1159,9 @@ export default function OriginalWorld({
         sync(next);
       } else if (offerDraft) {
         declineGeneratedQuest(next.tasks);
+        sync(next);
+      } else if (missedOffer) {
+        next.tasks.generatedQuestOfferMisses += 1;
         sync(next);
       }
       setNpcChat((chat) => {
@@ -1308,9 +1309,10 @@ export default function OriginalWorld({
   const generateAutoPlayerTurn = useCallback(async (chat: NpcChatState) => {
     const id = chat.id,
       controller = new AbortController(),
-      history: ChatMessage[] = chat.messages.slice(-10).map((message) => message.role === "user"
-        ? { role: "user", content: `行动：${message.action}\n语言：${message.speech}` }
-        : { role: "assistant", content: `${npcLore(message.npcId || id).name}\n状态：${message.state}\n动作：${message.action}\n语言：${message.speech}` });
+      history: ChatMessage[] = chat.messages.slice(-10).map((message) => ({
+        role: message.role,
+        content: message.speech,
+      }));
     chatAbort.current?.abort();
     chatAbort.current = controller;
     setNpcChat((current) => current?.id === id ? { ...current, loading: true, error: "" } : current);
@@ -3244,8 +3246,6 @@ export default function OriginalWorld({
                   onClick={advanceNpcConversation}
                 >
                   <strong className={npcSpeaking ? "npc-speaker" : "player-speaker"}>{speaker}</strong>
-                  {latest?.role === "assistant" && latest.state && <em>状态 · {latest.state}</em>}
-                  {latest?.action && <small>动作 · {latest.action}</small>}
                   <p className={npcChat.loading ? "thinking" : ""}>
                     {latest?.speech || (npcChat.loading ? "正在斟酌如何回应……" : "……")}
                   </p>
@@ -3342,8 +3342,6 @@ export default function OriginalWorld({
                       state.tasks.generatedQuest.transcript.map((entry) => (
                         <p key={entry.id}>
                           <b>{entry.speaker === "player" ? state.actor.name : entry.speaker === "npc" ? npcLore(entry.npcId || state.tasks.generatedQuest!.issuer.npcId).name : "任务记录"}</b>
-                          {entry.state && <em>状态 · {entry.state}</em>}
-                          {entry.action && <i>动作 · {entry.action}</i>}
                           <span>{entry.speech}</span>
                         </p>
                       )) : <em>任务刚刚开始，尚无对话记录。</em>}

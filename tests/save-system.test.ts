@@ -96,11 +96,21 @@ test("v2 saves migrate with an empty generated-task slot", () => {
   delete (legacy.tasks as Partial<typeof legacy.tasks>).generatedQuest;
   delete (legacy.tasks as Partial<typeof legacy.tasks>).generatedQuestNextOfferAt;
   delete (legacy.tasks as Partial<typeof legacy.tasks>).generatedQuestSerial;
+  delete (legacy.tasks as Partial<typeof legacy.tasks>).generatedQuestOfferMisses;
   const migrated = normalize(legacy);
   assert.equal(migrated.version, 3);
   assert.equal(migrated.tasks.generatedQuest, null);
   assert.equal(migrated.tasks.generatedQuestNextOfferAt, 0);
   assert.equal(migrated.tasks.generatedQuestSerial, 0);
+  assert.equal(migrated.tasks.generatedQuestOfferMisses, 0);
+});
+
+test("生成任务保底计数跨对话和存档保留，并规范非法值", () => {
+  const save = fresh();
+  save.tasks.generatedQuestOfferMisses = 7;
+  assert.equal(normalize(JSON.parse(JSON.stringify(save))).tasks.generatedQuestOfferMisses, 7);
+  save.tasks.generatedQuestOfferMisses = -4;
+  assert.equal(normalize(save).tasks.generatedQuestOfferMisses, 0);
 });
 
 test("导入任务必须仍指向对应 NPC 的真实地图事件", () => {

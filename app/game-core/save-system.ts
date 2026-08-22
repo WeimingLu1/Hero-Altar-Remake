@@ -172,6 +172,10 @@ export function normalize(value: unknown): WorldSave {
     tasks: {
       ...freshTaskState(),
       ...oldTasks,
+      generatedQuestOfferMisses: Math.max(
+        0,
+        Math.floor(Number(oldTasks.generatedQuestOfferMisses || 0)),
+      ),
       generatedQuest:
         oldTasks.generatedQuest && typeof oldTasks.generatedQuest === "object"
           ? normalizeGeneratedQuest(oldTasks.generatedQuest)

@@ -58,11 +58,10 @@ test("NPC prompt combines world, personal, player, location and task context", (
   assert.match(prompt, /颇有侠名/);
   assert.match(prompt, /师承、武境差距、年龄、容貌和名声/);
   assert.match(prompt, /称谓和代词必须符合明确性别/);
-  assert.match(prompt, /玩家每轮可能提供“行动”和“语言”/);
-  assert.match(prompt, /状态：具体描述此刻/);
-  assert.match(prompt, /动作：描述紧接着/);
-  assert.match(prompt, /语言：实际说出口/);
-  assert.match(prompt, /各字段不设字数限制/);
+  assert.match(prompt, /只输出角色实际说出口的纯台词/);
+  assert.match(prompt, /不要添加.*状态、动作、神态/);
+  assert.doesNotMatch(prompt, /状态：具体描述此刻/);
+  assert.doesNotMatch(prompt, /动作：描述紧接着/);
   assert.doesNotMatch(prompt, /不超过160个汉字/);
   assert.match(prompt, /不能跳出角色/);
   assert.ok(prompt.includes(WORLD_LORE));

@@ -40,6 +40,7 @@ export type TaskState = {
   generatedQuest: GeneratedQuest | null;
   generatedQuestNextOfferAt: number;
   generatedQuestSerial: number;
+  generatedQuestOfferMisses: number;
 };
 
 export const freshTaskState = (): TaskState => ({
@@ -77,6 +78,7 @@ export const freshTaskState = (): TaskState => ({
   generatedQuest: null,
   generatedQuestNextOfferAt: 0,
   generatedQuestSerial: 0,
+  generatedQuestOfferMisses: 0,
 });
 
 const reward = (

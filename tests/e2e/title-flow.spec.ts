@@ -141,7 +141,7 @@ test("NPC 菜单只保留统一交谈，并支持双立绘与自由发展", asyn
     await route.fulfill({
       status: 200,
       contentType: "text/event-stream",
-      body: 'data: {"type":"message.delta","content":"状态：从容\\n动作：抬眼相迎\\n语言：这是一句模型生成的开场。"}\n\ndata: [DONE]\n\n',
+      body: 'data: {"type":"message.delta","content":"这是一句模型生成的开场。"}\n\ndata: [DONE]\n\n',
     });
   });
   await page.goto("/");
@@ -170,6 +170,8 @@ test("NPC 菜单只保留统一交谈，并支持双立绘与自由发展", asyn
   await npcMenu.getByRole("button", { name: "交谈" }).click();
   const dialogue = page.locator(".npc-talk-dialog");
   await expect(dialogue).toContainText("这是一句模型生成的开场");
+  await expect(dialogue).not.toContainText("状态 ·");
+  await expect(dialogue).not.toContainText("动作 ·");
   await expect(dialogue.locator(".npc-talk-portrait")).toHaveCount(2);
   await expect(dialogue.getByRole("button", { name: "自由发展" })).toBeVisible();
   expect(llmPayloads.map((payload) => String(payload.transcript || "")))

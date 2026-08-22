@@ -92,6 +92,22 @@ export function generatedQuestOfferPercent(failedAttempts: number) {
   );
 }
 
+export function generatedQuestOfferRoll(options: {
+  npcId: number;
+  failedAttempts: number;
+  serial: number;
+  clock: number;
+}) {
+  let value =
+    Math.imul(options.npcId + 1, 0x9e3779b1) ^
+    Math.imul(options.failedAttempts + 1, 0x85ebca6b) ^
+    Math.imul(options.serial + 1, 0xc2b2ae35) ^
+    Math.floor(options.clock);
+  value = Math.imul(value ^ (value >>> 16), 0x7feb352d);
+  value = Math.imul(value ^ (value >>> 15), 0x846ca68b);
+  return ((value ^ (value >>> 16)) >>> 0) % 100;
+}
+
 const RESERVED_NPC_IDS = new Set([
   3, 6, 10, 14, 15, 25, 26, 31, 111, 139, 148, 149, 162, 163, 164, 165,
   166, 167, 168, 169, 170, 172, 195, 196, 197, 198,
@@ -389,6 +405,7 @@ export function acceptGeneratedQuest(tasks: TaskState, draft: GeneratedQuestDraf
   tasks.generatedQuest = structuredClone(draft);
   tasks.generatedQuest.stage = draft.kind === "duel" ? "confrontation" : "travel";
   tasks.generatedQuestSerial += 1;
+  tasks.generatedQuestOfferMisses = 0;
   tasks.generatedQuestNextOfferAt = Math.max(
     tasks.generatedQuestNextOfferAt,
     tasks.clock + GENERATED_QUEST_COOLDOWN_SECONDS,
@@ -397,6 +414,7 @@ export function acceptGeneratedQuest(tasks: TaskState, draft: GeneratedQuestDraf
 }
 
 export function declineGeneratedQuest(tasks: TaskState) {
+  tasks.generatedQuestOfferMisses = 0;
   tasks.generatedQuestNextOfferAt = Math.max(
     tasks.generatedQuestNextOfferAt,
     tasks.clock + GENERATED_QUEST_COOLDOWN_SECONDS,
@@ -486,6 +504,7 @@ export function failGeneratedQuest(tasks: TaskState, reason: string) {
 export function abandonGeneratedQuest(tasks: TaskState) {
   if (!tasks.generatedQuest) return false;
   tasks.generatedQuest = null;
+  tasks.generatedQuestOfferMisses = 0;
   tasks.generatedQuestNextOfferAt = Math.max(
     tasks.generatedQuestNextOfferAt,
     tasks.clock + GENERATED_QUEST_COOLDOWN_SECONDS,
@@ -510,6 +529,7 @@ export function claimGeneratedQuestReward(
     actor.inventory[key] = (actor.inventory[key] || 0) + reward.item.amount;
   }
   tasks.generatedQuest = null;
+  tasks.generatedQuestOfferMisses = 0;
   tasks.generatedQuestNextOfferAt = Math.max(
     tasks.generatedQuestNextOfferAt,
     tasks.clock + GENERATED_QUEST_COOLDOWN_SECONDS,

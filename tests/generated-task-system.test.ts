@@ -11,6 +11,7 @@ import {
   generatedQuestFallbackText,
   generatedQuestObjective,
   generatedQuestOfferPercent,
+  generatedQuestOfferRoll,
   generatedQuestParticipant,
   generatedQuestReward,
   markGeneratedQuestBattleWin,
@@ -29,6 +30,10 @@ test("生成任务从首轮以10%起步、失败递增5%，并遵守任务槽和
   assert.equal(generatedQuestOfferPercent(0), 10);
   assert.equal(generatedQuestOfferPercent(1), 15);
   assert.equal(generatedQuestOfferPercent(18), 100);
+  const rolls = Array.from({ length: 19 }, (_, failedAttempts) =>
+    generatedQuestOfferRoll({ npcId: 125, failedAttempts, serial: 0, clock: 0 }),
+  );
+  assert.ok(new Set(rolls).size > 12, "每轮判定必须充分打散，不能与递增概率线性同步");
   assert.equal(shouldOfferGeneratedQuest({ failedAttempts: 0, offeredThisSession: false, tasks, random: () => 9 }), true);
   assert.equal(shouldOfferGeneratedQuest({ failedAttempts: 0, offeredThisSession: false, tasks, random: () => 10 }), false);
   assert.equal(shouldOfferGeneratedQuest({ failedAttempts: 1, offeredThisSession: false, tasks, random: () => 14 }), true);

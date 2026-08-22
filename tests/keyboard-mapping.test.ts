@@ -115,6 +115,11 @@ test("底部交谈是唯一主动对话界面，普通闲聊仍不持久化", ()
   assert.doesNotMatch(source, /NpcFreeChat|npcFreeChat|自由对话/);
   assert.match(source, /playerGender=\{state\.actor\.gender\}/);
   assert.match(source, /自由发展/);
+  assert.doesNotMatch(source, /<em>状态 · \{latest\.state\}<\/em>/);
+  assert.doesNotMatch(source, /<small>动作 · \{latest\.action\}<\/small>/);
+  assert.doesNotMatch(source, /entry\.state && <em>状态/);
+  assert.doesNotMatch(source, /entry\.action && <i>动作/);
+  assert.match(source, /generatedQuestOfferMisses \+= 1/);
 });
 
 test("任务提议与任务簿都可完全使用键盘操作", () => {
