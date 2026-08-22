@@ -392,7 +392,7 @@ NPC数值在原始数据中按战斗等级公平重平衡（`scripts/rebalance-n
 
 当前本地基线：
 
-- 320 项逻辑/视觉单元测试、3 项 SSR 测试，以及 Chromium/Firefox/WebKit 共 21 项 E2E 全部通过。
+- 329 项逻辑/视觉单元测试、3 项 SSR 测试，以及 Chromium/Firefox/WebKit 共 27 项 E2E 全部通过。
 - ESLint 通过。
 - 正式构建通过。
 - `npm audit --audit-level=high` 无已知漏洞。
