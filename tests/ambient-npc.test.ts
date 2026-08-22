@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { AMBIENT_BUBBLE_MS, ambientCanHear, ambientNpcAt, ambientNpcByEventId, ambientNpcByName, ambientNpcsByName, ambientNpcInPlayerRange, ambientNpcInViewport, ambientViewportBounds, countActiveNpcConversations, createAmbientWorld, pairConversationShouldEnd, resetAmbientSessions, tickAmbientWorld } from "../app/game-core/ambient-npc";
+import { AMBIENT_BUBBLE_MS, AMBIENT_DEPART_MS, ambientCanHear, ambientNpcAt, ambientNpcByEventId, ambientNpcByName, ambientNpcsByName, ambientNpcInPlayerRange, ambientNpcInViewport, ambientViewportBounds, countActiveNpcConversations, createAmbientWorld, pairConversationShouldEnd, resetAmbientSessions, tickAmbientWorld } from "../app/game-core/ambient-npc";
 
 test("ambient NPCs exist only in the initialized current map", () => {
   const world = createAmbientWorld(2, 0, [{ eventId: 1, npcId: 3, name: "捕快", identity: "官差", x: 4, y: 4 }]);
@@ -572,4 +572,26 @@ test("leaving the active window clears the prefetch buffer", () => {
   assert.deepEqual([first.nextPair, second.nextPair], [undefined, undefined]);
   assert.equal(first.nextPairPending, false);
   assert.equal(second.nextPairPending, false);
+});
+
+test("对话结束后双方先走开，不原地接着组对", () => {
+  const world = createAmbientWorld(2, 0, [
+    { eventId: 1, npcId: 3, name: "甲", identity: "侠客", x: 4, y: 4 },
+    { eventId: 2, npcId: 4, name: "乙", identity: "商人", x: 5, y: 4 },
+  ]);
+  const [first, second] = world.npcs;
+  first.partnerId = second.eventId; second.partnerId = first.eventId;
+  first.conversationTurn = 3; second.conversationTurn = 2;
+  first.conversationRound = second.conversationRound = 6; // (1,2) 第 6 轮散场
+  second.bubble = "乙 to 甲：最后一句。"; second.bubbleUntil = 100;
+  tickAmbientWorld({ world, now: 200, playerX: 10, playerY: 10, indoor: false, canEnter: () => true });
+  // END：双方进入走开状态，面向最后搭档的位置。
+  assert.equal(first.partnerId, 0);
+  assert.equal(first.departUntil, 200 + AMBIENT_DEPART_MS);
+  assert.deepEqual(first.departFrom, { x: 5, y: 4 });
+  const before = [first.x, first.y];
+  // 下一 tick：仍在走开窗口内，位置应远离最后搭档变化，且不组对。
+  tickAmbientWorld({ world, now: 900, playerX: 10, playerY: 10, indoor: false, canEnter: () => true });
+  assert.notDeepEqual([first.x, first.y], before);
+  assert.equal(first.partnerId, 0);
 });
