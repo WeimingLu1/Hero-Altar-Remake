@@ -582,32 +582,46 @@ export function SpecialPicker({
   index: number;
   choose: (id?: number) => void;
 }) {
-  const dialogRef = useDialogFocus<HTMLDivElement>();
+  const dialogRef = useDialogFocus<HTMLDivElement>(),
+    listRef = useRef<HTMLDivElement>(null);
   const list = battleSpecials(actor, battle.cooldowns);
+  useEffect(() => {
+    listRef.current
+      ?.querySelector<HTMLElement>('[data-active="true"]')
+      ?.scrollIntoView({ block: "nearest" });
+  }, [index]);
   return (
     <div ref={dialogRef} tabIndex={-1} className="special-picker" role="dialog" aria-modal="true" aria-label="选择绝招">
-      <b>选择绝招</b>
+      <header className="special-picker-title">
+        <b>选择绝招</b>
+        <small>{list.length} 项已学绝招</small>
+      </header>
       {list.length ? (
-        list.map((special, i) => (
-          <button
-            className={index === i ? "active" : ""}
-            disabled={!special.enabled}
-            onClick={() => choose(special.id)}
-            key={special.id}
-          >
-            <span>
-              {special.name}
-              <small>{special.description}</small>
-            </span>
-            <em>
-              {special.enabled
-                ? `内力 ${special.fpCost}${special.mpCost ? ` · 法力 ${special.mpCost}` : ""}`
-                : special.reason}
-            </em>
-          </button>
-        ))
+        <div className="special-picker-list" ref={listRef} role="listbox" aria-label="已学绝招">
+          {list.map((special, i) => (
+            <button
+              className={index === i ? "active" : ""}
+              data-active={index === i}
+              role="option"
+              aria-selected={index === i}
+              disabled={!special.enabled}
+              onClick={() => choose(special.id)}
+              key={special.id}
+            >
+              <span>
+                {special.name}
+                <small>{special.description}</small>
+              </span>
+              <em>
+                {special.enabled
+                  ? `内力 ${special.fpCost}${special.mpCost ? ` · 法力 ${special.mpCost}` : ""}`
+                  : special.reason}
+              </em>
+            </button>
+          ))}
+        </div>
       ) : (
-        <p>尚未学会带绝招的武学。</p>
+        <p className="special-picker-empty">尚未学会带绝招的武学。</p>
       )}
       <footer>W/S 选择 · E/Enter 施展 · X/Esc 返回</footer>
     </div>
@@ -624,22 +638,41 @@ export function BattleSkillPicker({
   choose: (id?: number) => void;
   chooseParry: (id?: number) => void;
 }) {
-  const dialogRef = useDialogFocus<HTMLDivElement>();
+  const dialogRef = useDialogFocus<HTMLDivElement>(),
+    listRef = useRef<HTMLDivElement>(null);
   const list = battleCombatSkills(actor);
+  useEffect(() => {
+    listRef.current
+      ?.querySelector<HTMLElement>('[data-active="true"]')
+      ?.scrollIntoView({ block: "nearest" });
+  }, [index]);
   return (
     <div ref={dialogRef} tabIndex={-1} className="special-picker battle-skill-picker" role="dialog" aria-modal="true" aria-label="选择战斗武学">
-      <b>临阵调整武学</b>
-      {list.length ? list.map((skill, i) => (
-        <div className={index === i ? "battle-skill-row active" : "battle-skill-row"} key={skill.id}>
-          <button onClick={() => choose(skill.id)}>
-            <span>{skill.name}<small>{skill.category} · {skill.level} 级 · {battleSkillWeaponText(actor, skill.id)}</small></span>
-            <em>{skill.equipped ? "当前攻击" : "设为攻击"}</em>
-          </button>
-          <button className={skill.parrying ? "parry active" : "parry"} onClick={() => chooseParry(skill.id)}>
-            {skill.parrying ? "当前招架" : "设为招架"}
-          </button>
+      <header className="special-picker-title">
+        <b>临阵调整武学</b>
+        <small>{list.length} 门可用武学</small>
+      </header>
+      {list.length ? (
+        <div className="special-picker-list battle-skill-list" ref={listRef} role="listbox" aria-label="可用战斗武学">
+          {list.map((skill, i) => (
+            <div
+              className={index === i ? "battle-skill-row active" : "battle-skill-row"}
+              data-active={index === i}
+              role="option"
+              aria-selected={index === i}
+              key={skill.id}
+            >
+              <button onClick={() => choose(skill.id)}>
+                <span>{skill.name}<small>{skill.category} · {skill.level} 级 · {battleSkillWeaponText(actor, skill.id)}</small></span>
+                <em>{skill.equipped ? "当前攻击" : "设为攻击"}</em>
+              </button>
+              <button className={skill.parrying ? "parry active" : "parry"} onClick={() => chooseParry(skill.id)}>
+                {skill.parrying ? "当前招架" : "设为招架"}
+              </button>
+            </div>
+          ))}
         </div>
-      )) : <p>尚未学会可用于攻防的拳脚或兵刃武学。</p>}
+      ) : <p className="special-picker-empty">尚未学会可用于攻防的拳脚或兵刃武学。</p>}
       <footer>W/S 选择 · E/Enter 设为攻击 · R 设为招架 · M/X 返回</footer>
     </div>
   );

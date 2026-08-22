@@ -141,15 +141,15 @@ test("战斗中可打开完整行囊并临阵切换攻防武学", async ({ page 
         maxHp: 2000,
         fp: 2000,
         maxFp: 2000,
+        mp: 2000,
+        maxMp: 2000,
         inventory: { "1:8": 2, "2:2": 1, "3:4": 1 },
-        skills: {
-          "1": { level: 120, points: 0 },
-          "2": { level: 120, points: 0 },
-          "3": { level: 120, points: 0 },
-          "10": { level: 120, points: 0 },
-          "12": { level: 120, points: 0 },
-          "33": { level: 120, points: 0 },
-        },
+        skills: Object.fromEntries(
+          Array.from({ length: 60 }, (_, index) => [
+            String(index + 1),
+            { level: 120, points: 0 },
+          ]),
+        ),
         skillUse: [0, 0, 0, 1, 10, 0, 0],
       },
       tasks: {},
@@ -165,6 +165,30 @@ test("战斗中可打开完整行囊并临阵切换攻防武学", async ({ page 
   const battle = page.getByRole("dialog", { name: /与道德和尚战斗/ });
   await expect(battle.getByRole("button", { name: /行囊 I/ })).toBeVisible();
   await expect(battle.getByRole("button", { name: /武学 M/ })).toBeVisible();
+
+  await page.keyboard.press("q");
+  const specials = page.getByRole("dialog", { name: "选择绝招" }),
+    specialList = specials.locator(".special-picker-list");
+  await expect(specialList.getByRole("option")).toHaveCount(40);
+  const specialMetrics = await specials.evaluate((element) => {
+    const panel = element.getBoundingClientRect(),
+      list = element.querySelector<HTMLElement>(".special-picker-list")!;
+    return {
+      panelBottom: panel.bottom,
+      viewportHeight: window.innerHeight,
+      overflow: getComputedStyle(element).overflow,
+      listOverflowY: getComputedStyle(list).overflowY,
+      listClientHeight: list.clientHeight,
+      listScrollHeight: list.scrollHeight,
+    };
+  });
+  expect(specialMetrics.panelBottom).toBeLessThanOrEqual(specialMetrics.viewportHeight);
+  expect(specialMetrics.overflow).toBe("hidden");
+  expect(specialMetrics.listOverflowY).toBe("auto");
+  expect(specialMetrics.listScrollHeight).toBeGreaterThan(specialMetrics.listClientHeight);
+  await page.keyboard.press("w");
+  await expect.poll(() => specialList.evaluate((element) => element.scrollTop)).toBeGreaterThan(0);
+  await page.keyboard.press("x");
 
   await page.keyboard.press("m");
   const skills = page.getByRole("dialog", { name: "选择战斗武学" });

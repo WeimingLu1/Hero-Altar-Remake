@@ -32,6 +32,10 @@ const battleCss = readFileSync(
   new URL("../app/original/battle.css", import.meta.url),
   "utf8",
 );
+const specialCss = readFileSync(
+  new URL("../app/original/special.css", import.meta.url),
+  "utf8",
+);
 const ambientSource = readFileSync(
   new URL("../app/game-core/ambient-npc.ts", import.meta.url),
   "utf8",
@@ -438,6 +442,15 @@ test("战斗界面提供完整行囊与临阵武学切换入口", () => {
   assert.match(worldSource, /battleBagEntries/);
   assert.match(worldSource, /selectBattleCombatSkill/);
   assert.match(worldSource, /临阵换装不消耗回合/);
+});
+
+test("绝招与战斗武学面板锁定视口并只滚动内部列表", () => {
+  assert.match(uiSource, /className="special-picker-list"/);
+  assert.match(uiSource, /className="special-picker-list battle-skill-list"/);
+  assert.match(uiSource, /scrollIntoView\(\{ block: "nearest" \}\)/);
+  assert.match(specialCss, /grid-template-rows:\s*auto minmax\(0, 1fr\) auto/);
+  assert.match(specialCss, /\.special-picker-list\s*\{[\s\S]*overflow-y:\s*auto/);
+  assert.match(specialCss, /\.special-picker\s*\{[\s\S]*overflow:\s*hidden/);
 });
 
 test("奇遇选择保留完整委托对白并在任务簿展示完成日志", () => {
