@@ -97,7 +97,7 @@ const GENERATED_STAGES = new Set<GeneratedQuestStage>([
 ]);
 
 export const GENERATED_QUEST_COOLDOWN_SECONDS = 300;
-export const GENERATED_QUEST_OFFER_REPLY_COUNT = 2;
+export const GENERATED_QUEST_OFFER_REPLY_COUNT = 1;
 
 const RESERVED_NPC_IDS = new Set([
   3, 6, 10, 14, 15, 25, 26, 31, 111, 139, 148, 149, 162, 163, 164, 165,

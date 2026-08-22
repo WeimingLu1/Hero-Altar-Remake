@@ -24,9 +24,9 @@ const sequence = (...values: number[]) => {
   return (max: number) => Math.abs(values[index++] || 0) % Math.max(1, max);
 };
 
-test("生成任务在第二次NPC回复固定触发，并遵守任务槽和拒绝冷却", () => {
+test("生成任务在第一次NPC回复固定触发，并遵守任务槽和拒绝冷却", () => {
   const tasks = freshTaskState();
-  assert.equal(shouldOfferGeneratedQuest({ completedNpcReplies: 0, offeredThisSession: false, tasks }), false);
+  assert.equal(shouldOfferGeneratedQuest({ completedNpcReplies: 0, offeredThisSession: false, tasks }), true);
   assert.equal(shouldOfferGeneratedQuest({ completedNpcReplies: 1, offeredThisSession: false, tasks }), true);
   assert.equal(shouldOfferGeneratedQuest({ completedNpcReplies: 8, offeredThisSession: true, tasks }), false);
   tasks.generatedQuestNextOfferAt = 20;
@@ -114,7 +114,7 @@ test("奖励公式固定、只结算一次且完成后清除完整任务记录",
   assert.equal(tasks.generatedQuest, null);
   assert.equal(claimGeneratedQuestReward(actor, tasks, issuer.npcId).ok, false);
   assert.equal(tasks.generatedQuestHistory.length, 1, "重复领奖不能重复写入日志");
-  assert.equal(tasks.generatedQuestNextOfferAt, tasks.clock, "领奖后应立即允许下一名NPC按两轮触发");
+  assert.equal(tasks.generatedQuestNextOfferAt, tasks.clock, "领奖后应立即允许下一名NPC在首轮触发");
 });
 
 test("任务中断线有含真实人物地点的固定文本，放弃后进入冷却", () => {

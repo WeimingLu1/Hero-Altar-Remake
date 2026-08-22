@@ -309,7 +309,7 @@
   max-width: 100%;
   overflow: hidden;
   color: #ddc87e;
-  font-size: 10px;
+  font-size: 12px;
   letter-spacing: .08em;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -365,7 +365,7 @@
   outline: 1px solid #cdb66e88;
   outline-offset: 4px;
 }
-.npc-talk-copy strong { font-size: 13px; letter-spacing: .12em; }
+.npc-talk-copy strong { font-size: 15px; letter-spacing: .1em; }
 .npc-talk-copy strong.npc-speaker { color: #f0d27b; }
 .npc-talk-copy strong.player-speaker { color: #9fdaf2; }
 .npc-talk-copy em,
@@ -374,8 +374,8 @@
   min-height: 2.8em;
   margin: 3px 0 0;
   color: #f1e6c5;
-  font-size: 12px;
-  line-height: 1.55;
+  font-size: 14px;
+  line-height: 1.6;
   text-shadow: 0 1px 1px #000;
 }
 .npc-talk-copy p.thinking { color: #9eaa9f; font-style: italic; }
@@ -520,9 +520,9 @@
   .npc-talk-offer { grid-template-columns: 1fr; gap: 5px; }
   .npc-talk-offer-reward { padding-left: 0; border-left: 0; }
   .npc-talk-portrait .dialog-portrait { width: 70px; height: 70px; }
-  .npc-talk-portrait b { font-size: 8px; }
-  .npc-talk-copy strong { font-size: 11px; }
-  .npc-talk-copy p { font-size: 10px; }
+  .npc-talk-portrait b { font-size: 9px; }
+  .npc-talk-copy strong { font-size: 12px; }
+  .npc-talk-copy p { font-size: 11px; }
   .npc-talk-controls { flex-wrap: wrap; }
   .npc-talk-controls button { min-width: 70px; min-height: 28px; padding: 5px 7px; }
   .npc-talk-hint { display: none; }
