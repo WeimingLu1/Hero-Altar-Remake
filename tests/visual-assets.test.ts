@@ -393,3 +393,18 @@ test("原作交谈保持任务优先并统一进入双立绘底部 LLM", () => {
   assert.match(rendererSource, /generatedQuest\.target\.mapId === map\.id/);
   assert.match(rendererSource, /generatedQuest\.target\.eventId === e\.id/);
 });
+
+test("生成奇遇提议和各任务节点按完整台词单句收束", () => {
+  const requestStart = worldSource.indexOf("const requestNpcReply"),
+    requestEnd = worldSource.indexOf("const acceptNpcQuest", requestStart),
+    requestFlow = worldSource.slice(requestStart, requestEnd);
+  assert.ok(requestStart >= 0 && requestEnd > requestStart);
+  assert.ok(requestFlow.indexOf("await streamNpcReply") < requestFlow.indexOf("pendingQuest: offerDraft"));
+  assert.match(requestFlow, /只说一句催办对白/);
+  assert.match(requestFlow, /只说一句承接发布人、缘由和来意的开战对白/);
+  assert.match(requestFlow, /只说一句认下胜负并让玩家回发布人所在地图复命/);
+  assert.match(worldSource, /terminal: "close" \| "battle" \| null/);
+  assert.match(worldSource, /话音落下，切磋即将开始/);
+  assert.match(worldSource, /className="generated-quest-sidebar"/);
+  assert.doesNotMatch(worldSource, /当前奇遇尚未走到交手阶段/);
+});

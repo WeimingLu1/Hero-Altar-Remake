@@ -155,6 +155,27 @@
 .world-shell aside .actor-resources span {
   min-width: 0;
 }
+.generated-quest-sidebar {
+  display: grid;
+  gap: 4px;
+  width: 100%;
+  padding: 9px 10px;
+  text-align: left;
+  border: 1px solid #c7a95f88;
+  border-radius: 3px;
+  background: linear-gradient(135deg, #302615e8, #101912e8);
+  color: #eadcae;
+  box-shadow: inset 0 0 18px #e4c5680d;
+  cursor: pointer;
+}
+.generated-quest-sidebar:hover,
+.generated-quest-sidebar:focus-visible {
+  border-color: #e7cb76;
+  outline: 2px solid #e7cb7630;
+}
+.generated-quest-sidebar small { color: #c9aa58 !important; letter-spacing: .08em; }
+.generated-quest-sidebar b { color: #f0d27b; font-size: 12px !important; }
+.generated-quest-sidebar span { color: #c9c4ac; font-size: 9px; line-height: 1.45; }
 .world-shell aside small {
   color: #79877c;
 }
@@ -384,6 +405,14 @@
 .npc-talk-controls button.active { background: #263d2c; border-color: #83c19b; color: #bde8ca; }
 .npc-talk-controls button:disabled { cursor: default; opacity: .45; }
 .npc-talk-actions.quest-action { margin-top: 3px; }
+.npc-talk-terminal {
+  padding: 6px 9px;
+  text-align: center;
+  color: #d8c98f;
+  font-size: 9px;
+  border: 1px solid #9a814b55;
+  background: #211b10aa;
+}
 @keyframes npc-talk-line-in {
   from { opacity: .25; transform: translateY(3px); }
   to { opacity: 1; transform: translateY(0); }

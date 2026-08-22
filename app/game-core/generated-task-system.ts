@@ -112,6 +112,11 @@ const RESERVED_NPC_IDS = new Set([
   3, 6, 10, 14, 15, 25, 26, 31, 111, 139, 148, 149, 162, 163, 164, 165,
   166, 167, 168, 169, 170, 172, 195, 196, 197, 198,
 ]);
+// 163–198 are the original altar chain, its minions, and other story-only combat
+// records. They share map events with the original tan progression and must never
+// be reused as generated-quest participants.
+const isGeneratedQuestReservedNpc = (npcId: number) =>
+  RESERVED_NPC_IDS.has(npcId) || (npcId >= 163 && npcId <= 198);
 const HIDDEN_QUEST_NPC_IDS = new Set([2, 5, 13, 20, 30, 37, 47, 64, 68, 90]);
 
 const participantIndex = new Map<number, GeneratedQuestParticipant[]>();
@@ -187,7 +192,14 @@ export function normalizeGeneratedQuest(value: unknown): GeneratedQuest | null {
     } satisfies GeneratedQuestParticipant;
   };
   const issuer = normalizeParticipant(source.issuer), target = normalizeParticipant(source.target);
-  if (!issuer || !target || !source.reward || typeof source.reward !== "object") return null;
+  if (
+    !issuer ||
+    !target ||
+    isGeneratedQuestReservedNpc(issuer.npcId) ||
+    isGeneratedQuestReservedNpc(target.npcId) ||
+    !source.reward ||
+    typeof source.reward !== "object"
+  ) return null;
   const rawReward = source.reward as Partial<GeneratedQuestReward>,
     item = rawReward.item &&
       Number(rawReward.item.kind) === 1 &&
@@ -262,7 +274,7 @@ function candidateParticipants(
     const record = originalTables.enemies[npcId] || {}, lore = npcLore(npcId);
     if (
       npcId === issuerId ||
-      RESERVED_NPC_IDS.has(npcId) ||
+      isGeneratedQuestReservedNpc(npcId) ||
       HIDDEN_QUEST_NPC_IDS.has(npcId) ||
       excluded.has(npcId) ||
       !rows.length
@@ -281,11 +293,11 @@ export function generatedQuestEligibleKinds(
   actor: SceneActorState,
   tasks: TaskState,
 ) {
+  if (isGeneratedQuestReservedNpc(issuer.npcId)) return [];
   const kinds: GeneratedQuestKind[] = [],
     issuerLore = npcLore(issuer.npcId),
     playerRealm = actorStatusProfile(actor).realmValue;
   if (
-    !RESERVED_NPC_IDS.has(issuer.npcId) &&
     issuerLore.age >= 16 &&
     Math.abs(npcMartialProfile(issuer.npcId).value - playerRealm) <= 20
   ) kinds.push("duel");
@@ -448,6 +460,7 @@ export function generatedQuestInteraction(quest: GeneratedQuest, npcId: number) 
     quest.stage === "confrontation"
   ) return "battle-ready" as const;
   if (quest.stage === "defeated") return "post-battle" as const;
+  if (npcId === quest.issuer.npcId) return "issuer-reminder" as const;
   return null;
 }
 
@@ -462,10 +475,6 @@ export function advanceGeneratedQuestAfterDialogue(
     return true;
   }
   if (quest.kind === "delegated-duel" && quest.stage === "travel") {
-    const targetReplies = quest.transcript.filter(
-      (entry) => entry.speaker === "npc" && entry.npcId === npcId,
-    ).length;
-    if (targetReplies < 2) return false;
     quest.stage = "confrontation";
     return true;
   }
@@ -546,12 +555,12 @@ export function generatedQuestObjective(quest: GeneratedQuest) {
   if (quest.stage === "report") return `回到${quest.issuer.mapName}向${quest.issuer.name}复命。`;
   if (quest.kind === "duel")
     return quest.stage === "defeated"
-      ? `与${quest.issuer.name}完成战后交谈。`
+      ? `听完${quest.issuer.name}的战后交代，再向其领取奖励。`
       : `与${quest.issuer.name}开始安全切磋。`;
   if (quest.kind === "visit")
     return `前往${quest.target.mapName}拜访${quest.target.name}并交谈。`;
   if (quest.stage === "defeated")
-    return `与${quest.target.name}完成战后交谈。`;
+    return `听完${quest.target.name}的战后交代，再回${quest.issuer.mapName}向${quest.issuer.name}复命。`;
   return `前往${quest.target.mapName}找到${quest.target.name}并安全击败对方。`;
 }
 
@@ -577,5 +586,7 @@ export function generatedQuestFallbackText(quest: GeneratedQuest, npcId: number)
       return `${quest.target.name}认下这场胜负，请你回去向${quest.issuer.name}复命。`;
     return `${quest.target.name}已经听明来意，准备与你进行一场点到为止的切磋。`;
   }
+  if (npcId === quest.issuer.npcId)
+    return `此事尚未办妥：${generatedQuestObjective(quest)}办好再来见我。`;
   return quest.premise;
 }

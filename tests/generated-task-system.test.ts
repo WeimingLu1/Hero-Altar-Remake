@@ -15,6 +15,7 @@ import {
   generatedQuestParticipant,
   generatedQuestReward,
   markGeneratedQuestBattleWin,
+  normalizeGeneratedQuest,
   shouldOfferGeneratedQuest,
 } from "../app/game-core/generated-task-system";
 import { newActor } from "../app/game-core/save-system";
@@ -74,7 +75,7 @@ test("拜访任务保存目标地点、完整对话并在目标交谈后进入�
   assert.match(generatedQuestObjective(tasks.generatedQuest!), /复命/);
 });
 
-test("委派战斗只由匹配任务和目标胜利推进，战后对话再进入复命", () => {
+test("委派战斗由目标一句承接后开战，只由匹配胜利推进并在战后复命", () => {
   const actor = newActor(), tasks = freshTaskState(), issuer = generatedQuestParticipant(13)!;
   const draft = createGeneratedQuestDraft({ issuer, actor, tasks, random: sequence(2, 0, 99) });
   assert.equal(draft?.kind, "delegated-duel");
@@ -84,12 +85,6 @@ test("委派战斗只由匹配任务和目标胜利推进，战后对话再进�
     npcId: draft!.target.npcId,
     speech: "先说清楚这桩旧怨。",
   });
-  assert.equal(advanceGeneratedQuestAfterDialogue(tasks, draft!.target.npcId), false);
-  appendGeneratedQuestTranscript(tasks, {
-    speaker: "npc",
-    npcId: draft!.target.npcId,
-    speech: "缘由既明，便以武会友。",
-  });
   assert.equal(advanceGeneratedQuestAfterDialogue(tasks, draft!.target.npcId), true);
   assert.equal(tasks.generatedQuest?.stage, "confrontation");
   assert.equal(markGeneratedQuestBattleWin(tasks, "wrong", draft!.target.npcId), false);
@@ -97,6 +92,17 @@ test("委派战斗只由匹配任务和目标胜利推进，战后对话再进�
   assert.equal(tasks.generatedQuest?.stage, "defeated");
   assert.equal(advanceGeneratedQuestAfterDialogue(tasks, draft!.target.npcId), true);
   assert.equal(tasks.generatedQuest?.stage, "report");
+});
+
+test("原作坛战专用人物不会成为生成任务参与者，旧冲突任务会在读档时清除", () => {
+  const actor = newActor(), tasks = freshTaskState(), altarMinion = generatedQuestParticipant(179)!;
+  assert.ok(altarMinion);
+  assert.deepEqual(generatedQuestEligibleKinds(altarMinion, actor, tasks), []);
+  const issuer = generatedQuestParticipant(13)!;
+  const draft = createGeneratedQuestDraft({ issuer, actor, tasks, random: sequence(0, 0, 99) })!;
+  const conflicted = structuredClone(draft);
+  conflicted.target = altarMinion;
+  assert.equal(normalizeGeneratedQuest(conflicted), null);
 });
 
 test("奖励公式固定、只结算一次且完成后清除完整任务记录", () => {
