@@ -96,6 +96,15 @@ test("learned kungfu exposes its original special without being equipped", () =>
   assert.equal(list[0].enabled, true);
   assert.equal(list[0].fpCost, 200);
 });
+test("全部已学武学的四十项绝招都列出，条件不足只禁用不隐藏", () => {
+  const a = actor();
+  for (let id = 1; id < originalTables.kungfus.length; id++)
+    if (originalTables.kungfus[id]) a.skills[String(id)] = { level: 1, points: 0 };
+  const list = battleSpecials(a);
+  assert.equal(list.length, 40);
+  assert.deepEqual(list.map((special) => special.id), Array.from({ length: 40 }, (_, index) => index + 1));
+  assert.ok(list.some((special) => !special.enabled && special.reason !== ""));
+});
 test("拳脚和兵刃绝招仍校验当前武器", () => {
   const hand = actor();
   hand.weaponId = 2;
@@ -107,13 +116,24 @@ test("拳脚和兵刃绝招仍校验当前武器", () => {
   sword.skills["36"] = { level: 180, points: 0 };
   assert.match(
     battleSpecials(sword).find((special) => special.id === 19)?.reason || "",
-    /需要对应兵器/,
+    /需要装备剑类兵器/,
   );
   sword.weaponId = 2;
   assert.equal(
     battleSpecials(sword).find((special) => special.id === 19)?.enabled,
     true,
   );
+});
+test("流星飞掷学会后不再要求武学等级和先天敏捷，仍保留内力和杖棍条件", () => {
+  const a = actor();
+  a.skills["24"] = { level: 1, points: 0 };
+  a.fp = a.maxFp = 1000;
+  a.agi = 20;
+  a.weaponId = 25;
+  const special = battleSpecials(a).find((entry) => entry.id === 8);
+  assert.equal(special?.enabled, true);
+  a.weaponId = 0;
+  assert.match(battleSpecials(a).find((entry) => entry.id === 8)?.reason || "", /杖棍类兵器/);
 });
 test("special cooldown disables otherwise valid move", () => {
   const list = battleSpecials(actor(), { "1": 3 });

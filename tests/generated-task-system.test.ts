@@ -9,6 +9,7 @@ import {
   createGeneratedQuestDraft,
   generatedQuestEligibleKinds,
   generatedQuestFallbackText,
+  generatedQuestCurrentNpc,
   generatedQuestInteraction,
   generatedQuestObjective,
   generatedQuestParticipant,
@@ -61,9 +62,24 @@ test("拜访任务保存目标地点、完整对话并在目标交谈后进入�
   appendGeneratedQuestTranscript(tasks, { speaker: "player", speech: "我接下了。" });
   appendGeneratedQuestTranscript(tasks, { speaker: "npc", npcId: issuer.npcId, speech: "一路小心。" });
   assert.equal(tasks.generatedQuest?.transcript.length, 2);
+  assert.deepEqual(generatedQuestCurrentNpc(tasks.generatedQuest!), draft!.target);
   assert.equal(advanceGeneratedQuestAfterDialogue(tasks, tasks.generatedQuest!.target), true);
   assert.equal(tasks.generatedQuest?.stage, "report");
+  assert.deepEqual(generatedQuestCurrentNpc(tasks.generatedQuest!), draft!.issuer);
   assert.match(generatedQuestObjective(tasks.generatedQuest!), /复命/);
+});
+
+test("任务头顶标记严格跟随当前阶段的下一名 NPC", () => {
+  const actor = newActor(), tasks = freshTaskState(), issuer = generatedQuestParticipant(13)!;
+  const draft = createGeneratedQuestDraft({ issuer, actor, tasks, random: sequence(2, 0, 99) })!;
+  acceptGeneratedQuest(tasks, draft);
+  assert.deepEqual(generatedQuestCurrentNpc(tasks.generatedQuest!), draft.target);
+  tasks.generatedQuest!.stage = "defeated";
+  assert.deepEqual(generatedQuestCurrentNpc(tasks.generatedQuest!), draft.target);
+  tasks.generatedQuest!.stage = "report";
+  assert.deepEqual(generatedQuestCurrentNpc(tasks.generatedQuest!), draft.issuer);
+  tasks.generatedQuest!.stage = "failed";
+  assert.equal(generatedQuestCurrentNpc(tasks.generatedQuest!), null);
 });
 
 test("委派战斗由目标一句承接后开战，只由匹配胜利推进并在战后复命", () => {

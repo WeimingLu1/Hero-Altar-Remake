@@ -39,6 +39,13 @@ export function generatedQuestParticipantMatches(
     participant.eventId === ref.eventId;
 }
 
+/** 当前阶段真正需要玩家寻找的人物；地图标记、任务提示与交互应保持一致。 */
+export function generatedQuestCurrentNpc(quest: GeneratedQuest) {
+  if (quest.stage === "failed") return null;
+  if (quest.stage === "report") return quest.issuer;
+  return quest.target;
+}
+
 export type GeneratedQuestReward = {
   exp: number;
   potential: number;

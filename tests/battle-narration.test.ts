@@ -43,10 +43,13 @@ test("battle narration prompt grounds wuxia prose in both fighters and exact res
   assert.match(prompt, /测试少侠/);
   assert.match(prompt, /潘小莲/);
   assert.match(prompt, /豆腐店/);
-  assert.match(prompt, /三个连续短段/);
-  assert.match(prompt, /【主角】/);
-  assert.match(prompt, /160至280个汉字/);
-  assert.match(prompt, /绝不超过360个汉字/);
+  assert.match(prompt, /原版每次攻防严格依次显示/);
+  assert.match(prompt, /【你出招】/);
+  assert.match(prompt, /【对手应招】/);
+  assert.match(prompt, /【对手出招】/);
+  assert.match(prompt, /【你应招】/);
+  assert.match(prompt, /120至240个汉字/);
+  assert.match(prompt, /绝不超过320个汉字/);
   assert.match(prompt, /命中、闪避、招架、伤害、当前气血、胜负/);
   assert.match(prompt, /起手、发力、行进路线或变招/);
   assert.match(prompt, /非必要不加入对话/);
@@ -57,13 +60,14 @@ test("battle narration prompt grounds wuxia prose in both fighters and exact res
   assert.match(prompt, /不得写骨折、内伤或吐血/);
 });
 
-test("battle narration separates player, enemy and clash prose for distinct colors", () => {
+test("battle narration follows the original attack-response order with distinct fighter colors", () => {
   assert.deepEqual(parseBattleNarrativeSections(
-    "【主角】踏步递掌。\n【对手】横肘封架。\n【交锋】掌肘相撞，各退半步。",
+    "【你出招】踏步递掌。\n【对手应招】横肘封架。\n【对手出招】旋身回掌。\n【你应招】卸力退开。",
   ), [
-    { speaker: "player", text: "踏步递掌。" },
-    { speaker: "enemy", text: "横肘封架。" },
-    { speaker: "clash", text: "掌肘相撞，各退半步。" },
+    { speaker: "player", text: "踏步递掌。", label: "你出招" },
+    { speaker: "enemy", text: "横肘封架。", label: "对手应招" },
+    { speaker: "enemy", text: "旋身回掌。", label: "对手出招" },
+    { speaker: "player", text: "卸力退开。", label: "你应招" },
   ]);
   assert.deepEqual(parseBattleNarrativeSections("旧模型的普通正文。"), [
     { speaker: "clash", text: "旧模型的普通正文。" },
@@ -96,9 +100,10 @@ test("battle narration facts expose before and after health without changing set
 
 test("battle narration fallback keeps both fighters color-addressable without an LLM", () => {
   const input = event();
-  input.facts.push("潘小莲横掌回击。", "两股掌力在身前相撞。");
+  input.facts.push("潘小莲横掌回击。", "你架开了这一掌。");
   const fallback = buildBattleNarrationFallback(input);
-  assert.match(fallback, /【主角】测试少侠/);
-  assert.match(fallback, /【对手】潘小莲/);
-  assert.match(fallback, /【交锋】两股掌力/);
+  assert.match(fallback, /【你出招】测试少侠/);
+  assert.match(fallback, /【对手应招】潘小莲受到/);
+  assert.match(fallback, /【对手出招】潘小莲横掌/);
+  assert.match(fallback, /【你应招】你架开/);
 });

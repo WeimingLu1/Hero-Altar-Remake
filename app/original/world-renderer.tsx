@@ -22,6 +22,7 @@ import {
 import { npcRecord } from "../game-core/npc-system";
 import { canObtainCaihua } from "../game-core/actor-conditions";
 import { isCurrentKillTarget } from "../game-core/kill-target";
+import { generatedQuestCurrentNpc } from "../game-core/generated-task-system";
 import { npcVisibleWithInventory } from "../game-core/hidden-npc";
 import type { AmbientPlayerState } from "../game-core/ambient-player";
 import type { WorldSave } from "../game-core/save-system";
@@ -197,6 +198,9 @@ export function drawWorld(ctx: CanvasRenderingContext2D, state: WorldSave, ambie
     sx = viewport.left,
     sy = viewport.top,
     roamingByEvent = new Map(ambient.npcs.map((npc) => [npc.eventId, npc])),
+    generatedQuestNpc = state.tasks.generatedQuest
+      ? generatedQuestCurrentNpc(state.tasks.generatedQuest)
+      : null,
     ambientBubbles: Array<{ x: number; y: number; text: string; kind: AmbientBubbleKind | "player"; shownAt: number; preferBelow?: boolean }> = [];
   ctx.fillStyle = "#0c1410";
   ctx.fillRect(0, 0, W, H);
@@ -232,10 +236,9 @@ export function drawWorld(ctx: CanvasRenderingContext2D, state: WorldSave, ambie
           killId: state.tasks.killId,
         }),
         Boolean(
-          state.tasks.generatedQuest &&
-            state.tasks.generatedQuest.stage !== "failed" &&
-            state.tasks.generatedQuest.target.mapId === map.id &&
-            state.tasks.generatedQuest.target.eventId === e.id,
+          generatedQuestNpc &&
+            generatedQuestNpc.mapId === map.id &&
+            generatedQuestNpc.eventId === e.id,
         ),
       );
       // 每个 NPC 的台词显示在自己身上；双人成员一人在头顶、一人在脚下(按 eventId 奇偶分)，并错开 ±6px。

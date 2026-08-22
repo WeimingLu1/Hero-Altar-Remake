@@ -398,8 +398,9 @@ test("原作交谈保持任务优先并统一进入双立绘底部 LLM", () => {
   assert.match(worldSource, /npc-talk-portrait player/);
   assert.match(worldSource, /openOriginalNpcConversation/);
   assert.match(worldSource, /eventText \|\|[\s\S]*npcChat \|\|[\s\S]*taskBook/);
-  assert.match(rendererSource, /generatedQuest\.target\.mapId === map\.id/);
-  assert.match(rendererSource, /generatedQuest\.target\.eventId === e\.id/);
+  assert.match(rendererSource, /generatedQuestCurrentNpc/);
+  assert.match(rendererSource, /generatedQuestNpc\.mapId === map\.id/);
+  assert.match(rendererSource, /generatedQuestNpc\.eventId === e\.id/);
   assert.match(worldSource, /generatedQuestInteraction\(activeQuest, ref\)/);
   assert.match(worldSource, /activeQuest && activeInteraction !== null/);
   assert.match(worldSource, /generatedQuestParticipant\(chat\.id, chat\.mapId, chat\.eventId\)/);

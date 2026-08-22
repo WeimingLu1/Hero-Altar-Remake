@@ -536,7 +536,7 @@ export function BattleView({
             <div className="battle-narrative-copy">
               {parseBattleNarrativeSections(item.text).map((section, sectionIndex) => (
                 <p className={`narrative-${section.speaker}`} key={`${section.speaker}-${sectionIndex}`}>
-                  <strong>{section.speaker === "player" ? `${actor.name || "主角"}出招` : section.speaker === "enemy" ? `${battle.enemyName}应战` : "交锋结果"}</strong>
+                  <strong>{section.label === "你出招" ? `${actor.name || "主角"}出招` : section.label === "你应招" ? `${actor.name || "主角"}应招` : section.label === "对手出招" ? `${battle.enemyName}出招` : section.label === "对手应招" ? `${battle.enemyName}应招` : section.speaker === "player" ? `${actor.name || "主角"}出招` : section.speaker === "enemy" ? `${battle.enemyName}应战` : "交锋结果"}</strong>
                   <span>{section.text}</span>
                 </p>
               ))}

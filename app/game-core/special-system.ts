@@ -47,13 +47,15 @@ export function specialMpCost(actor: SceneActorState, id: number) {
     : actor.mpPlus + Number((s.magic_data as number[])?.[0] || 0);
 }
 function kungfuWeaponRequirement(actor: SceneActorState, kungfuId: number) {
-  const type = skillType(kungfuId), name = originalTables.kungfus[kungfuId]?.name;
+  const type = skillType(kungfuId), name = originalTables.kungfus[kungfuId]?.name,
+    weaponName = type === 3 ? "剑类兵器" : type === 4 ? "刀类兵器" : type === 5
+      ? "杖棍类兵器" : type === 6 ? "鞭索类兵器" : "对应兵器";
   if (type === 2 && actor.weaponId > 0)
     return `施展${name || "拳脚绝招"}时必须空手`;
   if (type >= 3 && type <= 6) {
-    if (actor.weaponId <= 0) return `施展${name || "兵刃绝招"}需要对应兵器`;
+    if (actor.weaponId <= 0) return `施展${name || "兵刃绝招"}需要装备${weaponName}`;
     if (weaponBasicId(actor.weaponId) !== type)
-      return `当前兵器与${name || "这门武学"}不匹配`;
+      return `施展${name || "这门武学"}需装备${weaponName}，当前兵器不匹配`;
   }
   return "";
 }
@@ -106,6 +108,9 @@ export function specialCheck(
   for (const row of (s.require as number[][]) || []) {
     const [type, num] = row;
     if (type > 0) {
+      // 流星飞掷只要已经从神龙杖法学到便可施展，不再重复卡
+      // 神龙杖法、普天同济的有效等级；资源与兵器仍在下方校验。
+      if (id === 8) continue;
       if ((actor.skills[String(type)]?.level || 0) <= 0)
         return {
           ok: false,
@@ -117,6 +122,8 @@ export function specialCheck(
           reason: `${originalTables.kungfus[type]?.name}有效等级不足`,
         };
     } else if (type >= -3) {
+      // 同时取消流星飞掷的先天敏捷门槛。
+      if (id === 8 && type === -1) continue;
       const attrs = [actor.str, actor.agi, actor.int, actor.bon];
       if (attrs[Math.abs(type)] < num)
         return { ok: false, reason: "先天属性不足" };
@@ -144,10 +151,12 @@ export function battleSpecials(
   actor: SceneActorState,
   cooldowns: Record<string, number> = {},
 ): BattleSpecial[] {
-  const ids = learnedSpecialKungfus(actor)
-    .flatMap((id) => (originalTables.kungfus[id]?.skill as number[]) || [])
-    .filter((id) => id > 0);
-  return [...new Set(ids)].map((id) => {
+  // 以完整原始绝招表为主索引，再反查任一已学所属武学。条件不足的
+  // 绝招仍然保留在菜单中并显示原因，不能因暂时不可施展而遗漏。
+  const ids = originalTables.skills.flatMap((skill, id) =>
+    skill && id > 0 && learnedSpecialOwners(actor, id).length ? [id] : [],
+  );
+  return ids.map((id) => {
     const s = skillRecord(id),
       check = specialCheck(actor, id, cooldowns);
     return {
