@@ -129,6 +129,8 @@ import {
 import { actorStatusProfile } from "../game-core/status-system";
 import { buildNpcSystemPrompt, npcLore } from "../game-core/npc-lore";
 import {
+  battleEffectKind,
+  buildBattleNarrationFallback,
   buildBattleNarrationFacts,
   buildBattleNarrationPrompt,
   type BattleNarrative,
@@ -226,6 +228,7 @@ type NpcChatState = {
   error: string;
   replyCount: number;
   offeredThisSession: boolean;
+  plannedQuest: GeneratedQuestDraft | null;
   pendingQuest: GeneratedQuestDraft | null;
   questChoice: 0 | 1;
   questReady: boolean;
@@ -773,6 +776,7 @@ export default function OriginalWorld({
       error: "",
       replyCount: 0,
       offeredThisSession: false,
+      plannedQuest: null,
       pendingQuest: null,
       questChoice: 0,
       questReady: false,
@@ -824,6 +828,7 @@ export default function OriginalWorld({
       error: "",
       replyCount: 0,
       offeredThisSession: false,
+      plannedQuest: null,
       pendingQuest: null,
       questChoice: 0,
       questReady: false,
@@ -904,6 +909,7 @@ export default function OriginalWorld({
       error: "",
       replyCount: messages.filter((message) => message.role === "assistant").length,
       offeredThisSession: false,
+      plannedQuest: null,
       pendingQuest: null,
       questChoice: 0,
       questReady: Boolean(
@@ -1092,26 +1098,25 @@ export default function OriginalWorld({
       current.tasks.generatedQuest ||
       !issuer ||
       !generatedQuestEligibleKinds(issuer, current.actor, current.tasks).length
-    ) return { draft: null };
-    if (!shouldOfferGeneratedQuest({
-      completedNpcReplies: chat.replyCount,
-      offeredThisSession: chat.offeredThisSession,
-      tasks: current.tasks,
-    })) return { draft: null };
+    ) return { draft: null, planned: null, preludeRound: 0 };
     const random = seeded(
         Math.imul(chat.id + 1, 0x9e3779b1) ^
-          Math.imul(chat.replyCount + 1, 0x85ebca6b) ^
           Math.imul(current.tasks.generatedQuestSerial + 1, 0xc2b2ae35) ^
           Math.floor(current.tasks.clock),
-      );
-    return {
-      draft: createGeneratedQuestDraft({
+      ),
+      planned = chat.plannedQuest || createGeneratedQuestDraft({
         issuer,
         actor: current.actor,
         tasks: current.tasks,
         random,
-      }),
-    };
+      });
+    if (!planned) return { draft: null, planned: null, preludeRound: 0 };
+    if (!shouldOfferGeneratedQuest({
+      completedNpcReplies: chat.replyCount,
+      offeredThisSession: chat.offeredThisSession,
+      tasks: current.tasks,
+    })) return { draft: null, planned, preludeRound: chat.replyCount + 1 };
+    return { draft: planned, planned, preludeRound: 0 };
   }, []);
   const requestNpcReply = useCallback(async (
     id: number,
@@ -1119,6 +1124,8 @@ export default function OriginalWorld({
     offerDraft: GeneratedQuestDraft | null = null,
     questReplyMode: NpcQuestReplyMode = null,
     contextDraft: GeneratedQuestDraft | null = null,
+    plannedDraft: GeneratedQuestDraft | null = null,
+    preludeRound = 0,
   ) => {
     const history: ChatMessage[] = dialogueHistory.slice(-10).map((message) => ({
       role: message.role,
@@ -1133,6 +1140,7 @@ export default function OriginalWorld({
       loading: true,
       error: "",
       pendingQuest: questReplyMode ? null : chat.pendingQuest,
+      plannedQuest: plannedDraft || chat.plannedQuest,
       questReplyMode,
       terminal: null,
       offeredThisSession: chat.offeredThisSession || Boolean(offerDraft),
@@ -1145,6 +1153,8 @@ export default function OriginalWorld({
           ? `\n\n${generatedQuestPrompt(offerDraft, id)}\n【本轮任务提议】你必须在本轮回复中自然提出上述委托，把目标人物和地点说清楚，但不要提及任务系统、概率、字段或规则。玩家之后会通过界面明确接受或婉拒；你不能替玩家接受。`
           : contextDraft
             ? `\n\n${generatedQuestPrompt(contextDraft, id)}`
+            : plannedDraft
+              ? `\n\n${generatedQuestPrompt(plannedDraft, id)}\n【同一委托的铺垫 · 第${preludeRound}轮】引擎已经确定了这桩事件，但现在还不能正式下达任务，也不能询问玩家是否接受。你和玩家此前及本轮的谈话必须始终围绕这同一件事，不得另起闲聊话题。${preludeRound === 1 ? "先从近期发生的异状、你的顾虑或你为何留意此事说起，给出具体细节，但暂时保留最终请求。" : preludeRound === 2 ? "承接上一轮，补充相关人物关系、旧因或这件事对当地与当事人的影响，让玩家理解利害。" : "承接前两轮，讲清迫切风险与为何需要玩家相助，自然把话头引向下一轮的正式委派，但本轮仍不得要求玩家表态。"}`
             : "",
         forcedInstruction = questReplyMode === "issuer-reminder"
           ? "\n\n【本轮唯一任务】你是发布人。只说一句催办对白，必须清楚重申目标人物、任务内容和地图位置；不要寒暄、提问或继续闲聊。"
@@ -1222,6 +1232,7 @@ export default function OriginalWorld({
           loading: false,
           replyCount: chat.replyCount + 1,
           pendingQuest: offerDraft,
+          plannedQuest: plannedDraft || chat.plannedQuest,
           questChoice: 0,
           questReady: progressedInteraction === "battle-ready" || progressedInteraction === "report",
           questReplyMode,
@@ -1307,8 +1318,7 @@ export default function OriginalWorld({
     const next = structuredClone(stateRef.current),
       accepted = acceptGeneratedQuest(next.tasks, draft);
     if (!accepted) return;
-    const tail = chat.messages.slice(-2);
-    for (const message of tail) {
+    for (const message of chat.messages) {
       if (message.role === "user")
         appendGeneratedQuestTranscript(next.tasks, {
           speaker: "player",
@@ -1332,7 +1342,7 @@ export default function OriginalWorld({
     const acceptedLine: NpcDialogueMessage = { role: "user", action: "", speech: "这件事我接下了。" },
       messages = [...chat.messages, acceptedLine],
       mode: NpcQuestReplyMode = draft.kind === "duel" ? "accept-battle" : "accept-close";
-    setNpcChat({ ...chat, messages, pendingQuest: null, auto: false, questReady: false, questReplyMode: mode, terminal: null });
+    setNpcChat({ ...chat, messages, plannedQuest: null, pendingQuest: null, auto: false, questReady: false, questReplyMode: mode, terminal: null });
     setNotice(`已接受「${draft.title}」 · ${generatedQuestObjective(next.tasks.generatedQuest!)}`);
     void requestNpcReply(chat.id, messages, null, mode);
   }, [npcChat, requestNpcReply, sync]);
@@ -1341,7 +1351,7 @@ export default function OriginalWorld({
     if (!chat || !draft) return;
     const declinedLine: NpcDialogueMessage = { role: "user", action: "", speech: "此事我不便答应。" },
       messages = [...chat.messages, declinedLine];
-    setNpcChat({ ...chat, messages, pendingQuest: null, auto: false, questReplyMode: "decline-close", terminal: null });
+    setNpcChat({ ...chat, messages, plannedQuest: null, pendingQuest: null, auto: false, questReplyMode: "decline-close", terminal: null });
     setNotice("你婉拒了这次委托。");
     void requestNpcReply(chat.id, messages, null, "decline-close", draft);
   }, [npcChat, requestNpcReply]);
@@ -1390,7 +1400,9 @@ export default function OriginalWorld({
       const current = stateRef.current,
         questContext = current.tasks.generatedQuest
           ? `\n\n${generatedQuestPrompt(current.tasks.generatedQuest, id)}`
-          : "",
+          : chat.plannedQuest
+            ? `\n\n${generatedQuestPrompt(chat.plannedQuest, id)}\n【当前谈话主线】NPC正围绕这桩尚未正式提出的委托逐层说明背景。你必须像身在现场的主角一样，只回应这件事：追问细节、判断利害或回应其中的人情，不得突然换话题，也不得替NPC提前说出正式请求。`
+            : "",
         answer = await streamNpcReply({
           system: `${buildAutoPlayerPrompt(id, current.actor, getOriginalMap(current.position.mapId).name)}${questContext}`,
           messages: history.length ? history : [{ role: "assistant", content: `${npcLore(id).name}正打量着你，等你先开口。挑一个具体话题——江湖近况、门派见闻、一个传闻或一桩旧事——自然开启交谈，不要只是寒暄。` }],
@@ -1470,6 +1482,10 @@ export default function OriginalWorld({
         npcChat.id,
         npcChat.messages,
         offer.draft,
+        null,
+        null,
+        offer.planned,
+        offer.preludeRound,
       );
     } else void generateAutoPlayerTurn(npcChat);
   }, [generateAutoPlayerTurn, npcChat, openNpcConversation, prepareGeneratedQuestOffer, requestNpcReply]);
@@ -1494,6 +1510,10 @@ export default function OriginalWorld({
         npcChat.id,
         npcChat.messages,
         offer.draft,
+        null,
+        null,
+        offer.planned,
+        offer.preludeRound,
       );
     }, 0);
     return () => window.clearTimeout(id);
@@ -1536,6 +1556,7 @@ export default function OriginalWorld({
       turn: event.battle.turn,
       facts: event.facts,
       text: "",
+      effect: battleEffectKind(event),
       loading: true,
       error: "",
     };
@@ -1561,7 +1582,7 @@ export default function OriginalWorld({
       const answer = await streamNpcReply({
         system: buildBattleNarrationPrompt(event),
         messages: history,
-        maxOutputTokens: 260,
+        maxOutputTokens: 420,
         signal: controller.signal,
         onToken: (token) => updateEntry((item) => ({ ...item, text: item.text + token })),
       });
@@ -1571,7 +1592,7 @@ export default function OriginalWorld({
         if (battleNarrationAbort.current)
           updateEntry((item) => ({
             ...item,
-            text: item.text || item.facts.join("\n"),
+            text: item.text || buildBattleNarrationFallback(event),
             loading: false,
           }));
         return;
@@ -1579,7 +1600,7 @@ export default function OriginalWorld({
       const detail = error instanceof Error ? error.message : "战报生成失败";
       updateEntry((item) => ({
         ...item,
-        text: item.text || item.facts.join("\n"),
+        text: item.text || buildBattleNarrationFallback(event),
         loading: false,
         error: detail,
       }));
@@ -1628,6 +1649,7 @@ export default function OriginalWorld({
         playerHpBefore,
         enemyHpBefore,
         playerTechnique,
+        effectHint: "special",
       });
     },
     [battle, narrateBattleRound, sync],
@@ -1846,6 +1868,7 @@ export default function OriginalWorld({
         playerHpBefore,
         enemyHpBefore,
         playerTechnique: entry.name,
+        effectHint: "item",
       });
     },
     [battle, narrateBattleRound, sync],

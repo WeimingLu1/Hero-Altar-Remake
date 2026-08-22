@@ -1,8 +1,11 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import {
+  battleEffectKind,
+  buildBattleNarrationFallback,
   buildBattleNarrationFacts,
   buildBattleNarrationPrompt,
+  parseBattleNarrativeSections,
   type BattleNarrationEvent,
 } from "../app/game-core/battle-narration";
 import { beginOriginalBattle } from "../app/game-core/original-battle";
@@ -40,11 +43,12 @@ test("battle narration prompt grounds wuxia prose in both fighters and exact res
   assert.match(prompt, /测试少侠/);
   assert.match(prompt, /潘小莲/);
   assert.match(prompt, /豆腐店/);
-  assert.match(prompt, /1至2个短段/);
-  assert.match(prompt, /80至160个汉字/);
-  assert.match(prompt, /绝不超过220个汉字/);
+  assert.match(prompt, /三个连续短段/);
+  assert.match(prompt, /【主角】/);
+  assert.match(prompt, /160至280个汉字/);
+  assert.match(prompt, /绝不超过360个汉字/);
   assert.match(prompt, /命中、闪避、招架、伤害、当前气血、胜负/);
-  assert.match(prompt, /一两个关键动作/);
+  assert.match(prompt, /起手、发力、行进路线或变招/);
   assert.match(prompt, /非必要不加入对话/);
   assert.match(prompt, /本回合所用武学/);
   assert.match(prompt, /原始出招句中的招式、动作方向、攻击部位/);
@@ -53,10 +57,48 @@ test("battle narration prompt grounds wuxia prose in both fighters and exact res
   assert.match(prompt, /不得写骨折、内伤或吐血/);
 });
 
+test("battle narration separates player, enemy and clash prose for distinct colors", () => {
+  assert.deepEqual(parseBattleNarrativeSections(
+    "【主角】踏步递掌。\n【对手】横肘封架。\n【交锋】掌肘相撞，各退半步。",
+  ), [
+    { speaker: "player", text: "踏步递掌。" },
+    { speaker: "enemy", text: "横肘封架。" },
+    { speaker: "clash", text: "掌肘相撞，各退半步。" },
+  ]);
+  assert.deepEqual(parseBattleNarrativeSections("旧模型的普通正文。"), [
+    { speaker: "clash", text: "旧模型的普通正文。" },
+  ]);
+});
+
+test("battle effect classification follows actual weapon, spell, special and item facts", () => {
+  const sword = event();
+  sword.playerTechnique = "华山剑法";
+  assert.equal(battleEffectKind(sword), "sword");
+  const spell = event();
+  spell.playerTechnique = "掌心雷";
+  assert.equal(battleEffectKind(spell), "spell");
+  const special = event();
+  special.playerTechnique = "无影绝杀";
+  special.effectHint = "special";
+  assert.equal(battleEffectKind(special), "special");
+  const item = event();
+  item.effectHint = "item";
+  assert.equal(battleEffectKind(item), "item");
+});
+
 test("battle narration facts expose before and after health without changing settlement", () => {
   const facts = buildBattleNarrationFacts(event());
   assert.match(facts, /唯一真实结算/);
   assert.match(facts, /结算前/);
   assert.match(facts, /结算后/);
   assert.match(facts, /受到 16 点伤害/);
+});
+
+test("battle narration fallback keeps both fighters color-addressable without an LLM", () => {
+  const input = event();
+  input.facts.push("潘小莲横掌回击。", "两股掌力在身前相撞。");
+  const fallback = buildBattleNarrationFallback(input);
+  assert.match(fallback, /【主角】测试少侠/);
+  assert.match(fallback, /【对手】潘小莲/);
+  assert.match(fallback, /【交锋】两股掌力/);
 });

@@ -28,6 +28,10 @@ const worldCss = readFileSync(
   new URL("../app/original/world.css", import.meta.url),
   "utf8",
 );
+const battleCss = readFileSync(
+  new URL("../app/original/battle.css", import.meta.url),
+  "utf8",
+);
 const ambientSource = readFileSync(
   new URL("../app/game-core/ambient-npc.ts", import.meta.url),
   "utf8",
@@ -177,7 +181,7 @@ test("历史台词不会在气泡存活期后复活显示，玩家气泡无条�
 test("战报生成期间仍可打开战斗药品且中止战报不会永久锁定", () => {
   assert.match(source, /if \(k === "i"\) setBattleItem\(0\)/);
   assert.match(source, /if \(controller\.signal\.aborted\)[\s\S]*battleNarrationAbort\.current[\s\S]*loading: false/);
-  assert.match(source, /text: item\.text \|\| item\.facts\.join\("\\n"\),\s*loading: false/);
+  assert.match(source, /text: item\.text \|\| buildBattleNarrationFallback\(event\),\s*loading: false/);
   assert.match(source, /openItem} disabled=\{Boolean\(battle\.finished\)\}/);
 });
 
@@ -407,6 +411,20 @@ test("生成奇遇提议和各任务节点按完整台词单句收束", () => {
   assert.match(worldSource, /话音落下，切磋即将开始/);
   assert.match(worldSource, /className="generated-quest-sidebar"/);
   assert.doesNotMatch(worldSource, /当前奇遇尚未走到交手阶段/);
+});
+
+test("任务交谈预先锁定同一委托背景，战斗舞台按招式区分彩色演出", () => {
+  assert.match(worldSource, /plannedQuest: GeneratedQuestDraft \| null/);
+  assert.match(worldSource, /同一委托的铺垫/);
+  assert.match(worldSource, /异状、你的顾虑/);
+  assert.match(worldSource, /相关人物关系、旧因/);
+  assert.match(worldSource, /迫切风险与为何需要玩家相助/);
+  assert.match(uiSource, /parseBattleNarrativeSections/);
+  for (const effect of ["fist", "sword", "blade", "staff", "whip", "spell", "special", "item"])
+    assert.match(battleCss, new RegExp(`effect-${effect}`));
+  assert.match(battleCss, /narrative-player/);
+  assert.match(battleCss, /narrative-enemy/);
+  assert.match(battleCss, /prefers-reduced-motion/);
 });
 
 test("奇遇选择保留完整委托对白并在任务簿展示完成日志", () => {

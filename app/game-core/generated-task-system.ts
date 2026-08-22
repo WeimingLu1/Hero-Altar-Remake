@@ -96,7 +96,7 @@ const GENERATED_STAGES = new Set<GeneratedQuestStage>([
   "failed",
 ]);
 
-export const GENERATED_QUEST_OFFER_REPLY_COUNT = 2;
+export const GENERATED_QUEST_OFFER_REPLY_COUNT = 4;
 
 const RESERVED_NPC_IDS = new Set([
   3, 6, 10, 14, 15, 25, 26, 31, 111, 139, 148, 149, 162, 163, 164, 165,

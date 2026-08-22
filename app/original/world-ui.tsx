@@ -41,7 +41,10 @@ import {
   levelTier,
   levelTitle,
 } from "../game-core/status-system";
-import type { BattleNarrative } from "../game-core/battle-narration";
+import {
+  parseBattleNarrativeSections,
+  type BattleNarrative,
+} from "../game-core/battle-narration";
 import { freshTaskState, type TaskState } from "../game-core/task-system";
 import type { WorldSave } from "../game-core/save-system";
 import {
@@ -448,6 +451,7 @@ export function BattleView({
   const dialogRef = useDialogFocus<HTMLDivElement>();
   const logRef = useRef<HTMLDivElement>(null);
   const latestNarrative = narratives.at(-1);
+  const effect = latestNarrative?.effect || "fist";
   useEffect(() => {
     const log = logRef.current;
     if (!log) return;
@@ -458,7 +462,8 @@ export function BattleView({
   }, [battle.log.length, latestNarrative?.loading, latestNarrative?.text.length]);
   return (
     <div ref={dialogRef} tabIndex={-1} className="battle" role="dialog" aria-modal="true" aria-label={`与${battle.enemyName}战斗`}>
-      <div className="battle-stage">
+      <div className={`battle-stage effect-${effect}`} key={`${latestNarrative?.turn || 0}-${effect}`}>
+        <div className="battle-arena" aria-hidden="true"><i /><i /><i /></div>
         <div className="fighter hero">
           <CharacterPortrait
             playerGender={actor.gender}
@@ -481,6 +486,11 @@ export function BattleView({
             </>
           )}
         </b>
+        <div className="battle-fx" aria-hidden="true">
+          <i className="fx-trail one" /><i className="fx-trail two" />
+          <i className="fx-impact" /><i className="fx-ring" />
+          <i className="fx-particle p1" /><i className="fx-particle p2" /><i className="fx-particle p3" />
+        </div>
         <div className="fighter enemy">
           <CharacterPortrait
             npcId={battle.enemyId}
@@ -517,7 +527,15 @@ export function BattleView({
         {narratives.map((item, index) => (
           <article className={index === narratives.length - 1 ? "latest" : ""} key={`${item.turn}-${index}`}>
             <header><time>第 {item.turn} 回合</time><small>{item.facts.join(" · ")}</small></header>
-            <div>{item.text || "风声骤紧，正在演绎这一回合……"}</div>
+            <div className="battle-narrative-copy">
+              {parseBattleNarrativeSections(item.text).map((section, sectionIndex) => (
+                <p className={`narrative-${section.speaker}`} key={`${section.speaker}-${sectionIndex}`}>
+                  <strong>{section.speaker === "player" ? `${actor.name || "主角"}出招` : section.speaker === "enemy" ? `${battle.enemyName}应战` : "交锋结果"}</strong>
+                  <span>{section.text}</span>
+                </p>
+              ))}
+              {!item.text && <p className="narrative-loading">风声骤紧，正在演绎这一回合……</p>}
+            </div>
             {item.error && <em>小说战报生成中断，已保留真实结算：{item.error}</em>}
           </article>
         ))}
