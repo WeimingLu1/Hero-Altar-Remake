@@ -263,6 +263,12 @@ export function battleConsumableEntries(actor: SceneActorState) {
     return !item.is_book && [0, 1].includes(Number(item.occasion || 0));
   });
 }
+export function battleBagEntries(actor: SceneActorState) {
+  const consumables = new Set(battleConsumableEntries(actor).map((entry) => entry.key));
+  return bagEntries(actor).filter(
+    (entry) => entry.kind === 2 || entry.kind === 3 || consumables.has(entry.key),
+  );
+}
 function activateItemEntry(
   actor: SceneActorState,
   entry: BagEntry,

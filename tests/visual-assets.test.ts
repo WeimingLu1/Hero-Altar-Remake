@@ -427,6 +427,16 @@ test("任务交谈预先锁定同一委托背景，战斗舞台按招式区分�
   assert.match(battleCss, /prefers-reduced-motion/);
 });
 
+test("战斗界面提供完整行囊与临阵武学切换入口", () => {
+  assert.match(uiSource, /行囊 <kbd>I<\/kbd>/);
+  assert.match(uiSource, /武学 <kbd>M<\/kbd>/);
+  assert.match(uiSource, /export function BattleSkillPicker/);
+  assert.match(uiSource, /E\/Enter 设为攻击 · R 设为招架/);
+  assert.match(worldSource, /battleBagEntries/);
+  assert.match(worldSource, /selectBattleCombatSkill/);
+  assert.match(worldSource, /临阵换装不消耗回合/);
+});
+
 test("奇遇选择保留完整委托对白并在任务簿展示完成日志", () => {
   assert.match(worldSource, /pendingQuest \? " has-offer"/);
   assert.match(worldSource, /委托原委保留在上方对白中，可滚动查看/);

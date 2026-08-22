@@ -1,8 +1,10 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import {
+  battleCombatSkills,
   combatSkillProfile,
   equipSkill,
+  selectBattleCombatSkill,
   toggleParry,
 } from "../app/game-core/skill-system";
 import type { SceneActorState } from "../app/game-core/scene-event";
@@ -67,4 +69,17 @@ test("equipped attack skill may also become parry", () => {
   const p = combatSkillProfile(a);
   assert.equal(p.attack, 70);
   assert.equal(p.parry, 65);
+});
+test("战斗中可从全部已学拳脚兵刃武学分别选择攻击与招架", () => {
+  const a = actor();
+  a.skills["12"] = { level: 50, points: 0 };
+  assert.deepEqual(
+    battleCombatSkills(a).map((skill) => skill.id),
+    [12, 14],
+  );
+  assert.equal(selectBattleCombatSkill(a, 12).ok, true);
+  assert.equal(a.skillUse[0], 12);
+  assert.equal(selectBattleCombatSkill(a, 14, true).ok, true);
+  assert.equal(a.skillUse[1], 14);
+  assert.equal(a.skillUse[4], 14);
 });

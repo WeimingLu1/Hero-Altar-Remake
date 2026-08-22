@@ -13,7 +13,11 @@ import {
   maxWater,
   type BagEntry,
 } from "../game-core/inventory-system";
-import { learnedSkills } from "../game-core/skill-system";
+import {
+  battleCombatSkills,
+  battleSkillWeaponText,
+  learnedSkills,
+} from "../game-core/skill-system";
 import { battleSpecials } from "../game-core/special-system";
 import {
   customSwordBonus,
@@ -435,6 +439,7 @@ export function BattleView({
   leave,
   openSpecial,
   openItem,
+  openSkill,
   flee,
 }: {
   battle: OriginalBattle;
@@ -446,6 +451,7 @@ export function BattleView({
   leave: () => void;
   openSpecial: () => void;
   openItem: () => void;
+  openSkill: () => void;
   flee: () => void;
 }) {
   const dialogRef = useDialogFocus<HTMLDivElement>();
@@ -549,7 +555,10 @@ export function BattleView({
           绝招 <kbd>Q</kbd>
         </button>
         <button onClick={openItem} disabled={Boolean(battle.finished)}>
-          物品 <kbd>I</kbd>
+          行囊 <kbd>I</kbd>
+        </button>
+        <button onClick={openSkill} disabled={Boolean(battle.finished)}>
+          武学 <kbd>M</kbd>
         </button>
         <button
           onClick={battle.mode === "spar" ? leave : flee}
@@ -598,9 +607,40 @@ export function SpecialPicker({
           </button>
         ))
       ) : (
-        <p>当前装配的功夫没有可用绝招。</p>
+        <p>尚未学会带绝招的武学。</p>
       )}
       <footer>W/S 选择 · E/Enter 施展 · X/Esc 返回</footer>
+    </div>
+  );
+}
+export function BattleSkillPicker({
+  actor,
+  index,
+  choose,
+  chooseParry,
+}: {
+  actor: SceneActorState;
+  index: number;
+  choose: (id?: number) => void;
+  chooseParry: (id?: number) => void;
+}) {
+  const dialogRef = useDialogFocus<HTMLDivElement>();
+  const list = battleCombatSkills(actor);
+  return (
+    <div ref={dialogRef} tabIndex={-1} className="special-picker battle-skill-picker" role="dialog" aria-modal="true" aria-label="选择战斗武学">
+      <b>临阵调整武学</b>
+      {list.length ? list.map((skill, i) => (
+        <div className={index === i ? "battle-skill-row active" : "battle-skill-row"} key={skill.id}>
+          <button onClick={() => choose(skill.id)}>
+            <span>{skill.name}<small>{skill.category} · {skill.level} 级 · {battleSkillWeaponText(actor, skill.id)}</small></span>
+            <em>{skill.equipped ? "当前攻击" : "设为攻击"}</em>
+          </button>
+          <button className={skill.parrying ? "parry active" : "parry"} onClick={() => chooseParry(skill.id)}>
+            {skill.parrying ? "当前招架" : "设为招架"}
+          </button>
+        </div>
+      )) : <p>尚未学会可用于攻防的拳脚或兵刃武学。</p>}
+      <footer>W/S 选择 · E/Enter 设为攻击 · R 设为招架 · M/X 返回</footer>
     </div>
   );
 }

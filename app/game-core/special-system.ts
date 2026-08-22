@@ -1,6 +1,6 @@
 import { originalTables, type OriginalRecord } from "./original-data";
 import type { SceneActorState } from "./scene-event";
-import { combatSkillProfile, effectiveLevel } from "./skill-system";
+import { effectiveLevel, skillType, weaponBasicId } from "./skill-system";
 
 export type BattleSpecial = {
   id: number;
@@ -16,17 +16,16 @@ export type BattleSpecial = {
 };
 const skillRecord = (id: number) =>
   (originalTables.skills[id] || {}) as OriginalRecord;
-const equippedKungfus = (actor: SceneActorState) => {
-  const profile = combatSkillProfile(actor);
-  return [
-    ...new Set([
-      profile.attackId,
-      actor.skillUse[2] || 9,
-      actor.skillUse[3] || 1,
-      actor.skillUse[5] || 8,
-    ]),
-  ];
-};
+const learnedSpecialKungfus = (actor: SceneActorState) =>
+  Object.entries(actor.skills)
+    .filter(([, progress]) => progress.level > 0)
+    .map(([id]) => Number(id));
+const learnedSpecialOwners = (actor: SceneActorState, specialId: number) =>
+  learnedSpecialKungfus(actor).filter((kungfuId) =>
+    ((originalTables.kungfus[kungfuId]?.skill as number[]) || []).includes(
+      specialId,
+    ),
+  );
 export function specialFpCost(actor: SceneActorState, id: number) {
   const s = skillRecord(id);
   if (id === 5) return effectiveLevel(actor, 18) < 120 ? 200 : 400;
@@ -47,16 +46,27 @@ export function specialMpCost(actor: SceneActorState, id: number) {
     ? cost
     : actor.mpPlus + Number((s.magic_data as number[])?.[0] || 0);
 }
-function matchingId(actor: SceneActorState, type: number) {
-  const p = combatSkillProfile(actor),
-    kfType = Number(originalTables.kungfus[type]?.type || 0);
-  if (kfType === 1) return actor.skillUse[3] || 1;
-  if (kfType === 2) return actor.skillUse[0] || 2;
-  if (kfType >= 3 && kfType <= 7) return p.attackId;
-  if (kfType === 8) return actor.skillUse[5] || 8;
-  if (kfType === 9) return actor.skillUse[2] || 9;
-  if (kfType === 10) return actor.skillUse[4];
-  return type;
+function kungfuWeaponRequirement(actor: SceneActorState, kungfuId: number) {
+  const type = skillType(kungfuId), name = originalTables.kungfus[kungfuId]?.name;
+  if (type === 2 && actor.weaponId > 0)
+    return `施展${name || "拳脚绝招"}时必须空手`;
+  if (type >= 3 && type <= 6) {
+    if (actor.weaponId <= 0) return `施展${name || "兵刃绝招"}需要对应兵器`;
+    if (weaponBasicId(actor.weaponId) !== type)
+      return `当前兵器与${name || "这门武学"}不匹配`;
+  }
+  return "";
+}
+function specialWeaponRequirement(actor: SceneActorState, specialId: number) {
+  const owners = learnedSpecialOwners(actor, specialId).filter((kungfuId) => {
+    const type = skillType(kungfuId);
+    return type >= 2 && type <= 6;
+  });
+  if (!owners.length) return "";
+  const reasons = owners.map((kungfuId) =>
+    kungfuWeaponRequirement(actor, kungfuId),
+  );
+  return reasons.some((reason) => !reason) ? "" : reasons[0];
 }
 export function specialCheck(
   actor: SceneActorState,
@@ -77,7 +87,16 @@ export function specialCheck(
       };
   if (id >= 29) {
     const required = Number((s.magic_data as number[])?.[1] || 0),
-      magicId = actor.skillUse[5] || 8;
+      magicOwners = learnedSpecialOwners(actor, id).filter(
+        (kungfuId) => skillType(kungfuId) === 8,
+      ),
+      magicRequirements = ((s.require as number[][]) || [])
+        .map(([kungfuId]) => kungfuId)
+        .filter((kungfuId) => skillType(kungfuId) === 8),
+      magicId = magicOwners[0] ||
+        magicRequirements.find((kungfuId) => kungfuId > 11) ||
+        magicRequirements[0] ||
+        8;
     if (effectiveLevel(actor, magicId) < required)
       return {
         ok: false,
@@ -87,11 +106,10 @@ export function specialCheck(
   for (const row of (s.require as number[][]) || []) {
     const [type, num] = row;
     if (type > 0) {
-      const active = matchingId(actor, type);
-      if (active !== type)
+      if ((actor.skills[String(type)]?.level || 0) <= 0)
         return {
           ok: false,
-          reason: `需配合${originalTables.kungfus[type]?.name}`,
+          reason: `尚未学会${originalTables.kungfus[type]?.name}`,
         };
       if (effectiveLevel(actor, type) < num)
         return {
@@ -115,6 +133,8 @@ export function specialCheck(
     else if (type === -9 && actor.maxMp < num)
       return { ok: false, reason: "法力上限不足" };
   }
+  const weaponReason = specialWeaponRequirement(actor, id);
+  if (weaponReason) return { ok: false, reason: weaponReason };
   if (actor.fp < fp) return { ok: false, reason: "内力不足" };
   if (actor.mp < mp) return { ok: false, reason: "法力不足" };
   if (actor.hp < hp) return { ok: false, reason: "气血不足" };
@@ -124,7 +144,7 @@ export function battleSpecials(
   actor: SceneActorState,
   cooldowns: Record<string, number> = {},
 ): BattleSpecial[] {
-  const ids = equippedKungfus(actor)
+  const ids = learnedSpecialKungfus(actor)
     .flatMap((id) => (originalTables.kungfus[id]?.skill as number[]) || [])
     .filter((id) => id > 0);
   return [...new Set(ids)].map((id) => {

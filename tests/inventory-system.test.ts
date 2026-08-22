@@ -7,6 +7,7 @@ import {
   activateBattleEntry,
   activateEntry,
   battleConsumableEntries,
+  battleBagEntries,
   discardEntry,
 } from "../app/game-core/inventory-system";
 import type { SceneActorState } from "../app/game-core/scene-event";
@@ -88,6 +89,14 @@ test("战斗物品画面和键盘共用列表且排除永久丹药", () => {
   assert.deepEqual(
     battleConsumableEntries(a).map((entry) => entry.id),
     [9, 8],
+  );
+});
+test("战斗行囊包含可用药品和全部装备，但排除不可战斗使用的物品", () => {
+  const a = actor();
+  a.inventory = { "1:8": 1, "1:10": 1, "2:1": 1, "3:4": 1 };
+  assert.deepEqual(
+    battleBagEntries(a).map((entry) => entry.key),
+    ["1:8", "2:1", "3:4"],
   );
 });
 test("永久丹药同时提升内力法力并严格钳制在六万五千五百三十五", () => {

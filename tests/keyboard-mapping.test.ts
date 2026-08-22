@@ -68,8 +68,9 @@ test("战斗结束后的按钮和确认键统一进入战果处理", () => {
 test("所有行囊操作都先确认，剧情说明的鼠标和键盘推进共用入口", () => {
   assert.match(
     worldSource,
-    /const openBagEntry = useCallback\([\s\S]*setItemConfirm\(\{ entry, index: 0 \}\)/,
+    /const openBagEntry = useCallback\([\s\S]*setItemConfirm\(\{ entry, index: 0, source: "menu" \}\)/,
   );
+  assert.match(worldSource, /setItemConfirm\(\{ entry, index: 0, source: "battle" \}\)/);
   assert.doesNotMatch(worldSource, /entry\.kind === 2 \|\| entry\.kind === 3/);
   assert.match(worldSource, /const advanceEventText = useCallback/);
   assert.match(

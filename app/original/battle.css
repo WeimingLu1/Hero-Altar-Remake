@@ -22,7 +22,7 @@
 .battle-log article.latest time{color:#e0b65e}
 .battle-log article.latest>div:empty::after{content:"▍";color:#e0b65e;animation:battle-live-pulse .8s infinite}
 .battle-log-anchor{height:2px}
-.battle nav{display:flex;gap:8px;padding-top:12px}
+.battle nav{display:grid;grid-template-columns:repeat(5,minmax(0,1fr));gap:8px;padding-top:12px}
 .battle button{flex:1;padding:9px;border:1px solid #9b8957;background:#201f18;color:#f0dfae;cursor:pointer}
 .battle button:first-child{background:#6d382c}
 .battle kbd{margin-left:6px}

@@ -25,7 +25,7 @@ export type InputLayer =
 
 export type ConfirmationKind = "cheat" | "hidden-quest" | "item";
 export type DialogueKind = "npc-talk" | "event-text";
-export type BattleView = "action" | "outcome" | "items" | "specials";
+export type BattleView = "action" | "outcome" | "items" | "specials" | "skills";
 export type ArcadeKind = "select" | "dance" | "ball";
 export type ModalKind =
   | "life"
@@ -79,6 +79,7 @@ export type GameCommand =
   | { type: "cheat-maximize" }
   | { type: "battle-specials-open" }
   | { type: "battle-items-open" }
+  | { type: "battle-skills-open" }
   | { type: "battle-flee" }
   | { type: "cultivation-open" }
   | { type: "fly-open" }
@@ -230,11 +231,17 @@ const resolveBattleCommand = (
     if (key === "i") return { type: "cancel" };
     return basicChoiceCommand(key);
   }
+  if (view === "skills") {
+    if (key === "m") return { type: "cancel" };
+    if (key === "r") return { type: "menu-skill-secondary" };
+    return basicChoiceCommand(key);
+  }
   if (view === "specials" || view === "outcome") {
     return basicChoiceCommand(key);
   }
   if (key === "q" || key === "c") return { type: "battle-specials-open" };
   if (key === "i") return { type: "battle-items-open" };
+  if (key === "m") return { type: "battle-skills-open" };
   if (key === "g") return { type: "battle-flee" };
   return isConfirmKey(key)
     ? { type: "confirm" }

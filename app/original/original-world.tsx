@@ -48,13 +48,15 @@ import {
   bagEntries,
   activateEntry,
   activateBattleEntry,
-  battleConsumableEntries,
+  battleBagEntries,
   discardEntry,
   type BagEntry,
 } from "../game-core/inventory-system";
 import {
   effectiveLevel,
+  battleCombatSkills,
   equipSkill,
+  selectBattleCombatSkill,
   toggleParry,
 } from "../game-core/skill-system";
 import { battleSpecials } from "../game-core/special-system";
@@ -179,6 +181,7 @@ import {
   allCheatSkills,
   Arcade,
   BattleView,
+  BattleSkillPicker,
   Choice,
   GameMenu,
   LifeMenu,
@@ -320,6 +323,7 @@ export default function OriginalWorld({
   const [battleOutcome, setBattleOutcome] = useState<number | null>(null);
   const [battleItem, setBattleItem] = useState<number | null>(null);
   const [specialMenu, setSpecialMenu] = useState<number | null>(null);
+  const [battleSkill, setBattleSkill] = useState<number | null>(null);
   // 主菜单：tab 0=行囊 1=状态 2=功夫 3=秘技；sub 为秘技子页签(0-5)。
   const [menu, setMenu] = useState<{
     tab: number;
@@ -333,6 +337,7 @@ export default function OriginalWorld({
   const [itemConfirm, setItemConfirm] = useState<{
     entry: BagEntry;
     index: number;
+    source: "menu" | "battle";
   } | null>(null);
   // 隐藏交换的确认弹窗。
   const [hiddenConfirm, setHiddenConfirm] = useState<{
@@ -1796,6 +1801,7 @@ export default function OriginalWorld({
         setBattleOutcome(null);
         setBattleItem(null);
         setSpecialMenu(null);
+        setBattleSkill(null);
         return;
       }
       endSpar(next.actor, battle);
@@ -1804,6 +1810,7 @@ export default function OriginalWorld({
       setBattleOutcome(null);
       setBattleItem(null);
       setSpecialMenu(null);
+      setBattleSkill(null);
       setNotice(
         battle.finished === "win"
           ? altarText
@@ -1840,6 +1847,9 @@ export default function OriginalWorld({
     sync(next);
     if (result.escaped) {
       setBattle(null);
+      setBattleItem(null);
+      setSpecialMenu(null);
+      setBattleSkill(null);
       setNotice("成功脱离战斗");
     } else setBattle(result.battle);
   }, [battle, sync]);
@@ -1910,9 +1920,39 @@ export default function OriginalWorld({
   const openBagEntry = useCallback(
     (entry?: BagEntry) => {
       if (!entry) return;
-      setItemConfirm({ entry, index: 0 });
+      setItemConfirm({ entry, index: 0, source: "menu" });
     },
     [],
+  );
+  const openBattleBagEntry = useCallback((entry?: BagEntry) => {
+    if (!entry) return;
+    setItemConfirm({ entry, index: 0, source: "battle" });
+  }, []);
+  const activateBattleEquipment = useCallback(
+    (entry?: BagEntry) => {
+      if (!entry) return;
+      const next = structuredClone(stateRef.current),
+        result = activateBattleEntry(next.actor, entry);
+      sync(next);
+      setNotice(`${result.text} 临阵换装不消耗回合。`);
+      const entries = battleBagEntries(next.actor);
+      setBattleItem((current) =>
+        current === null
+          ? current
+          : Math.min(current, Math.max(0, entries.length - 1)),
+      );
+    },
+    [sync],
+  );
+  const selectBattleSkill = useCallback(
+    (id?: number, parry = false) => {
+      if (!id) return;
+      const next = structuredClone(stateRef.current),
+        result = selectBattleCombatSkill(next.actor, id, parry);
+      if (result.ok) sync(next);
+      setNotice(`${result.text}${result.ok ? " 临阵调整不消耗回合。" : ""}`);
+    },
+    [sync],
   );
   // 隐藏交换确认。
   const confirmHiddenQuest = useCallback(
@@ -2099,10 +2139,16 @@ export default function OriginalWorld({
   const confirmBagAction = useCallback(
     (index: number) => {
       if (!itemConfirm) return;
-      if (index === 0) activateBagEntry(itemConfirm.entry);
+      if (index === 0) {
+        if (itemConfirm.source === "battle") {
+          if (itemConfirm.entry.kind === 1)
+            consumeBattleItem(itemConfirm.entry);
+          else activateBattleEquipment(itemConfirm.entry);
+        } else activateBagEntry(itemConfirm.entry);
+      }
       setItemConfirm(null);
     },
-    [activateBagEntry, itemConfirm],
+    [activateBagEntry, activateBattleEquipment, consumeBattleItem, itemConfirm],
   );
   const openFlyMenu = useCallback(() => {
     const current = stateRef.current,
@@ -2316,6 +2362,8 @@ export default function OriginalWorld({
                         ? "items"
                         : specialMenu !== null
                           ? "specials"
+                          : battleSkill !== null
+                            ? "skills"
                           : "action",
                 }
               : null,
@@ -2585,7 +2633,8 @@ export default function OriginalWorld({
             stateRef.current.actor,
             battle.cooldowns,
           );
-          const combatItems = battleConsumableEntries(stateRef.current.actor);
+          const combatItems = battleBagEntries(stateRef.current.actor);
+          const combatSkills = battleCombatSkills(stateRef.current.actor);
           if (battleOutcome !== null) {
             if (["arrowup", "arrowdown", "w", "s"].includes(k))
               setBattleOutcome((battleOutcome + 1) % 2);
@@ -2601,7 +2650,7 @@ export default function OriginalWorld({
               );
             else if (k === "arrowdown" || k === "s")
               setBattleItem((battleItem + 1) % Math.max(1, combatItems.length));
-            else if (confirm) consumeBattleItem(combatItems[battleItem]);
+            else if (confirm) openBattleBagEntry(combatItems[battleItem]);
             else if (cancel || k === "i") setBattleItem(null);
             return;
           }
@@ -2617,8 +2666,26 @@ export default function OriginalWorld({
             else if (cancel) setSpecialMenu(null);
             return;
           }
+          if (battleSkill !== null) {
+            if (k === "arrowup" || k === "w")
+              setBattleSkill(
+                (battleSkill + combatSkills.length - 1) %
+                  Math.max(1, combatSkills.length),
+              );
+            else if (k === "arrowdown" || k === "s")
+              setBattleSkill(
+                (battleSkill + 1) % Math.max(1, combatSkills.length),
+              );
+            else if (confirm)
+              selectBattleSkill(combatSkills[battleSkill]?.id, false);
+            else if (k === "r")
+              selectBattleSkill(combatSkills[battleSkill]?.id, true);
+            else if (cancel || k === "m") setBattleSkill(null);
+            return;
+          }
           if (k === "q" || k === "c") setSpecialMenu(0);
           else if (k === "i") setBattleItem(0);
+          else if (k === "m") setBattleSkill(0);
           else if (k === "g") fleeBattle();
           else if (confirm) {
             if (battle.finished) leaveBattle();
@@ -2865,6 +2932,7 @@ export default function OriginalWorld({
   }, [
     battle,
     battleItem,
+    battleSkill,
     battleOutcome,
     advanceEventText,
     advanceNpcConversation,
@@ -2902,6 +2970,7 @@ export default function OriginalWorld({
     closeNpcChat,
     toggleNpcConversationAuto,
     openBagEntry,
+    openBattleBagEntry,
     openFlyMenu,
     startSwordChallenge,
     save,
@@ -2915,6 +2984,7 @@ export default function OriginalWorld({
     life,
     taskBook,
     specialMenu,
+    selectBattleSkill,
     fightSpecial,
     fleeBattle,
     rememberArcadeScore,
@@ -3090,7 +3160,7 @@ export default function OriginalWorld({
   };
   const map = getOriginalMap(state.position.mapId),
     profile = actorStatusProfile(state.actor);
-  const battleConsumables = battleConsumableEntries(state.actor);
+  const battleEntries = battleBagEntries(state.actor);
   const cultivationInfo = [
     cultivationAvailability(state.actor, "meditate"),
     cultivationAvailability(state.actor, "magic"),
@@ -3582,6 +3652,7 @@ export default function OriginalWorld({
             leave={leaveBattle}
             openSpecial={() => setSpecialMenu(0)}
             openItem={() => setBattleItem(0)}
+            openSkill={() => setBattleSkill(0)}
             flee={fleeBattle}
           />
         )}{" "}
@@ -3595,16 +3666,16 @@ export default function OriginalWorld({
         )}{" "}
         {battle && battleItem !== null && (
           <Choice
-            title="战斗物品"
+            title="战斗行囊"
             items={
-              battleConsumables.length
-                ? battleConsumables.map(
-                    (entry) => `${entry.name} ×${entry.amount}`,
+              battleEntries.length
+                ? battleEntries.map(
+                    (entry) => `${entry.name} ×${entry.amount}${entry.equipped ? " · 已装备" : ""}`,
                   )
-                : ["无可用物品"]
+                : ["行囊中没有可在战斗中使用的物品或装备"]
             }
             index={battleItem}
-            choose={(index) => consumeBattleItem(battleConsumables[index])}
+            choose={(index) => openBattleBagEntry(battleEntries[index])}
           />
         )}{" "}
         {battle && specialMenu !== null && (
@@ -3613,6 +3684,14 @@ export default function OriginalWorld({
             battle={battle}
             index={specialMenu}
             choose={fightSpecial}
+          />
+        )}{" "}
+        {battle && battleSkill !== null && (
+          <BattleSkillPicker
+            actor={state.actor}
+            index={battleSkill}
+            choose={(id) => selectBattleSkill(id, false)}
+            chooseParry={(id) => selectBattleSkill(id, true)}
           />
         )}{" "}
         {menu && (

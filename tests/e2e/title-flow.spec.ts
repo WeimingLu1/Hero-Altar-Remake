@@ -126,6 +126,61 @@ test("JSON 存档可导入并进入完整世界", async ({ page }) => {
   ).toBe(true);
 });
 
+test("战斗中可打开完整行囊并临阵切换攻防武学", async ({ page }) => {
+  await page.goto("/");
+  await page.locator('input[type="file"]').setInputFiles({
+    name: "battle-loadout-save.json",
+    mimeType: "application/json",
+    buffer: Buffer.from(JSON.stringify({
+      format: "rmxp-hero-original-world-save",
+      version: 4,
+      savedAt: "",
+      position: { mapId: 3, x: 9, y: 10, direction: 8 },
+      actor: {
+        hp: 2000,
+        maxHp: 2000,
+        fp: 2000,
+        maxFp: 2000,
+        inventory: { "1:8": 2, "2:2": 1, "3:4": 1 },
+        skills: {
+          "1": { level: 120, points: 0 },
+          "2": { level: 120, points: 0 },
+          "3": { level: 120, points: 0 },
+          "10": { level: 120, points: 0 },
+          "12": { level: 120, points: 0 },
+          "33": { level: 120, points: 0 },
+        },
+        skillUse: [0, 0, 0, 1, 10, 0, 0],
+      },
+      tasks: {},
+      flags: {},
+      variables: {},
+    })),
+  });
+  await expect(page.getByRole("img", { name: /地图，主角位于/ })).toBeVisible();
+  await page.keyboard.press("E");
+  await page.getByRole("dialog", { name: "道德和尚" })
+    .getByRole("button", { name: "战斗" }).click();
+
+  const battle = page.getByRole("dialog", { name: /与道德和尚战斗/ });
+  await expect(battle.getByRole("button", { name: /行囊 I/ })).toBeVisible();
+  await expect(battle.getByRole("button", { name: /武学 M/ })).toBeVisible();
+
+  await page.keyboard.press("m");
+  const skills = page.getByRole("dialog", { name: "选择战斗武学" });
+  await expect(skills.getByRole("button", { name: /八卦游身掌/ })).toBeVisible();
+  await expect(skills.getByRole("button", { name: /太极剑/ })).toBeVisible();
+  await page.keyboard.press("r");
+  await expect(page.getByText(/已设为招架武学/)).toBeVisible();
+  await page.keyboard.press("m");
+
+  await page.keyboard.press("i");
+  const bag = page.getByRole("dialog", { name: "战斗行囊" });
+  await expect(bag.getByRole("button", { name: /匕首/ })).toBeVisible();
+  await expect(bag.getByRole("button", { name: /布衣/ })).toBeVisible();
+  await page.keyboard.press("i");
+});
+
 test("多轮奇遇日志仍可保存并在任务簿中纵向滚动", async ({ page }) => {
   const history = Array.from({ length: 12 }, (_, index) => ({
     version: 1,

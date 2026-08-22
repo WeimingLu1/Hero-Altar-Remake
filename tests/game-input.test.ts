@@ -161,6 +161,7 @@ test("战斗、小游戏和通用模态各自截获命令", () => {
   assert.equal(battle("q")?.type, "battle-specials-open");
   assert.equal(battle("c")?.type, "battle-specials-open");
   assert.equal(battle("i")?.type, "battle-items-open");
+  assert.equal(battle("m")?.type, "battle-skills-open");
   assert.equal(battle("g")?.type, "battle-flee");
   assert.equal(battle("x")?.type, "cancel");
   assert.equal(
@@ -169,6 +170,20 @@ test("战斗、小游戏和通用模态各自截获命令", () => {
       play({ battle: { view: "items" } }),
     ).command?.type,
     "cancel",
+  );
+  assert.equal(
+    resolveGameKey(
+      { key: "m" },
+      play({ battle: { view: "skills" } }),
+    ).command?.type,
+    "cancel",
+  );
+  assert.equal(
+    resolveGameKey(
+      { key: "r" },
+      play({ battle: { view: "skills" } }),
+    ).command?.type,
+    "menu-skill-secondary",
   );
   assert.deepEqual(
     resolveGameKey({ key: "a" }, play({ arcade: "dance" })).command,

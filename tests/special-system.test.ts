@@ -85,11 +85,35 @@ const dummyEnemy = {
   agi: 20,
   bon: 20,
 };
-test("equipped kungfu exposes its original special and requirements", () => {
+test("learned kungfu exposes its original special without being equipped", () => {
+  const a = actor();
+  a.skills["13"] = { level: 120, points: 0 };
+  assert.notEqual(a.skillUse[0], 13);
+  const learned = battleSpecials(a).find((special) => special.id === 2);
+  assert.equal(learned?.enabled, true);
   const list = battleSpecials(actor());
   assert.equal(list[0].id, 1);
   assert.equal(list[0].enabled, true);
   assert.equal(list[0].fpCost, 200);
+});
+test("拳脚和兵刃绝招仍校验当前武器", () => {
+  const hand = actor();
+  hand.weaponId = 2;
+  assert.match(battleSpecials(hand)[0].reason, /必须空手/);
+
+  const sword = actor();
+  sword.skills["3"] = { level: 120, points: 0 };
+  sword.skills["33"] = { level: 180, points: 0 };
+  sword.skills["36"] = { level: 180, points: 0 };
+  assert.match(
+    battleSpecials(sword).find((special) => special.id === 19)?.reason || "",
+    /需要对应兵器/,
+  );
+  sword.weaponId = 2;
+  assert.equal(
+    battleSpecials(sword).find((special) => special.id === 19)?.enabled,
+    true,
+  );
 });
 test("special cooldown disables otherwise valid move", () => {
   const list = battleSpecials(actor(), { "1": 3 });
