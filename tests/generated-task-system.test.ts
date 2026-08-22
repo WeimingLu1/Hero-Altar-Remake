@@ -24,13 +24,13 @@ const sequence = (...values: number[]) => {
   return (max: number) => Math.abs(values[index++] || 0) % Math.max(1, max);
 };
 
-test("生成任务在第一次NPC回复固定触发，并遵守任务槽和拒绝冷却", () => {
+test("生成任务在一轮NPC与玩家对话后固定触发，不受旧冷却字段阻挡", () => {
   const tasks = freshTaskState();
-  assert.equal(shouldOfferGeneratedQuest({ completedNpcReplies: 0, offeredThisSession: false, tasks }), true);
+  assert.equal(shouldOfferGeneratedQuest({ completedNpcReplies: 0, offeredThisSession: false, tasks }), false);
   assert.equal(shouldOfferGeneratedQuest({ completedNpcReplies: 1, offeredThisSession: false, tasks }), true);
   assert.equal(shouldOfferGeneratedQuest({ completedNpcReplies: 8, offeredThisSession: true, tasks }), false);
   tasks.generatedQuestNextOfferAt = 20;
-  assert.equal(shouldOfferGeneratedQuest({ completedNpcReplies: 8, offeredThisSession: false, tasks }), false);
+  assert.equal(shouldOfferGeneratedQuest({ completedNpcReplies: 8, offeredThisSession: false, tasks }), true);
 });
 
 test("任务候选使用真实地图事件并按人物条件过滤三种类型", () => {
@@ -54,7 +54,7 @@ test("拜访任务保存目标地点、完整对话并在目标交谈后进入�
   assert.ok(draft?.target.mapName);
   assert.equal(acceptGeneratedQuest(tasks, draft!), true);
   assert.equal(tasks.generatedQuestSerial, 1);
-  assert.equal(tasks.generatedQuestNextOfferAt, 300);
+  assert.equal(tasks.generatedQuestNextOfferAt, tasks.clock);
   appendGeneratedQuestTranscript(tasks, { speaker: "player", speech: "我接下了。" });
   appendGeneratedQuestTranscript(tasks, { speaker: "npc", npcId: issuer.npcId, speech: "一路小心。" });
   assert.equal(tasks.generatedQuest?.transcript.length, 2);
@@ -114,10 +114,10 @@ test("奖励公式固定、只结算一次且完成后清除完整任务记录",
   assert.equal(tasks.generatedQuest, null);
   assert.equal(claimGeneratedQuestReward(actor, tasks, issuer.npcId).ok, false);
   assert.equal(tasks.generatedQuestHistory.length, 1, "重复领奖不能重复写入日志");
-  assert.equal(tasks.generatedQuestNextOfferAt, tasks.clock, "领奖后应立即允许下一名NPC在首轮触发");
+  assert.equal(tasks.generatedQuestNextOfferAt, tasks.clock, "领奖后应立即允许下一名NPC在一轮对话后触发");
 });
 
-test("任务中断线有含真实人物地点的固定文本，放弃后进入冷却", () => {
+test("任务中断线有含真实人物地点的固定文本，放弃后立即开放新任务", () => {
   const actor = newActor(), tasks = freshTaskState(), issuer = generatedQuestParticipant(2)!;
   const draft = createGeneratedQuestDraft({ issuer, actor, tasks, random: sequence(0, 0, 99) })!;
   acceptGeneratedQuest(tasks, draft);
@@ -127,5 +127,5 @@ test("任务中断线有含真实人物地点的固定文本，放弃后进入�
   tasks.clock = 50;
   assert.equal(abandonGeneratedQuest(tasks), true);
   assert.equal(tasks.generatedQuest, null);
-  assert.equal(tasks.generatedQuestNextOfferAt, 350);
+  assert.equal(tasks.generatedQuestNextOfferAt, 50);
 });

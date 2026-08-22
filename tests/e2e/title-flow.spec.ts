@@ -154,7 +154,7 @@ test("NPC 菜单只保留统一交谈，并支持双立绘与自由发展", asyn
       savedAt: "",
       position: { mapId: 3, x: 9, y: 10, direction: 8 },
       actor: {},
-      tasks: { generatedQuestNextOfferAt: 9999 },
+      tasks: {},
       flags: {},
       variables: {},
     })),
@@ -180,4 +180,9 @@ test("NPC 菜单只保留统一交谈，并支持双立绘与自由发展", asyn
   await expect(dialogue.getByRole("button", { name: "暂停发展" })).toBeVisible();
   await page.keyboard.press("Space");
   await expect(dialogue.getByRole("button", { name: "自由发展" })).toBeVisible();
+  await dialogue.getByRole("button", { name: "继续" }).click();
+  await expect(dialogue.locator(".player-speaker")).toBeVisible();
+  await dialogue.getByRole("button", { name: "继续" }).click();
+  await expect(dialogue.locator(".npc-talk-offer")).toBeVisible();
+  await expect(dialogue).toContainText("是否接受");
 });

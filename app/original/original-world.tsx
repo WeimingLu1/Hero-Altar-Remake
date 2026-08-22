@@ -1090,7 +1090,6 @@ export default function OriginalWorld({
     if (
       chat.offeredThisSession ||
       current.tasks.generatedQuest ||
-      current.tasks.clock < current.tasks.generatedQuestNextOfferAt ||
       !issuer ||
       !generatedQuestEligibleKinds(issuer, current.actor, current.tasks).length
     ) return { draft: null };
@@ -3499,7 +3498,7 @@ export default function OriginalWorld({
             {taskBook.confirmAbandon && (
               <div className="task-abandon-confirm">
                 <h3>确定放弃这条奇遇？</h3>
-                <p>当前完整任务对话与进度会被清除，且 300 秒内不会再次触发新奇遇。</p>
+                <p>当前完整任务对话与进度会被清除；放弃后可立即与 NPC 交谈并接受新委托。</p>
                 <div>
                   <button type="button" className="danger" onClick={confirmAbandonGeneratedQuest}>确定放弃</button>
                   <button type="button" onClick={() => setTaskBook({ ...taskBook, confirmAbandon: false })}>继续任务</button>

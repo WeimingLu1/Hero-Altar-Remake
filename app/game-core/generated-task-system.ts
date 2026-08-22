@@ -96,8 +96,7 @@ const GENERATED_STAGES = new Set<GeneratedQuestStage>([
   "failed",
 ]);
 
-export const GENERATED_QUEST_COOLDOWN_SECONDS = 300;
-export const GENERATED_QUEST_OFFER_REPLY_COUNT = 1;
+export const GENERATED_QUEST_OFFER_REPLY_COUNT = 2;
 
 const RESERVED_NPC_IDS = new Set([
   3, 6, 10, 14, 15, 25, 26, 31, 111, 139, 148, 149, 162, 163, 164, 165,
@@ -381,7 +380,6 @@ export function shouldOfferGeneratedQuest(options: {
   return (
     !options.offeredThisSession &&
     !options.tasks.generatedQuest &&
-    options.tasks.clock >= options.tasks.generatedQuestNextOfferAt &&
     options.completedNpcReplies + 1 >= GENERATED_QUEST_OFFER_REPLY_COUNT
   );
 }
@@ -482,19 +480,13 @@ export function acceptGeneratedQuest(tasks: TaskState, draft: GeneratedQuestDraf
   tasks.generatedQuest.stage = draft.kind === "duel" ? "confrontation" : "travel";
   tasks.generatedQuestSerial += 1;
   tasks.generatedQuestOfferMisses = 0;
-  tasks.generatedQuestNextOfferAt = Math.max(
-    tasks.generatedQuestNextOfferAt,
-    tasks.clock + GENERATED_QUEST_COOLDOWN_SECONDS,
-  );
+  tasks.generatedQuestNextOfferAt = tasks.clock;
   return true;
 }
 
 export function declineGeneratedQuest(tasks: TaskState) {
   tasks.generatedQuestOfferMisses = 0;
-  tasks.generatedQuestNextOfferAt = Math.max(
-    tasks.generatedQuestNextOfferAt,
-    tasks.clock + GENERATED_QUEST_COOLDOWN_SECONDS,
-  );
+  tasks.generatedQuestNextOfferAt = tasks.clock;
 }
 
 export function appendGeneratedQuestTranscript(
@@ -578,10 +570,7 @@ export function abandonGeneratedQuest(tasks: TaskState) {
   if (!tasks.generatedQuest) return false;
   tasks.generatedQuest = null;
   tasks.generatedQuestOfferMisses = 0;
-  tasks.generatedQuestNextOfferAt = Math.max(
-    tasks.generatedQuestNextOfferAt,
-    tasks.clock + GENERATED_QUEST_COOLDOWN_SECONDS,
-  );
+  tasks.generatedQuestNextOfferAt = tasks.clock;
   return true;
 }
 
@@ -606,8 +595,8 @@ export function claimGeneratedQuestReward(
   );
   tasks.generatedQuest = null;
   tasks.generatedQuestOfferMisses = 0;
-  // A successfully completed story immediately reopens discovery: the next
-  // eligible NPC can offer another quest on their second reply.
+  // Every terminal outcome immediately reopens discovery: the next eligible
+  // NPC can offer another quest after one complete NPC/player exchange.
   tasks.generatedQuestNextOfferAt = tasks.clock;
   return {
     ok: true,
