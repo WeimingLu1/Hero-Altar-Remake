@@ -6,6 +6,8 @@ export type AmbientBubbleInput = {
   text: string;
   kind: BubbleKind;
   shownAt: number;
+  /** 双人对话时一人台词显示在脚下(默认头顶)，与对方一上一下更清楚。 */
+  preferBelow?: boolean;
 };
 
 export type AmbientBubbleBox = {
@@ -19,26 +21,37 @@ export type AmbientBubbleBox = {
   lines: string[];
 };
 
-export type ConversationCardInput = {
-  x: number;
-  y: number;
-  lines: string[];
-  playerInvolved?: boolean;
-  playerName?: string;
-};
-
-export type ConversationCardBox = ConversationCardInput & {
-  left: number;
-  top: number;
-  width: number;
-  height: number;
-  entries: Array<{ route: string; lines: string[] }>;
-};
-
 type LayoutObstacle = { left: number; top: number; width: number; height: number };
 
 const W = 640;
 const H = 480;
+/** 头顶气泡的最大文本宽度与整体宽度（小字号紧凑气泡）。 */
+const BUBBLE_TEXT_WIDTH = 128;
+const BUBBLE_MAX_WIDTH = 144;
+const BUBBLE_LINE_HEIGHT = 9;
+
+function fontFor(kind: BubbleKind) {
+  return kind === "action"
+    ? "italic 6px sans-serif"
+    : kind === "player"
+      ? "bold 6px sans-serif"
+      : "6px sans-serif";
+}
+
+/** 假设 ctx.font 已按气泡类型设置，按最大宽度逐字换行。 */
+function wrapAmbientText(ctx: CanvasRenderingContext2D, clean: string, maxWidth = BUBBLE_TEXT_WIDTH) {
+  const lines: string[] = [];
+  let line = "";
+  for (const character of clean) {
+    const candidate = line + character;
+    if (line && ctx.measureText(candidate).width > maxWidth) {
+      lines.push(line);
+      line = character;
+    } else line = candidate;
+  }
+  if (line || !lines.length) lines.push(line);
+  return lines;
+}
 
 export function measureAmbientBubble(
   ctx: CanvasRenderingContext2D,
@@ -47,29 +60,14 @@ export function measureAmbientBubble(
 ): { width: number; height: number; lines: string[] } {
   const clean = text.replace(/\s+/g, " ").trim();
   ctx.save();
-  ctx.font =
-    kind === "action"
-      ? "italic 10px sans-serif"
-      : kind === "player"
-        ? "bold 10px sans-serif"
-        : "10px sans-serif";
-  const maxTextWidth = 204,
-    lines: string[] = [];
-  let line = "";
-  for (const character of clean) {
-    const candidate = line + character;
-    if (line && ctx.measureText(candidate).width > maxTextWidth) {
-      lines.push(line);
-      line = character;
-    } else line = candidate;
-  }
-  if (line || !lines.length) lines.push(line);
+  ctx.font = fontFor(kind);
+  const lines = wrapAmbientText(ctx, clean);
   const width = Math.min(
-    220,
-    Math.max(...lines.map((item) => ctx.measureText(item).width)) + 16,
+    BUBBLE_MAX_WIDTH,
+    Math.max(...lines.map((item) => ctx.measureText(item).width)) + 8,
   );
   ctx.restore();
-  return { width, height: lines.length * 14 + 8, lines };
+  return { width, height: lines.length * BUBBLE_LINE_HEIGHT + 2, lines };
 }
 
 /** 把重叠的气泡自动错开：优先在头顶向上堆叠，其次移到角色下方，最后左右平移。 */
@@ -84,7 +82,8 @@ export function resolveAmbientBubbleLayout(
       ...bubble,
       ...m,
       left: Math.max(3, Math.min(W - m.width - 3, bubble.x - m.width / 2)),
-      top: bubble.y - m.height, // 头顶优先位置(暂不钳制，由候选处理)
+      // 头顶优先；双人对话的「脚下」台词则让箱体顶边贴在基准点下方。
+      top: bubble.preferBelow ? bubble.y + 2 : bubble.y - m.height,
       baseY: bubble.y,
     };
   });
@@ -140,79 +139,32 @@ export function resolveAmbientBubbleLayout(
   return placed;
 }
 
-export function drawAmbientBubble(
-  ctx: CanvasRenderingContext2D,
-  box: AmbientBubbleBox,
-) {
-  const { left, top, width, height, lines, kind } = box,
-    accent = kind === "action" ? "#77d6c7" : kind === "player" ? "#8ecbff" : "#f0cf71";
+/** 绘制头顶台词：无背景框，深色描边+阴影保证任何底色上可读；「to」显示为箭头，动作青色斜体、独白白色。 */
+export function drawAmbientBubble(ctx: CanvasRenderingContext2D, box: AmbientBubbleBox) {
+  const { left, top, width, kind, lines } = box,
+    monologue = box.text.includes("自言自语"),
+    accent = kind === "action"
+      ? "#77d6c7"
+      : kind === "player"
+        ? "#8ecbff"
+        : monologue
+          ? "#ffffff"
+          : "#f0cf71";
   ctx.save();
-  ctx.font =
-    kind === "action"
-      ? "italic 10px sans-serif"
-      : kind === "player"
-        ? "bold 10px sans-serif"
-        : "10px sans-serif";
-  ctx.fillStyle = "rgba(5,12,8,.94)";
-  ctx.strokeStyle =
-    kind === "action"
-      ? "rgba(82,174,162,.82)"
-      : kind === "player"
-        ? "rgba(91,166,224,.95)"
-        : "rgba(193,157,75,.86)";
-  ctx.lineWidth = 1;
-  ctx.fillRect(left, top, width, height);
-  ctx.strokeRect(left + 0.5, top + 0.5, width - 1, height - 1);
-  ctx.fillStyle = accent;
+  ctx.font = fontFor(kind);
   ctx.textAlign = "center";
-  lines.forEach((line, index) =>
-    ctx.fillText(line, left + width / 2, top + 14 + index * 14),
-  );
-  ctx.restore();
-}
-
-function conversationParts(value: string) {
-  const clean = value.replace(/^群聊\s*·\s*/, "").trim(),
-    routed = clean.match(/^(.+?)\s+to\s+(.+?)：[“"]?(.*?)[”"]?$/);
-  if (routed) return { route: `${routed[1]} → ${routed[2]}`, text: routed[3] };
-  const solo = clean.match(/^(.+?)(?:自言自语|正在和环境交互)：[“"]?(.*?)[”"]?$/);
-  return solo ? { route: solo[1], text: solo[2] } : { route: "交谈", text: clean };
-}
-
-export function layoutConversationCard(ctx: CanvasRenderingContext2D, card: ConversationCardInput): ConversationCardBox {
-  const width = 218,
-    entries = card.lines.slice(-3).map(conversationParts),
-    wrapped = entries.map((entry) => {
-      const lines: string[] = []; let line = "";
-      ctx.save(); ctx.font = "9px sans-serif";
-      for (const character of entry.text) {
-        const next = line + character;
-        if (line && ctx.measureText(next).width > width - 20) { lines.push(line); line = character; }
-        else line = next;
-      }
-      if (line) lines.push(line);
-      ctx.restore();
-      return { ...entry, lines };
-    }),
-    height = 14 + wrapped.reduce((sum, entry) => sum + 13 + entry.lines.length * 12 + 3, 0),
-    left = Math.max(5, Math.min(W - width - 5, card.x - width / 2)),
-    top = Math.max(5, Math.min(H - height - 5, card.y - height));
-  return { ...card, left, top, width, height, entries: wrapped };
-}
-
-export function drawConversationCard(ctx: CanvasRenderingContext2D, card: ConversationCardBox) {
-  const { left, top, width, height, entries } = card;
-  ctx.save();
-  ctx.fillStyle = card.playerInvolved ? "rgba(5,13,20,.97)" : "rgba(5,12,10,.95)"; ctx.fillRect(left, top, width, height);
-  ctx.strokeStyle = card.playerInvolved ? "rgba(91,166,224,.98)" : "rgba(207,177,95,.88)"; ctx.lineWidth = card.playerInvolved ? 2 : 1.5; ctx.strokeRect(left + .75, top + .75, width - 1.5, height - 1.5);
-  let cursor = top + 14;
-  entries.forEach((entry, index) => {
-    const playerRoute = card.playerName && entry.route.split(" → ").includes(card.playerName);
-    ctx.textAlign = "left"; ctx.font = "bold 9px sans-serif"; ctx.fillStyle = playerRoute ? "#8ecbff" : index === entries.length - 1 ? "#f2d67f" : "#9eb7aa";
-    ctx.fillText(entry.route, left + 9, cursor); cursor += 13;
-    ctx.font = "9px sans-serif"; ctx.fillStyle = "#e8eadf";
-    entry.lines.forEach((line) => { ctx.fillText(line, left + 10, cursor); cursor += 12; });
-    cursor += 3;
+  ctx.shadowColor = "rgba(0,0,0,.95)";
+  ctx.shadowBlur = 3;
+  ctx.shadowOffsetX = 1;
+  ctx.shadowOffsetY = 1;
+  ctx.strokeStyle = "rgba(0,0,0,.9)";
+  ctx.lineWidth = 2;
+  ctx.fillStyle = accent;
+  lines.forEach((line, index) => {
+    const text = line.replace(/ to /g, " → "),
+      baselineY = top + BUBBLE_LINE_HEIGHT + index * BUBBLE_LINE_HEIGHT;
+    ctx.strokeText(text, left + width / 2, baselineY);
+    ctx.fillText(text, left + width / 2, baselineY);
   });
   ctx.restore();
 }

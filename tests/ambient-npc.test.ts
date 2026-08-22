@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { ambientCanHear, ambientNpcAt, ambientNpcByEventId, ambientNpcByName, ambientNpcsByName, ambientNpcInPlayerRange, ambientNpcInViewport, ambientViewportBounds, createAmbientWorld, resetAmbientSessions, tickAmbientWorld } from "../app/game-core/ambient-npc";
+import { AMBIENT_BUBBLE_MS, ambientCanHear, ambientNpcAt, ambientNpcByEventId, ambientNpcByName, ambientNpcsByName, ambientNpcInPlayerRange, ambientNpcInViewport, ambientViewportBounds, countActiveNpcConversations, createAmbientWorld, pairConversationShouldEnd, resetAmbientSessions, tickAmbientWorld } from "../app/game-core/ambient-npc";
 
 test("ambient NPCs exist only in the initialized current map", () => {
   const world = createAmbientWorld(2, 0, [{ eventId: 1, npcId: 3, name: "捕快", identity: "官差", x: 4, y: 4 }]);
@@ -91,7 +91,7 @@ test("ambient movement respects the supplied collision gate and home radius", ()
   assert.deepEqual([world.npcs[0].x, world.npcs[0].y], [4, 4]);
 });
 
-test("nearby NPC conversation displays one speaker at a time", () => {
+test("nearby pair conversation shows both speakers' bubbles in parallel", () => {
   const world = createAmbientWorld(2, 0, [
     { eventId: 1, npcId: 3, name: "甲", identity: "侠客", x: 4, y: 4 },
     { eventId: 2, npcId: 4, name: "乙", identity: "商人", x: 5, y: 4 },
@@ -99,11 +99,12 @@ test("nearby NPC conversation displays one speaker at a time", () => {
   const [first, second] = world.npcs;
   first.partnerId = second.eventId; second.partnerId = first.eventId;
   first.conversationTurn = 1; second.conversationTurn = 2;
-  first.bubble = "“近来可好？”"; first.bubbleUntil = 100;
-  second.queuedBubble = "“一切尚好。”"; second.bubbleUntil = 1000;
+  first.conversationRound = second.conversationRound = 1;
+  first.bubble = "甲 to 乙：“近来可好？”"; first.bubbleUntil = 5000;
+  second.bubble = "乙 to 甲：“一切尚好。”"; second.bubbleUntil = 5000;
   tickAmbientWorld({ world, now: 200, playerX: 10, playerY: 10, indoor: false, canEnter: () => true });
-  assert.equal(first.bubble, "");
-  assert.equal(second.bubble, "“一切尚好。”");
+  assert.equal(first.bubble, "甲 to 乙：“近来可好？”");
+  assert.equal(second.bubble, "乙 to 甲：“一切尚好。”");
 });
 
 test("paired NPCs continue the same session for a second exchange", () => {
@@ -317,4 +318,258 @@ test("NPCs merely inside the initiator circle but not mutually heard stay a pair
   assert.equal(a.groupId, 0);
   assert.equal(b.groupId, 0);
   assert.equal(c.groupId, 0);
+});
+
+test("pairConversationShouldEnd rolls deterministically from round four", () => {
+  // mapId=2 的确定性子：1-3 轮恒不结束；(1,2) 第 6 轮结束，(3,4) 第 7 轮结束
+  assert.equal(pairConversationShouldEnd(2, 1, 2, 1), false);
+  assert.equal(pairConversationShouldEnd(2, 1, 2, 3), false);
+  assert.equal(pairConversationShouldEnd(2, 1, 2, 4), false);
+  assert.equal(pairConversationShouldEnd(2, 1, 2, 6), true);
+  assert.equal(pairConversationShouldEnd(2, 3, 4, 7), true);
+  assert.equal(pairConversationShouldEnd(2, 3, 4, 5), false);
+  // 与双方顺序无关（种子用 Math.min）
+  assert.equal(pairConversationShouldEnd(2, 2, 1, 6), pairConversationShouldEnd(2, 1, 2, 6));
+});
+
+test("a pair ends naturally when the round roll says so", () => {
+  const world = createAmbientWorld(2, 0, [
+    { eventId: 1, npcId: 3, name: "甲", identity: "侠客", x: 4, y: 4 },
+    { eventId: 2, npcId: 4, name: "乙", identity: "商人", x: 5, y: 4 },
+  ]);
+  const [first, second] = world.npcs;
+  first.partnerId = second.eventId; second.partnerId = first.eventId;
+  first.conversationTurn = 3; second.conversationTurn = 2;
+  first.conversationRound = second.conversationRound = 6;
+  first.nextPair = second.nextPair = { a: "甲 to 乙：“续。”", b: "乙 to 甲：“续。”" };
+  second.bubble = "乙 to 甲：“最后一轮。”"; second.bubbleUntil = 100;
+  tickAmbientWorld({ world, now: 200, playerX: 10, playerY: 10, indoor: false, canEnter: () => true });
+  assert.deepEqual([first.partnerId, second.partnerId], [0, 0]);
+  assert.equal(first.conversationRound, 0);
+  assert.equal(first.nextPair, undefined);
+  assert.equal(first.nextPairPending, false);
+  assert.equal(first.partnerCooldownUntil, 200 + 30000);
+});
+
+test("a pair that keeps going advances to the next round on demand", () => {
+  const world = createAmbientWorld(2, 0, [
+    { eventId: 1, npcId: 3, name: "甲", identity: "侠客", x: 4, y: 4 },
+    { eventId: 2, npcId: 4, name: "乙", identity: "商人", x: 5, y: 4 },
+  ]);
+  const [first, second] = world.npcs;
+  first.partnerId = second.eventId; second.partnerId = first.eventId;
+  first.conversationTurn = 3; second.conversationTurn = 2;
+  first.conversationRound = second.conversationRound = 4;
+  second.bubble = "乙 to 甲：“还要说。”"; second.bubbleUntil = 100;
+  tickAmbientWorld({ world, now: 200, playerX: 10, playerY: 10, indoor: false, canEnter: () => true });
+  assert.equal(first.conversationRound, 5);
+  assert.equal(second.conversationRound, 5);
+  assert.equal(first.generationPending, true);
+  assert.equal(first.nextPairPending, false);
+  assert.equal(first.speechTargetName, "乙");
+  assert.equal(second.queuedBubble, "");
+});
+
+test("a buffered prefetched pair promotes seamlessly at round close", () => {
+  const world = createAmbientWorld(2, 0, [
+    { eventId: 1, npcId: 3, name: "甲", identity: "侠客", x: 4, y: 4 },
+    { eventId: 2, npcId: 4, name: "乙", identity: "商人", x: 5, y: 4 },
+  ]);
+  const [first, second] = world.npcs;
+  first.partnerId = second.eventId; second.partnerId = first.eventId;
+  first.conversationTurn = 3; second.conversationTurn = 2;
+  first.conversationRound = second.conversationRound = 4;
+  first.nextPair = second.nextPair = { a: "甲 to 乙：“第二问。”", b: "乙 to 甲：“第二答。”" };
+  second.bubble = "乙 to 甲：“第一答。”"; second.bubbleUntil = 100;
+  tickAmbientWorld({ world, now: 200, playerX: 10, playerY: 10, indoor: false, canEnter: () => true });
+  assert.equal(first.conversationRound, 5);
+  assert.equal(first.bubble, "甲 to 乙：“第二问。”");
+  assert.equal(second.bubble, "乙 to 甲：“第二答。”");
+  assert.equal(second.queuedBubble, "");
+  assert.equal(first.nextPair, undefined);
+  assert.equal(first.generationPending, true);
+  assert.equal(first.nextPairPending, true);
+  assert.equal(first.bubbleUntil, second.bubbleUntil);
+  assert.equal(first.bubbleUntil, 200 + AMBIENT_BUBBLE_MS);
+  assert.deepEqual(first.conversationContext, ["甲 to 乙：“第二问。”", "乙 to 甲：“第二答。”"]);
+  assert.equal(second.speechTargetName, "甲");
+});
+
+test("a pending prefetch makes the pair wait instead of double-requesting", () => {
+  const world = createAmbientWorld(2, 0, [
+    { eventId: 1, npcId: 3, name: "甲", identity: "侠客", x: 4, y: 4 },
+    { eventId: 2, npcId: 4, name: "乙", identity: "商人", x: 5, y: 4 },
+  ]);
+  const [first, second] = world.npcs;
+  first.partnerId = second.eventId; second.partnerId = first.eventId;
+  first.conversationTurn = 3; second.conversationTurn = 2;
+  first.conversationRound = second.conversationRound = 4;
+  first.nextPairPending = second.nextPairPending = true;
+  first.generationPending = true; first.queuedAt = 150;
+  second.bubble = "乙 to 甲：“等一下。”"; second.bubbleUntil = 100;
+  tickAmbientWorld({ world, now: 200, playerX: 10, playerY: 10, indoor: false, canEnter: () => true });
+  assert.equal(first.conversationRound, 4);
+  assert.equal(second.bubble, "");
+  // 预取就绪后下一 tick 无缝提升（双方同时写入）
+  first.nextPair = second.nextPair = { a: "甲 to 乙：“续。”", b: "乙 to 甲：“续。”" };
+  tickAmbientWorld({ world, now: 201, playerX: 10, playerY: 10, indoor: false, canEnter: () => true });
+  assert.equal(first.conversationRound, 5);
+  assert.equal(first.bubble, "甲 to 乙：“续。”");
+  assert.equal(second.bubble, "乙 to 甲：“续。”");
+});
+
+test("a stalled prefetch times out and falls back to on-demand", () => {
+  const world = createAmbientWorld(2, 0, [
+    { eventId: 1, npcId: 3, name: "甲", identity: "侠客", x: 4, y: 4 },
+    { eventId: 2, npcId: 4, name: "乙", identity: "商人", x: 5, y: 4 },
+  ]);
+  const [first, second] = world.npcs;
+  first.partnerId = second.eventId; second.partnerId = first.eventId;
+  first.conversationTurn = 3; second.conversationTurn = 2;
+  first.conversationRound = second.conversationRound = 4;
+  first.nextPairPending = second.nextPairPending = true;
+  first.generationPending = true; first.queuedAt = 0;
+  second.bubble = "乙 to 甲：“太久了。”"; second.bubbleUntil = 100;
+  tickAmbientWorld({ world, now: 25000, playerX: 10, playerY: 10, indoor: false, canEnter: () => true });
+  assert.equal(first.conversationRound, 5);
+  assert.equal(first.generationPending, true);
+  assert.equal(first.nextPairPending, false);
+  assert.equal(first.llmRequested, false);
+  assert.equal(second.llmRequested, true);
+});
+
+test("countActiveNpcConversations counts pairs and groups, excluding player-paused NPCs", () => {
+  const viewport = { left: 0, top: 0, right: 20, bottom: 15 };
+  const world = createAmbientWorld(2, 0, [
+    { eventId: 1, npcId: 1, name: "甲", identity: "侠客", x: 1, y: 1 },
+    { eventId: 2, npcId: 2, name: "乙", identity: "商人", x: 2, y: 1 },
+    { eventId: 3, npcId: 3, name: "丙", identity: "书生", x: 3, y: 1 },
+    { eventId: 4, npcId: 4, name: "丁", identity: "镖师", x: 4, y: 1 },
+    { eventId: 5, npcId: 5, name: "戊", identity: "货郎", x: 5, y: 1 },
+  ]);
+  assert.equal(countActiveNpcConversations(world, viewport), 0);
+  world.npcs[0].partnerId = 2; world.npcs[1].partnerId = 1;
+  assert.equal(countActiveNpcConversations(world, viewport), 1);
+  world.npcs[2].partnerId = 4; world.npcs[3].partnerId = 3;
+  assert.equal(countActiveNpcConversations(world, viewport), 2);
+  for (const npc of world.npcs.slice(0, 3)) { npc.groupId = 1; npc.groupMembers = [1, 2, 3]; npc.partnerId = 0; }
+  world.npcs[3].partnerId = 0; world.npcs[4].partnerId = 0;
+  assert.equal(countActiveNpcConversations(world, viewport), 1);
+  world.npcs[3].partnerId = 5; world.npcs[4].partnerId = 4;
+  assert.equal(countActiveNpcConversations(world, viewport), 2);
+  assert.equal(countActiveNpcConversations(world, viewport, new Set([1, 2, 3])), 1);
+  assert.equal(countActiveNpcConversations(world, viewport, new Set([1, 2, 3, 4, 5])), 0);
+});
+
+test("a third pair is deferred while two conversations already run", () => {
+  const viewport = { left: 0, top: 0, right: 20, bottom: 15 };
+  const world = createAmbientWorld(2, 0, [
+    { eventId: 1, npcId: 1, name: "甲", identity: "侠客", x: 1, y: 1 },
+    { eventId: 2, npcId: 2, name: "乙", identity: "商人", x: 2, y: 1 },
+    { eventId: 3, npcId: 3, name: "丙", identity: "书生", x: 1, y: 3 },
+    { eventId: 4, npcId: 4, name: "丁", identity: "镖师", x: 2, y: 3 },
+    { eventId: 5, npcId: 5, name: "戊", identity: "货郎", x: 5, y: 5 },
+    { eventId: 6, npcId: 6, name: "己", identity: "花匠", x: 7, y: 5 },
+  ]);
+  const [a, b, c, d, e, f] = world.npcs;
+  for (const [lead, follow] of [[a, b], [c, d]] as const) {
+    lead.partnerId = follow.eventId; follow.partnerId = lead.eventId;
+    lead.conversationTurn = 1; follow.conversationTurn = 2;
+    lead.bubble = `${lead.name} to ${follow.name}：……`; lead.bubbleUntil = 8000;
+    follow.queuedBubble = "……"; follow.bubbleUntil = 8000;
+  }
+  e.nextBehaviorAt = 0; f.nextBehaviorAt = 1000000;
+  tickAmbientWorld({ world, now: 1001, playerX: 30, playerY: 30, indoor: false, viewport, canEnter: () => true });
+  assert.equal(e.partnerId, 0);
+  assert.ok(e.nextBehaviorAt > 1001);
+});
+
+test("a pair still forms while a single conversation is running", () => {
+  const viewport = { left: 0, top: 0, right: 20, bottom: 15 };
+  const world = createAmbientWorld(2, 0, [
+    { eventId: 1, npcId: 1, name: "甲", identity: "侠客", x: 1, y: 1 },
+    { eventId: 2, npcId: 2, name: "乙", identity: "商人", x: 2, y: 1 },
+    { eventId: 5, npcId: 5, name: "戊", identity: "货郎", x: 5, y: 5 },
+    { eventId: 6, npcId: 6, name: "己", identity: "花匠", x: 7, y: 5 },
+  ]);
+  const [a, b, e, f] = world.npcs;
+  a.partnerId = 2; b.partnerId = 1;
+  a.conversationTurn = 1; b.conversationTurn = 2;
+  a.bubble = "甲 to 乙：……"; a.bubbleUntil = 8000;
+  b.queuedBubble = "……"; b.bubbleUntil = 8000;
+  e.nextBehaviorAt = 0; f.nextBehaviorAt = 1000000;
+  tickAmbientWorld({ world, now: 1001, playerX: 30, playerY: 30, indoor: false, viewport, canEnter: () => true });
+  assert.equal(e.partnerId, f.eventId);
+  assert.equal(f.partnerId, e.eventId);
+});
+
+test("a player-owned conversation does not consume the cap", () => {
+  const viewport = { left: 0, top: 0, right: 20, bottom: 15 };
+  const world = createAmbientWorld(2, 0, [
+    { eventId: 1, npcId: 1, name: "甲", identity: "侠客", x: 1, y: 1 },
+    { eventId: 2, npcId: 2, name: "乙", identity: "商人", x: 2, y: 1 },
+    { eventId: 5, npcId: 5, name: "戊", identity: "货郎", x: 5, y: 5 },
+    { eventId: 6, npcId: 6, name: "己", identity: "花匠", x: 7, y: 5 },
+  ]);
+  const [a, b, e, f] = world.npcs;
+  a.partnerId = 2; b.partnerId = 1;
+  a.conversationTurn = 1; b.conversationTurn = 2;
+  a.bubble = "甲 to 乙：……"; a.bubbleUntil = 8000;
+  b.queuedBubble = "……"; b.bubbleUntil = 8000;
+  e.nextBehaviorAt = 0; f.nextBehaviorAt = 1000000;
+  tickAmbientWorld({ world, now: 1001, playerX: 30, playerY: 30, indoor: false, viewport, pausedConversationNpcIds: [1, 2], canEnter: () => true });
+  assert.equal(e.partnerId, f.eventId);
+});
+
+test("the conversation cap drops to one while a player conversation is active", () => {
+  const viewport = { left: 0, top: 0, right: 20, bottom: 15 };
+  const world = createAmbientWorld(2, 0, [
+    { eventId: 1, npcId: 1, name: "甲", identity: "侠客", x: 1, y: 1 },
+    { eventId: 2, npcId: 2, name: "乙", identity: "商人", x: 2, y: 1 },
+    { eventId: 5, npcId: 5, name: "戊", identity: "货郎", x: 5, y: 5 },
+    { eventId: 6, npcId: 6, name: "己", identity: "花匠", x: 7, y: 5 },
+  ]);
+  const [a, b, e, f] = world.npcs;
+  a.partnerId = 2; b.partnerId = 1;
+  a.conversationTurn = 1; b.conversationTurn = 2;
+  a.bubble = "甲 to 乙：……"; a.bubbleUntil = 8000;
+  b.queuedBubble = "……"; b.bubbleUntil = 8000;
+  e.nextBehaviorAt = 0; f.nextBehaviorAt = 1000000;
+  tickAmbientWorld({ world, now: 1001, playerX: 30, playerY: 30, indoor: false, viewport, pausedConversationNpcIds: [9], canEnter: () => true });
+  assert.equal(e.partnerId, 0);
+  assert.ok(e.nextBehaviorAt > 1001);
+});
+
+test("reset sites clear the prefetch buffer and pending flag", () => {
+  const world = createAmbientWorld(2, 0, [
+    { eventId: 1, npcId: 1, name: "甲", identity: "侠客", x: 4, y: 4 },
+    { eventId: 2, npcId: 2, name: "乙", identity: "商人", x: 5, y: 4 },
+  ]);
+  for (const npc of world.npcs) {
+    npc.partnerId = npc.eventId === 1 ? 2 : 1;
+    npc.nextPair = { a: "a", b: "b" };
+    npc.nextPairPending = true;
+  }
+  resetAmbientSessions(world, 1700);
+  for (const npc of world.npcs) {
+    assert.equal(npc.partnerId, 0);
+    assert.equal(npc.nextPair, undefined);
+    assert.equal(npc.nextPairPending, false);
+    assert.equal(npc.nextBehaviorAt, 1700);
+  }
+});
+
+test("leaving the active window clears the prefetch buffer", () => {
+  const world = createAmbientWorld(2, 0, [
+    { eventId: 1, npcId: 3, name: "甲", identity: "侠客", x: 30, y: 30 },
+    { eventId: 2, npcId: 4, name: "乙", identity: "商人", x: 31, y: 30 },
+  ]);
+  const [first, second] = world.npcs;
+  first.partnerId = 2; second.partnerId = 1;
+  first.nextPair = second.nextPair = { a: "a", b: "b" };
+  first.nextPairPending = second.nextPairPending = true;
+  tickAmbientWorld({ world, now: 1000, playerX: 5, playerY: 5, indoor: false, canEnter: () => true });
+  assert.deepEqual([first.nextPair, second.nextPair], [undefined, undefined]);
+  assert.equal(first.nextPairPending, false);
+  assert.equal(second.nextPairPending, false);
 });

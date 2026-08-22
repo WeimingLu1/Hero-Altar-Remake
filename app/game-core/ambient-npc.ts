@@ -33,6 +33,10 @@ export type AmbientNpc = {
   groupMembers: number[];
   groupTurn: number;
   groupNextAt: number;
+  /** 预取缓冲的下一对台词，双方成员镜像持有（轮转时读取 A 一份为准）。 */
+  nextPair?: { a: string; b: string };
+  /** 预取请求是否在途（区别于 generationPending 的"当前轮"）。 */
+  nextPairPending?: boolean;
 };
 
 export type AmbientWorld = {
@@ -110,14 +114,48 @@ export function ambientNpcInViewport(npc: Pick<AmbientNpc, "x" | "y">, viewport:
   return npc.x >= viewport.left && npc.x < viewport.right && npc.y >= viewport.top && npc.y < viewport.bottom;
 }
 
+/**
+ * 当前视野内纯 NPC 对话会话数（玩家参与的不计）。
+ * 群会话 = 活跃非暂停 NPC 的去重 groupId 数；双人 = 每对计一次（eventId < partnerId）。
+ */
+export function countActiveNpcConversations(
+  world: AmbientWorld,
+  viewport: AmbientViewport,
+  pausedIds: ReadonlySet<number> = new Set(),
+) {
+  let groups = 0, pairs = 0;
+  const seenGroups = new Set<number>();
+  for (const item of world.npcs) {
+    if (!ambientNpcInViewport(item, viewport) || pausedIds.has(item.eventId)) continue;
+    if (item.groupId > 0) {
+      if (!seenGroups.has(item.groupId)) {
+        seenGroups.add(item.groupId);
+        groups += 1;
+      }
+    } else if (item.partnerId > 0 && item.eventId < item.partnerId) {
+      pairs += 1;
+    }
+  }
+  return groups + pairs;
+}
+
 export function resetAmbientSessions(world: AmbientWorld, resumeAt: number) {
   for (const npc of world.npcs) {
     npc.partnerId = 0; npc.groupId = 0; npc.groupMembers = []; npc.groupTurn = -1; npc.groupNextAt = 0;
     npc.conversationTurn = 0; npc.conversationRound = 0; npc.lastPartnerId = 0;
     npc.bubble = ""; npc.queuedBubble = ""; npc.generationPending = false; npc.llmRequested = true;
-    npc.speechTargetName = ""; npc.speechTargetEventId = 0; npc.conversationContext = []; npc.nextBehaviorAt = resumeAt;
+    npc.speechTargetName = ""; npc.speechTargetEventId = 0; npc.conversationContext = []; npc.nextPair = undefined; npc.nextPairPending = false; npc.nextBehaviorAt = resumeAt;
   }
 }
+
+/** 双人会话前几轮不掷散场骰；此后每轮按 PAIR_END_PERCENT 概率成为最后一轮。 */
+export const PAIR_MIN_ROUNDS = 4;
+export const PAIR_END_PERCENT = 15;
+/** 屏幕上最多同时进行的纯 NPC 对话会话数；玩家参与时降为 1。 */
+export const MAX_NPC_CONVERSATIONS = 2;
+export const MAX_NPC_CONVERSATIONS_WITH_PLAYER = 1;
+/** 头顶气泡固定停留时长（毫秒）；新台词到达即替换。 */
+export const AMBIENT_BUBBLE_MS = 8000;
 
 const hash = (value: number) => {
   let next = value | 0;
@@ -125,6 +163,32 @@ const hash = (value: number) => {
   next = Math.imul(next ^ (next >>> 16), 0x45d9f3b);
   return (next ^ (next >>> 16)) >>> 0;
 };
+
+/**
+ * 双人会话散场骰子。用 mapId、双方较小 eventId 与轮次做确定性种子，
+ * 与 now 无关——调度时刻与轮转时刻算同一值，跨 tick 稳定且可测。
+ */
+export function pairConversationSeed(
+  mapId: number,
+  aEventId: number,
+  bEventId: number,
+  round: number,
+) {
+  return hash(mapId * 17 + Math.min(aEventId, bEventId) * 131 + round * 7919);
+}
+
+/** 第 PAIR_MIN_ROUNDS 轮起，每轮按 PAIR_END_PERCENT 概率成为最后一轮。 */
+export function pairConversationShouldEnd(
+  mapId: number,
+  aEventId: number,
+  bEventId: number,
+  round: number,
+) {
+  return (
+    round >= PAIR_MIN_ROUNDS &&
+    pairConversationSeed(mapId, aEventId, bEventId, round) % 100 < PAIR_END_PERCENT
+  );
+}
 
 export function createAmbientWorld(
   mapId: number,
@@ -160,6 +224,8 @@ export function createAmbientWorld(
       groupMembers: [],
       groupTurn: -1,
       groupNextAt: 0,
+      nextPair: undefined,
+      nextPairPending: false,
     })),
   };
   ensureAmbientIndexes(world);
@@ -224,7 +290,7 @@ export function tickAmbientWorld(options: {
     for (const item of world.npcs.filter((candidate) => memberIds.has(candidate.eventId))) {
       item.bubble = ""; item.queuedBubble = ""; item.generationPending = false; item.speechTargetName = ""; item.speechTargetEventId = 0; item.groupId = 0; item.groupMembers = [];
       item.groupTurn = -1; item.groupNextAt = 0; item.nextBehaviorAt = resumeAt; item.conversationContext = [];
-      item.partnerCooldownUntil = now + 30000;
+      item.nextPair = undefined; item.nextPairPending = false; item.partnerCooldownUntil = now + 30000;
     }
   };
   for (const npc of world.npcs.filter((item) => !isActive(item))) {
@@ -234,11 +300,12 @@ export function tickAmbientWorld(options: {
       if (partner) {
         partner.partnerId = 0; partner.conversationTurn = 0; partner.conversationRound = 0;
         partner.conversationContext = []; partner.bubble = ""; partner.queuedBubble = ""; partner.generationPending = false; partner.speechTargetName = ""; partner.speechTargetEventId = 0;
-        partner.nextBehaviorAt = now + 700;
+        partner.nextPair = undefined; partner.nextPairPending = false; partner.nextBehaviorAt = now + 700;
       }
     }
     npc.x = npc.homeX; npc.y = npc.homeY; npc.partnerId = 0; npc.conversationTurn = 0; npc.conversationRound = 0; npc.conversationContext = [];
-    npc.bubble = ""; npc.queuedBubble = ""; npc.generationPending = false; npc.speechTargetName = ""; npc.speechTargetEventId = 0; npc.waitingForPlayer = false; npc.nextBehaviorAt = now + 700;
+    npc.bubble = ""; npc.queuedBubble = ""; npc.generationPending = false; npc.speechTargetName = ""; npc.speechTargetEventId = 0; npc.waitingForPlayer = false;
+    npc.nextPair = undefined; npc.nextPairPending = false; npc.nextBehaviorAt = now + 700;
   }
   for (const npc of world.npcs) {
     if (!isActive(npc)) continue;
@@ -310,14 +377,15 @@ export function tickAmbientWorld(options: {
       }
       continue;
     }
+    // 统一守卫：partnerId 指向已不存在的人物时立即清理，避免任何 turn 卡死。
+    if (npc.partnerId && !ambientNpcByEventId(world, npc.partnerId)) {
+      npc.partnerId = 0; npc.speechTargetName = ""; npc.speechTargetEventId = 0; npc.conversationTurn = 0; npc.conversationRound = 0;
+      npc.conversationContext = []; npc.generationPending = false; npc.nextPair = undefined; npc.nextPairPending = false; npc.nextBehaviorAt = now + 700;
+      continue;
+    }
     if (npc.partnerId && npc.conversationTurn === 0) {
       if (pausedConversationNpcIds.has(npc.eventId)) continue;
-      const partner = ambientNpcByEventId(world, npc.partnerId);
-      if (!partner) {
-        npc.partnerId = 0; npc.speechTargetName = ""; npc.speechTargetEventId = 0; npc.conversationTurn = 0; npc.conversationRound = 0;
-        npc.conversationContext = []; npc.generationPending = false; npc.nextBehaviorAt = now + 700;
-        continue;
-      }
+      const partner = ambientNpcByEventId(world, npc.partnerId)!;
       if (!ambientCanHear(npc, partner)) {
         stepToward(npc, partner);
         npc.nextBehaviorAt = now + 500;
@@ -336,7 +404,8 @@ export function tickAmbientWorld(options: {
           const members = candidates, ids = members.map((item) => item.eventId), groupId = Math.min(...ids);
           for (const member of members) {
             member.groupId = groupId; member.groupMembers = ids; member.groupTurn = -1; member.groupNextAt = 0;
-            member.partnerId = 0; member.conversationTurn = 0; member.bubble = ""; member.speechTargetName = ""; member.speechTargetEventId = 0; member.nextBehaviorAt = now + 300;
+            member.partnerId = 0; member.conversationTurn = 0; member.bubble = ""; member.speechTargetName = ""; member.speechTargetEventId = 0;
+            member.nextPair = undefined; member.nextPairPending = false; member.nextBehaviorAt = now + 300;
           }
           continue;
         }
@@ -354,48 +423,63 @@ export function tickAmbientWorld(options: {
       }
       continue;
     }
-    if (npc.partnerId && npc.conversationTurn === 1 && npc.bubbleUntil <= now) {
-      if (pausedConversationNpcIds.has(npc.eventId)) continue;
-      if (npc.generationPending) continue;
-      const partner = ambientNpcByEventId(world, npc.partnerId);
-      if (!partner) {
-        npc.partnerId = 0; npc.speechTargetName = ""; npc.speechTargetEventId = 0; npc.conversationTurn = 0; npc.conversationRound = 0;
-        npc.conversationContext = []; npc.generationPending = false; npc.nextBehaviorAt = now + 700;
-        continue;
-      }
-      const completedTurn = [npc.bubble, partner?.queuedBubble || ""].filter(Boolean);
-      npc.bubble = "";
-      npc.conversationTurn = 3;
-      if (partner) {
-        const nextContext = [...npc.conversationContext, ...completedTurn].filter((line, index, all) => index === 0 || line !== all[index - 1]).slice(-6);
-        npc.conversationContext = partner.conversationContext = nextContext;
-        partner.bubble = partner.queuedBubble;
-        partner.bubbleShownAt = now;
-        partner.queuedBubble = "";
-        partner.bubbleUntil = now + Math.max(3400, partner.bubble.length * 180);
-      }
-      continue;
-    }
     if (npc.partnerId && npc.conversationTurn === 2 && npc.bubbleUntil <= now) {
       if (pausedConversationNpcIds.has(npc.eventId)) continue;
       if (npc.generationPending) continue;
-      const partner = ambientNpcByEventId(world, npc.partnerId);
-      if (partner && npc.conversationRound < 3) {
-        partner.conversationRound = npc.conversationRound = npc.conversationRound + 1;
-        partner.conversationTurn = 1; npc.conversationTurn = 2;
-        partner.bubble = ""; partner.speechTargetName = npc.name; partner.speechTargetEventId = npc.eventId; partner.generationPending = true; partner.queuedAt = now;
-        npc.bubble = ""; npc.queuedBubble = ""; npc.speechTargetName = partner.name; npc.speechTargetEventId = partner.eventId;
-        partner.bubbleUntil = now + 12000; npc.bubbleUntil = now + 20000;
-        partner.llmRequested = false; npc.llmRequested = true;
+      const partner = ambientNpcByEventId(world, npc.partnerId)!;
+      const round = npc.conversationRound;
+      // 散场判定是确定性纯函数：调度时刻与此刻算同一值，无需存储标志。
+      if (pairConversationShouldEnd(world.mapId, partner.eventId, npc.eventId, round)) {
+        // END：本轮是最后一轮，双方散场并进入冷却。
+        partner.nextPair = npc.nextPair = undefined;
+        partner.nextPairPending = npc.nextPairPending = false;
+        partner.generationPending = false;
+        npc.bubble = ""; npc.queuedBubble = ""; npc.partnerId = 0; npc.speechTargetName = ""; npc.speechTargetEventId = 0; npc.conversationTurn = 0; npc.conversationRound = 0; npc.conversationContext = [];
+        npc.lastPartnerId = partner.eventId; npc.partnerCooldownUntil = now + 30000; npc.nextBehaviorAt = now + 400;
+        partner.bubble = ""; partner.queuedBubble = ""; partner.partnerId = 0; partner.speechTargetName = ""; partner.speechTargetEventId = 0; partner.conversationTurn = 0; partner.conversationRound = 0; partner.conversationContext = [];
+        partner.lastPartnerId = npc.eventId; partner.partnerCooldownUntil = now + 30000; partner.nextBehaviorAt = now + 400;
         continue;
       }
-      const formerPartnerId = npc.partnerId;
-      npc.bubble = ""; npc.partnerId = 0; npc.speechTargetName = ""; npc.speechTargetEventId = 0; npc.conversationTurn = 0; npc.conversationRound = 0; npc.conversationContext = [];
-      npc.lastPartnerId = formerPartnerId; npc.partnerCooldownUntil = now + 30000; npc.nextBehaviorAt = now + 400;
-      if (partner) {
-        partner.bubble = ""; partner.partnerId = 0; partner.speechTargetName = ""; partner.speechTargetEventId = 0; partner.conversationTurn = 0; partner.conversationRound = 0; partner.conversationContext = [];
-        partner.lastPartnerId = npc.eventId; partner.partnerCooldownUntil = now + 30000; partner.nextBehaviorAt = now + 400;
+      if (partner.nextPair) {
+        // PROMOTE：预取就绪，双方气泡同时写入、无缝进入下一轮。
+        const { a, b } = partner.nextPair;
+        partner.nextPair = npc.nextPair = undefined;
+        partner.nextPairPending = npc.nextPairPending = false;
+        partner.conversationRound = npc.conversationRound = round + 1;
+        partner.conversationTurn = 1; npc.conversationTurn = 2;
+        partner.bubble = ""; npc.bubble = "";
+        partner.speechTargetName = npc.name; partner.speechTargetEventId = npc.eventId;
+        npc.speechTargetName = partner.name; npc.speechTargetEventId = partner.eventId;
+        partner.bubble = a; partner.bubbleShownAt = now; partner.bubbleKind = "speech";
+        npc.bubble = b; npc.bubbleShownAt = now; npc.bubbleKind = "speech";
+        partner.bubbleUntil = npc.bubbleUntil = now + AMBIENT_BUBBLE_MS;
+        const nextContext = [...npc.conversationContext, a, b].filter(Boolean).slice(-8);
+        partner.conversationContext = npc.conversationContext = nextContext;
+        // 调度下一轮预取（下一轮仍会被允许时才发起）。
+        if (!pairConversationShouldEnd(world.mapId, partner.eventId, npc.eventId, round + 1)) {
+          partner.nextPairPending = npc.nextPairPending = true;
+          partner.generationPending = true; partner.llmRequested = false; partner.queuedAt = now;
+        } else {
+          partner.generationPending = false;
+        }
+        continue;
       }
+      if (partner.nextPairPending) {
+        // WAIT：预取在途，不推进、不双请求；超时后落到 on-demand。
+        npc.bubble = "";
+        if (now - (partner.queuedAt || 0) <= 20000) continue;
+        partner.nextPairPending = npc.nextPairPending = false;
+        partner.generationPending = false;
+      }
+      // ON-DEMAND：首轮或预取失败/超时，现用现请求；完成时由 hook 同时写双方气泡。
+      partner.conversationRound = npc.conversationRound = round + 1;
+      partner.conversationTurn = 1; npc.conversationTurn = 2;
+      partner.bubble = ""; npc.bubble = ""; npc.queuedBubble = "";
+      partner.speechTargetName = npc.name; partner.speechTargetEventId = npc.eventId;
+      npc.speechTargetName = partner.name; npc.speechTargetEventId = partner.eventId;
+      partner.generationPending = true; partner.queuedAt = now;
+      partner.bubbleUntil = now + 12000; npc.bubbleUntil = now + 20000;
+      partner.llmRequested = false; npc.llmRequested = true;
       continue;
     }
     if (npc.bubbleUntil <= now) {
@@ -411,6 +495,14 @@ export function tickAmbientWorld(options: {
     ).slice(0, 3), nearby = nearbyCandidates[0];
     const seed = hash(Math.floor(now / 1000) + npc.eventId * 131 + world.mapId * 17);
     if (nearby && seed % 2 === 0) {
+      // 会话并发上限：玩家参与时降为 1，否则最多 2 组；满则软排队稍后重试。
+      const cap = pausedConversationNpcIds.size > 0
+        ? MAX_NPC_CONVERSATIONS_WITH_PLAYER
+        : MAX_NPC_CONVERSATIONS;
+      if (countActiveNpcConversations(world, viewport, pausedConversationNpcIds) >= cap) {
+        npc.nextBehaviorAt = now + 1500 + seed % 1500;
+        continue;
+      }
       npc.partnerId = nearby.eventId;
       nearby.partnerId = npc.eventId;
       npc.conversationTurn = 0;

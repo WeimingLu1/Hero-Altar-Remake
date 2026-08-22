@@ -2,12 +2,14 @@
 
 import { useCallback, useEffect, useRef } from "react";
 import {
+  AMBIENT_BUBBLE_MS,
   ambientCanHear,
   ambientNpcByEventId,
   ambientNpcByName,
   ambientNpcInViewport,
   ambientViewportBounds,
   createAmbientWorld,
+  pairConversationShouldEnd,
   resetAmbientSessions,
   tickAmbientWorld,
   type AmbientNpc,
@@ -142,6 +144,8 @@ export function useAmbientRuntime({
       npc.speechTargetName = "";
       npc.speechTargetEventId = 0;
       npc.conversationContext = [];
+      npc.nextPair = undefined;
+      npc.nextPairPending = false;
       npc.nextBehaviorAt = Date.now() + 700;
     }
     for (const [controller, job] of ambientControllers.current) {
@@ -231,13 +235,13 @@ export function useAmbientRuntime({
           for (const linked of world.npcs.filter((npc) => priorLinks.has(npc.eventId) && !ids.includes(npc.eventId))) {
             linked.partnerId = 0; linked.groupId = 0; linked.groupMembers = []; linked.groupTurn = -1; linked.groupNextAt = 0;
             linked.bubble = ""; linked.queuedBubble = ""; linked.generationPending = false; linked.speechTargetName = ""; linked.speechTargetEventId = 0;
-            linked.conversationContext = []; linked.nextBehaviorAt = now + 700;
+            linked.conversationContext = []; linked.nextPair = undefined; linked.nextPairPending = false; linked.nextBehaviorAt = now + 700;
           }
           for (const npc of nearby) {
             npc.partnerId = 0; npc.conversationTurn = 0; npc.conversationRound = 0;
             npc.groupId = groupId; npc.groupMembers = groupId ? ids : []; npc.groupTurn = groupId ? -1 : 0; npc.groupNextAt = 0;
             npc.bubble = ""; npc.queuedBubble = ""; npc.generationPending = false; npc.conversationContext = [];
-            npc.nextBehaviorAt = now + 30000;
+            npc.nextPair = undefined; npc.nextPairPending = false; npc.nextBehaviorAt = now + 30000;
           }
           if (!playerStarts) {
             candidate.speechTargetName = current.actor.name || "少侠";
@@ -315,7 +319,7 @@ export function useAmbientRuntime({
       const groupMark = participants.length > 1 ? "群聊 · " : "";
       ambientPlayer.current.bubble = `${groupMark}${current.actor.name || "少侠"} to ${target.name}：“${playerLine}”`;
       ambientPlayer.current.bubbleShownAt = Date.now();
-      ambientPlayer.current.bubbleUntil = Date.now() + Math.max(4200, ambientPlayer.current.bubble.length * 180);
+      ambientPlayer.current.bubbleUntil = Date.now() + AMBIENT_BUBBLE_MS;
       ambientPlayerStarts.current = false;
       participants.forEach((npc) => {
         npc.conversationContext = [...npc.conversationContext, ambientPlayer.current.bubble].slice(-6);
@@ -358,7 +362,6 @@ export function useAmbientRuntime({
     const controller = new AbortController();
     ambientControllers.current.set(controller, { player: false, npcEventId: npc.eventId });
     npc.llmRequested = true;
-    npc.bubbleUntil = Date.now() + 30000;
     const current = stateRef.current,
       map = getOriginalMap(current.position.mapId),
       lore = npcLore(npc.npcId),
@@ -384,6 +387,9 @@ export function useAmbientRuntime({
         : npc.bubbleKind === "action"
           ? `由你随机构思${lore.name}此刻做出的一个简短、具体且符合身份与地点的日常动作。必须由模型现场生成，只输出动作本身，不加姓名、引号、解释、台词或默认占位内容。`
           : `写${lore.name}此刻${isOpening ? "在心里琢磨的一件具体的事——一个疑虑、一个盘算、一个发现或一段牵挂，把它说出来" : "接着心里正琢磨的那件事往下想"}的一句简短自言自语，要有具体的内心活动、判断或感慨，不要泛泛。只输出嘴里实际说出的台词，严禁描写天气、风景、地点、环境、声音、衣物、身体、动作或神态，不加姓名、旁白或解释。`;
+    // 预取请求只缓冲、不写显示，因此不能续显示中气泡的超时窗口（否则当前轮会卡 30s）。
+    const isPrefetch = Boolean(npc.nextPairPending && partner);
+    if (!isPrefetch) npc.bubbleUntil = Date.now() + 30000;
     try {
       const playerName = current.actor.name || "少侠",
         targetsPlayer = npc.speechTargetName === playerName,
@@ -427,13 +433,32 @@ export function useAmbientRuntime({
           .map((line) => cleanAmbientSpeech(line, [npc.name, partner.name]))
           .filter((line): line is string => Boolean(line));
         if (lines.length < 2) throw new Error("LM Studio returned an incomplete paired exchange");
-        npc.bubble = `${npc.name} to ${partner.name}：“${lines[0]}”`;
-        npc.bubbleShownAt = Date.now();
-        npc.generationPending = false;
-        npc.bubbleUntil = Date.now() + Math.max(3400, npc.bubble.length * 180);
-        partner.queuedBubble = `${partner.name} to ${npc.name}：“${lines[1]}”`;
-        const nextContext = [...npc.conversationContext, npc.bubble, partner.queuedBubble].filter(Boolean).slice(-8);
-        npc.conversationContext = partner.conversationContext = nextContext;
+        if (isPrefetch) {
+          // 预取：只缓冲下一对，不动当前显示轮；轮转提升时统一写回与更新上下文。
+          npc.nextPair = partner.nextPair = {
+            a: `${npc.name} to ${partner.name}：“${lines[0]}”`,
+            b: `${partner.name} to ${npc.name}：“${lines[1]}”`,
+          };
+          npc.nextPairPending = partner.nextPairPending = false;
+          npc.generationPending = false;
+        } else {
+          // 并行显示：一轮两句同时写入甲、乙各自头顶气泡，各停留固定时长。
+          npc.bubble = `${npc.name} to ${partner.name}：“${lines[0]}”`;
+          partner.bubble = `${partner.name} to ${npc.name}：“${lines[1]}”`;
+          const shownAt = Date.now();
+          npc.bubbleShownAt = partner.bubbleShownAt = shownAt;
+          npc.generationPending = false;
+          npc.bubbleUntil = partner.bubbleUntil = shownAt + AMBIENT_BUBBLE_MS;
+          const nextContext = [...npc.conversationContext, npc.bubble, partner.bubble].filter(Boolean).slice(-8);
+          npc.conversationContext = partner.conversationContext = nextContext;
+          // 下一轮仍会被允许时立即预取，消除组间死寂。
+          if (!pairConversationShouldEnd(map.id, npc.eventId, partner.eventId, npc.conversationRound)) {
+            npc.nextPairPending = partner.nextPairPending = true;
+            npc.generationPending = true;
+            npc.llmRequested = false;
+            npc.queuedAt = Date.now();
+          }
+        }
       } else {
         const address = npc.speechTargetName ? `${npc.name} to ${npc.speechTargetName}：` : "";
         const participantNames = npc.groupId
@@ -452,7 +477,7 @@ export function useAmbientRuntime({
               : `${groupMark}${npc.name}自言自语：“${generatedLine}”`;
         npc.bubbleShownAt = Date.now();
         npc.generationPending = false;
-        npc.bubbleUntil = Date.now() + Math.max(4200, npc.bubble.length * 180);
+        npc.bubbleUntil = Date.now() + AMBIENT_BUBBLE_MS;
         if (ambientPlayer.current.replyToNpcId === npc.eventId) {
           // 群聊：让队列里下一个成员接着回应(可能回应玩家，也可能随机回应群里另一个人)；
           // 都回完后玩家才能再次开口
@@ -493,20 +518,31 @@ export function useAmbientRuntime({
         }
       }
     } catch {
-      npc.bubble = ""; npc.queuedBubble = ""; npc.generationPending = false;
-      npc.bubbleUntil = Date.now(); npc.nextBehaviorAt = Date.now() + 1800;
-      if (npc.groupId) {
-        for (const member of ambientWorld.current.npcs.filter((item) => npc.groupMembers.includes(item.eventId))) {
-          member.bubble = ""; member.queuedBubble = ""; member.generationPending = false;
-          member.groupId = 0; member.groupMembers = []; member.groupTurn = -1; member.groupNextAt = 0;
-          member.conversationContext = []; member.speechTargetName = ""; member.speechTargetEventId = 0; member.nextBehaviorAt = Date.now() + 1800;
+      if (isPrefetch) {
+        // 预取失败：只清 pending，让轮转落到 on-demand；不杀正在显示的会话。
+        npc.nextPairPending = false;
+        npc.generationPending = false;
+        if (partner) partner.nextPairPending = false;
+      } else {
+        npc.bubble = ""; npc.queuedBubble = ""; npc.generationPending = false;
+        npc.nextPair = undefined; npc.nextPairPending = false;
+        npc.bubbleUntil = Date.now(); npc.nextBehaviorAt = Date.now() + 1800;
+        if (npc.groupId) {
+          for (const member of ambientWorld.current.npcs.filter((item) => npc.groupMembers.includes(item.eventId))) {
+            member.bubble = ""; member.queuedBubble = ""; member.generationPending = false;
+            member.nextPair = undefined; member.nextPairPending = false;
+            member.groupId = 0; member.groupMembers = []; member.groupTurn = -1; member.groupNextAt = 0;
+            member.conversationContext = []; member.speechTargetName = ""; member.speechTargetEventId = 0; member.nextBehaviorAt = Date.now() + 1800;
+          }
         }
-      }
-      if (partner) {
-        npc.partnerId = 0; npc.speechTargetName = ""; npc.speechTargetEventId = 0; npc.conversationTurn = 0; npc.conversationRound = 0; npc.conversationContext = [];
-        partner.bubble = ""; partner.queuedBubble = ""; partner.generationPending = false;
-        partner.partnerId = 0; partner.speechTargetName = ""; partner.speechTargetEventId = 0; partner.conversationTurn = 0; partner.conversationRound = 0; partner.conversationContext = [];
-        partner.bubbleUntil = Date.now(); partner.nextBehaviorAt = Date.now() + 1800;
+        if (partner) {
+          npc.partnerId = 0; npc.speechTargetName = ""; npc.speechTargetEventId = 0; npc.conversationTurn = 0; npc.conversationRound = 0; npc.conversationContext = [];
+          npc.nextPair = undefined; npc.nextPairPending = false;
+          partner.bubble = ""; partner.queuedBubble = ""; partner.generationPending = false;
+          partner.nextPair = undefined; partner.nextPairPending = false;
+          partner.partnerId = 0; partner.speechTargetName = ""; partner.speechTargetEventId = 0; partner.conversationTurn = 0; partner.conversationRound = 0; partner.conversationContext = [];
+          partner.bubbleUntil = Date.now(); partner.nextBehaviorAt = Date.now() + 1800;
+        }
       }
     } finally {
       ambientControllers.current.delete(controller);
@@ -541,7 +577,7 @@ export function useAmbientRuntime({
           if (item.speechTargetName && !target) return false;
           return !target || ambientCanHear(item, target);
         },
-        activeNpcOnlySessions = inRange.filter((item) => !isPlayerWork(item) && (Boolean(item.bubble) || (item.generationPending && item.llmRequested))).length,
+        activeNpcOnlySessions = inRange.filter((item) => !isPlayerWork(item) && (Boolean(item.bubble) || (item.generationPending && item.llmRequested && !item.nextPairPending))).length,
         pending = inRange
           .filter((item) => item.generationPending && !item.llmRequested && conversationIsClose(item))
           .sort((first, second) => {

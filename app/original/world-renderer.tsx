@@ -8,13 +8,10 @@ import {
 import {
   ambientViewportBounds,
   type AmbientBubbleKind,
-  type AmbientNpc,
   type AmbientWorld,
 } from "../game-core/ambient-npc";
 import {
   drawAmbientBubble,
-  drawConversationCard,
-  layoutConversationCard,
   resolveAmbientBubbleLayout,
 } from "../game-core/ambient-bubble-layout";
 import {
@@ -193,48 +190,6 @@ export function CharacterPortrait({
   );
 }
 
-function conversationSessionKey(npc: AmbientNpc, player: AmbientPlayerState) {
-  if (npc.bubbleKind === "action") return "";
-  if (npc.groupId) return `group:${npc.groupId}`;
-  if (npc.partnerId) return `pair:${Math.min(npc.eventId, npc.partnerId)}:${Math.max(npc.eventId, npc.partnerId)}`;
-  if (player.npcIds.includes(npc.eventId) && npc.speechTargetName)
-    return `player:${[...player.npcIds].sort((a, b) => a - b).join(":")}`;
-  const routed = npc.bubble.match(/^(?:群聊\s*·\s*)?(.+?)\s+to\s+(.+?)：/);
-  if (routed) return `route:${[routed[1], routed[2]].sort().join(":")}`;
-  return "";
-}
-
-function collectConversationCards(ambient: AmbientWorld, player: AmbientPlayerState, sx: number, sy: number, playerName: string) {
-  const sessions = new Map<string, AmbientNpc[]>();
-  for (const npc of ambient.npcs) {
-    const key = conversationSessionKey(npc, player);
-    if (!key) continue;
-    sessions.set(key, [...(sessions.get(key) || []), npc]);
-  }
-  return [...sessions.values()].flatMap((members) => {
-    const contexts = members.map((member) => member.conversationContext).sort((a, b) => b.length - a.length),
-      active = members.filter((member) => member.bubble).sort((a, b) => a.bubbleShownAt - b.bubbleShownAt).map((member) => member.bubble),
-      includesPlayer = members.some((member) => player.npcIds.includes(member.eventId)),
-      history = [...(contexts[0] || []), ...active, ...(includesPlayer && player.bubble ? [player.bubble] : [])]
-        .filter((line, index, all) => line && all.indexOf(line) === index)
-        .slice(-3);
-    const live = members.some((member) =>
-      Boolean(member.bubble || member.queuedBubble || member.generationPending),
-    );
-    // conversationContext is prompt history, not visible UI state. Once the
-    // live turn has ended (or movement has detached the player), history must
-    // not resurrect a card or keep it anchored above the protagonist.
-    if (!history.length || (!live && !(includesPlayer && player.bubble))) return [];
-    return [{
-      x: members.reduce((sum, member) => sum + (member.x - sx) * T + 16, 0) / members.length,
-      y: Math.min(...members.map((member) => (member.y - sy) * T - 18)),
-      lines: history,
-      playerInvolved: includesPlayer,
-      playerName,
-    }];
-  });
-}
-
 export function drawWorld(ctx: CanvasRenderingContext2D, state: WorldSave, ambient: AmbientWorld, playerAmbient: AmbientPlayerState) {
   const pos = state.position,
     map = getOriginalMap(pos.mapId),
@@ -242,7 +197,7 @@ export function drawWorld(ctx: CanvasRenderingContext2D, state: WorldSave, ambie
     sx = viewport.left,
     sy = viewport.top,
     roamingByEvent = new Map(ambient.npcs.map((npc) => [npc.eventId, npc])),
-    ambientBubbles: Array<{ x: number; y: number; text: string; kind: AmbientBubbleKind | "player"; shownAt: number }> = [];
+    ambientBubbles: Array<{ x: number; y: number; text: string; kind: AmbientBubbleKind | "player"; shownAt: number; preferBelow?: boolean }> = [];
   ctx.fillStyle = "#0c1410";
   ctx.fillRect(0, 0, W, H);
   const staticMap = staticMapCanvas(map);
@@ -277,13 +232,19 @@ export function drawWorld(ctx: CanvasRenderingContext2D, state: WorldSave, ambie
           killId: state.tasks.killId,
         }),
       );
-      if (roaming?.bubble && !conversationSessionKey(roaming, playerAmbient)) ambientBubbles.push({
-        x: (eventX - sx) * T + 16,
-        y: (eventY - sy) * T - 13,
-        text: roaming.bubble,
-        kind: roaming.bubbleKind,
-        shownAt: roaming.bubbleShownAt,
-      });
+      // 每个 NPC 的台词显示在自己身上；双人成员一人在头顶、一人在脚下(按 eventId 奇偶分)，并错开 ±6px。
+      if (roaming?.bubble) {
+        const pairMember = Boolean(roaming.partnerId),
+          below = pairMember && roaming.eventId % 2 !== 0;
+        ambientBubbles.push({
+          x: (eventX - sx) * T + 16 + (pairMember ? (roaming.eventId % 2 === 0 ? 6 : -6) : 0),
+          y: below ? (eventY - sy) * T + 34 : (eventY - sy) * T - 13,
+          text: roaming.bubble,
+          kind: roaming.bubbleKind,
+          shownAt: roaming.bubbleShownAt,
+          preferBelow: below,
+        });
+      }
     } else if (visual.kind === "door")
       drawDoorMarker(
         ctx,
@@ -342,28 +303,18 @@ export function drawWorld(ctx: CanvasRenderingContext2D, state: WorldSave, ambie
     { sheet: 0, row: state.actor.gender ? 1 : 0 },
     pos.direction,
   );
-  const conversationCards = collectConversationCards(
-    ambient,
-    playerAmbient,
-    sx,
-    sy,
-    state.actor.name || "少侠",
-  )
-      .map((card) => card.playerInvolved ? {
-        ...card,
-        x: (pos.x - sx) * T + 16,
-        y: (pos.y - sy) * T - 13,
-      } : card)
-      .map((card) => layoutConversationCard(ctx, card)),
-    playerGrouped = conversationCards.length > 0 && playerAmbient.npcIds.length > 0;
-  if (playerAmbient.bubble && !playerGrouped) ambientBubbles.push({
-    x: (pos.x - sx) * T + 16,
-    y: (pos.y - sy) * T - 13,
-    text: playerAmbient.bubble,
-    kind: "player",
-    shownAt: playerAmbient.bubbleShownAt,
-  });
-  // 玩家气泡永远最后绘制(最上层)；所有气泡再统一做碰撞错开布局。
+  // 玩家气泡无条件发射(蓝色)；玩家参与对话时气泡放脚下，与 NPC 的头顶台词一上一下分开；玩家最后绘制(最上层)。
+  if (playerAmbient.bubble) {
+    const playerInConversation = playerAmbient.npcIds.length > 0;
+    ambientBubbles.push({
+      x: (pos.x - sx) * T + 16,
+      y: (pos.y - sy) * T + (playerInConversation ? 34 : -13),
+      text: playerAmbient.bubble,
+      kind: "player",
+      shownAt: playerAmbient.bubbleShownAt,
+      preferBelow: playerInConversation,
+    });
+  }
   const placedBubbles = resolveAmbientBubbleLayout(
     ctx,
     ambientBubbles.sort((first, second) =>
@@ -373,12 +324,8 @@ export function drawWorld(ctx: CanvasRenderingContext2D, state: WorldSave, ambie
           ? -1
           : first.shownAt - second.shownAt,
     ),
-    conversationCards,
   );
-  conversationCards.filter((card) => !card.playerInvolved).forEach((card) => drawConversationCard(ctx, card));
   placedBubbles.forEach((bubble) => drawAmbientBubble(ctx, bubble));
-  // 主角参与的会话固定在屏幕顶部，并最后绘制，避免被任何环境气泡遮挡。
-  conversationCards.filter((card) => card.playerInvolved).forEach((card) => drawConversationCard(ctx, card));
   let shade = shadeCache.get(ctx);
   if (!shade) {
     shade = ctx.createRadialGradient(W / 2, H / 2, 120, W / 2, H / 2, 430);
@@ -940,9 +887,12 @@ function drawNpcMarker(
   ctx.strokeStyle = near ? accent : "rgba(255,216,102,.72)";
   ctx.lineWidth = near ? 3 : 2;
   ctx.strokeRect(x - 11, y + 8, 22, near ? 5 : 3);
-  ctx.fillStyle = accent;
-  ctx.fillRect(x - 2, y - 47 - (pulse ? 2 : 0), 5, 7);
-  ctx.fillRect(x - 2, y - 38 - (pulse ? 2 : 0), 5, 3);
+  // 仅击杀目标/通缉犯保留红色感叹号；普通 NPC 头顶不显示感叹号。
+  if (hostile) {
+    ctx.fillStyle = accent;
+    ctx.fillRect(x - 2, y - 47 - (pulse ? 2 : 0), 5, 7);
+    ctx.fillRect(x - 2, y - 38 - (pulse ? 2 : 0), 5, 3);
+  }
   if (!near) return;
   const label = name.length > 7 ? `${name.slice(0, 7)}…` : name;
   ctx.font = "bold 10px sans-serif";

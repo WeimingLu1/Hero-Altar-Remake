@@ -165,14 +165,13 @@ test("player ambient bubble is always on the highest layer", () => {
   assert.ok(source.indexOf("ambientBubbles.push") < source.indexOf("ambientBubbles.sort"));
 });
 
-test("历史对话不能在主角离开后复活并继续跟随主角", () => {
-  assert.match(source, /const live = members\.some/);
-  assert.match(source, /!live && !\(includesPlayer && player\.bubble\)/);
-  assert.match(source, /playerInvolved: includesPlayer/);
-  assert.doesNotMatch(
-    source,
-    /playerInvolved: includesPlayer \|\| history\.some/,
-  );
+test("历史台词不会在气泡存活期后复活显示，玩家气泡无条件最上层", () => {
+  // 每个 NPC 的气泡都在自己头顶、只在该台词存活期间显示；不再聚合历史会话卡。
+  assert.match(source, /if \(roaming\?\.bubble\)/);
+  assert.match(source, /roaming\.bubbleShownAt/);
+  assert.match(source, /if \(playerAmbient\.bubble\)/);
+  assert.match(source, /preferBelow: playerInConversation/);
+  assert.doesNotMatch(source, /collectConversationCards/);
 });
 
 test("战报生成期间仍可打开战斗药品且中止战报不会永久锁定", () => {
@@ -340,15 +339,15 @@ test("world canvas renders characters props bubbles and text at high resolution"
   assert.doesNotMatch(worldCss, /image-rendering:\s*pixelated/);
 });
 
-test("paired and group conversations share one ordered conversation card", () => {
-  assert.match(source, /function conversationSessionKey/);
-  assert.match(source, /`group:\$\{npc\.groupId\}`/);
-  assert.match(source, /`pair:\$\{Math\.min\(npc\.eventId, npc\.partnerId\)\}/);
-  assert.match(source, /function collectConversationCards/);
-  assert.match(source, /\.slice\(-3\)/);
-  assert.match(source, /drawConversationCard\(ctx, card\)/);
-  assert.match(source, /roaming\?\.bubble && !conversationSessionKey/);
-  assert.match(source, /playerAmbient\.bubble && !playerGrouped/);
+test("双人和群聊台词各自显示在说话者头顶的小气泡", () => {
+  assert.match(source, /if \(roaming\?\.bubble\)/);
+  assert.match(source, /roaming\.partnerId/);
+  assert.match(source, /preferBelow: below/);
+  assert.match(source, /resolveAmbientBubbleLayout/);
+  assert.match(source, /drawAmbientBubble\(ctx, bubble\)/);
+  assert.doesNotMatch(source, /conversationSessionKey/);
+  assert.doesNotMatch(source, /collectConversationCards/);
+  assert.doesNotMatch(source, /drawConversationCard/);
 });
 
 test("indoor furnishing follows repeatable scene-specific patterns", () => {
