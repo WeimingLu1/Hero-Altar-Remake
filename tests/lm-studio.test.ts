@@ -123,9 +123,9 @@ test("streaming transport accepts LM Studio and OpenAI-compatible SSE deltas", a
   const originalFetch = globalThis.fetch;
   context.after(() => { globalThis.fetch = originalFetch; });
   const encoder = new TextEncoder();
-  let requestBody: Record<string, unknown> | undefined;
+  const requestBodies: Array<Record<string, unknown>> = [];
   globalThis.fetch = async (_input, init) => {
-    requestBody = JSON.parse(String(init?.body));
+    requestBodies.push(JSON.parse(String(init?.body)) as Record<string, unknown>);
     const body = new ReadableStream<Uint8Array>({
       start(controller) {
         controller.enqueue(encoder.encode("data: {\"type\":\"message.delta\",\"content\":\"江\"}\n"));
@@ -146,8 +146,16 @@ test("streaming transport accepts LM Studio and OpenAI-compatible SSE deltas", a
   });
   assert.equal(answer, "江湖");
   assert.deepEqual(tokens, ["江", "湖"]);
-  assert.equal(requestBody?.reasoning, "off");
-  assert.match(String(requestBody?.input), /店小二：$/);
+  assert.equal(requestBodies[0]?.reasoning, "off");
+  assert.match(String(requestBodies[0]?.input), /店小二：$/);
+
+  await streamNpcReply({
+    system: "由 NPC 主动开场",
+    messages: [],
+    transportUrl: "/api/lm-studio",
+    onToken: () => undefined,
+  });
+  assert.match(String(requestBodies[1]?.transcript), /准备交谈/);
 });
 
 test("streaming transport forwards an already-aborted caller signal", async (context) => {

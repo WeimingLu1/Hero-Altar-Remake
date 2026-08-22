@@ -816,6 +816,7 @@ export default function OriginalWorld({
       participant = Boolean(quest && (quest.issuer.npcId === id || quest.target.npcId === id));
     if (!healthy && !participant) {
       setNpcChat(null);
+      setNotice("LM Studio 当前不可用，已回退为原作固定对白。");
       fixedNpcDialogue(id);
       return;
     }
@@ -1177,6 +1178,7 @@ export default function OriginalWorld({
         participant = Boolean(quest && (quest.issuer.npcId === id || quest.target.npcId === id));
       if (!quest || !participant) {
         setNpcChat(null);
+        setNotice("LLM 对话生成失败，已回退为原作固定对白。");
         fixedNpcDialogue(id);
         return;
       }
@@ -1325,6 +1327,7 @@ export default function OriginalWorld({
           : active);
       else {
         setNpcChat(null);
+        setNotice("LLM 主角接话生成失败，已回退为原作固定对白。");
         fixedNpcDialogue(id);
       }
     } finally {

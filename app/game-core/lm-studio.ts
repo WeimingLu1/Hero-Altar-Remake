@@ -144,7 +144,7 @@ export async function streamNpcReply(options: {
   const endpoint = (options.endpoint || settings.endpoint).replace(/\/$/, "");
   const transcript = messagesWithinContext(options.messages).map((message) =>
     `${message.role === "user" ? "玩家" : "NPC"}：${message.content}`,
-  ).join("\n");
+  ).join("\n") || "玩家：我来到对方面前准备交谈，请对方结合此地情境自然开口。";
   const transportUrl = options.transportUrl ||
     (options.endpoint || settings.endpoint !== LM_STUDIO_ENDPOINT
       ? `${endpoint}/api/v1/chat`

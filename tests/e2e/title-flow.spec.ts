@@ -127,11 +127,23 @@ test("JSON 存档可导入并进入完整世界", async ({ page }) => {
 });
 
 test("NPC 菜单同时保留原作交谈和独立自由对话", async ({ page }) => {
-  await page.route("**/api/lm-studio", (route) => route.fulfill({
-    status: 503,
-    contentType: "application/json",
-    body: JSON.stringify({ error: "offline in test" }),
-  }));
+  const llmPayloads: Array<Record<string, unknown>> = [];
+  await page.route("**/api/lm-studio", async (route) => {
+    if (route.request().method() === "GET") {
+      await route.fulfill({
+        status: 200,
+        contentType: "application/json",
+        body: JSON.stringify({ ok: true }),
+      });
+      return;
+    }
+    llmPayloads.push(route.request().postDataJSON() as Record<string, unknown>);
+    await route.fulfill({
+      status: 200,
+      contentType: "text/event-stream",
+      body: 'data: {"type":"message.delta","content":"状态：从容\\n动作：抬眼相迎\\n语言：这是一句模型生成的开场。"}\n\ndata: [DONE]\n\n',
+    });
+  });
   await page.goto("/");
   await page.locator('input[type="file"]').setInputFiles({
     name: "npc-menu-save.json",
@@ -156,7 +168,9 @@ test("NPC 菜单同时保留原作交谈和独立自由对话", async ({ page })
   await expect(npcMenu.getByRole("button", { name: "自由对话" })).toBeVisible();
 
   await npcMenu.getByRole("button", { name: "交谈" }).click();
-  await expect(page.locator(".world-dialog")).toContainText("道德和尚");
+  await expect(page.locator(".npc-talk-dialog")).toContainText("这是一句模型生成的开场");
+  expect(llmPayloads.map((payload) => String(payload.transcript || "")))
+    .toContainEqual(expect.stringContaining("准备交谈"));
   await page.keyboard.press("Escape");
   await page.keyboard.press("E");
   await page.getByRole("dialog", { name: "道德和尚" })
