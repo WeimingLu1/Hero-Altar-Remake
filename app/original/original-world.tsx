@@ -96,6 +96,7 @@ import {
   markGeneratedQuestBattleWin,
   shouldOfferGeneratedQuest,
   type GeneratedQuestDraft,
+  type GeneratedQuestNpcRef,
 } from "../game-core/generated-task-system";
 import {
   cultivationAvailability,
@@ -222,6 +223,8 @@ type NpcQuestReplyMode =
   | null;
 type NpcChatState = {
   id: number;
+  mapId: number;
+  eventId: number;
   phase: "original" | "llm";
   originalLines: string[];
   originalIndex: number;
@@ -240,6 +243,11 @@ type NpcChatState = {
   started: boolean;
   shownAt: number;
 };
+const npcChatRef = (chat: Pick<NpcChatState, "id" | "mapId" | "eventId">): GeneratedQuestNpcRef => ({
+  npcId: chat.id,
+  mapId: chat.mapId,
+  eventId: chat.eventId,
+});
 type NpcDialogueMessage =
   | { role: "user"; speech: string; action: string }
   | {
@@ -304,7 +312,12 @@ export default function OriginalWorld({
     gender: 0,
     attrs: [20, 20, 20, 20],
   });
-  const [npcMenu, setNpcMenu] = useState<{ id: number; index: number } | null>(
+  const [npcMenu, setNpcMenu] = useState<{
+    id: number;
+    mapId: number;
+    eventId: number;
+    index: number;
+  } | null>(
       null,
     ),
     [npcChat, setNpcChat] = useState<NpcChatState | null>(null),
@@ -545,7 +558,12 @@ export default function OriginalWorld({
       });
       if (sceneCall && !automatic) {
         if (sceneCall.type === 0 && sceneCall.id !== undefined) {
-          setNpcMenu({ id: sceneCall.id, index: 0 });
+          setNpcMenu({
+            id: sceneCall.id,
+            mapId: s.position.mapId,
+            eventId: event.id,
+            index: 0,
+          });
           return true;
         }
         const next = structuredClone(s),
@@ -754,7 +772,16 @@ export default function OriginalWorld({
     if (!runAt(p.x + d[0], p.y + d[1]))
       setNotice("靠近人物并按 E / Enter 互动");
   }, [ambientWorld, runAt]);
-  const openOriginalNpcConversation = useCallback((id: number, source: string | string[]) => {
+  const openOriginalNpcConversation = useCallback((
+    id: number,
+    source: string | string[],
+    ref?: GeneratedQuestNpcRef,
+  ) => {
+    const identity = ref || {
+      npcId: id,
+      mapId: stateRef.current.position.mapId,
+      eventId: -1,
+    };
     const lines = (Array.isArray(source) ? source : source.split("\n"))
       .map((line) => line.trim())
       .filter((line) => line && line !== npcDisplayName(id));
@@ -765,6 +792,8 @@ export default function OriginalWorld({
     setEventNpcId(null);
     setNpcChat({
       id,
+      mapId: identity.mapId,
+      eventId: identity.eventId,
       phase: "original",
       originalLines: lines.length ? lines : [first],
       originalIndex: 0,
@@ -800,9 +829,9 @@ export default function OriginalWorld({
       );
     openOriginalNpcConversation(id, resolution.lines);
   }, [openOriginalNpcConversation]);
-  const questTranscriptMessages = useCallback((id: number): NpcDialogueMessage[] => {
+  const questTranscriptMessages = useCallback((ref: GeneratedQuestNpcRef): NpcDialogueMessage[] => {
     const quest = stateRef.current.tasks.generatedQuest;
-    if (!quest || (quest.issuer.npcId !== id && quest.target.npcId !== id)) return [];
+    if (!quest || generatedQuestInteraction(quest, ref) === null) return [];
     return quest.transcript.flatMap((entry): NpcDialogueMessage[] => {
       if (entry.speaker === "system") return [];
       if (entry.speaker === "player")
@@ -817,13 +846,24 @@ export default function OriginalWorld({
       }];
     });
   }, []);
-  const openNpcConversation = useCallback(async (id: number, fallbackToFixed = true) => {
+  const openNpcConversation = useCallback(async (
+    id: number,
+    fallbackToFixed = true,
+    ref?: GeneratedQuestNpcRef,
+  ) => {
+    const identity = ref || {
+      npcId: id,
+      mapId: stateRef.current.position.mapId,
+      eventId: -1,
+    };
     const controller = new AbortController();
     chatAbort.current?.abort();
     chatAbort.current = controller;
     setEventNpcId(null);
     setNpcChat({
       id,
+      mapId: identity.mapId,
+      eventId: identity.eventId,
       phase: "llm",
       originalLines: [],
       originalIndex: 0,
@@ -854,8 +894,8 @@ export default function OriginalWorld({
     chatAbort.current = null;
     const current = stateRef.current,
       quest = current.tasks.generatedQuest,
-      interaction = quest ? generatedQuestInteraction(quest, id) : null,
-      participant = Boolean(quest && (quest.issuer.npcId === id || quest.target.npcId === id)),
+      interaction = quest ? generatedQuestInteraction(quest, identity) : null,
+      participant = interaction !== null,
       questReplyMode: NpcQuestReplyMode = interaction === "issuer-reminder"
         ? "issuer-reminder"
         : interaction === "visit-target"
@@ -875,9 +915,9 @@ export default function OriginalWorld({
       } else setNotice("LM Studio 当前不可用，本次交谈到此结束。");
       return;
     }
-    const messages = questTranscriptMessages(id);
+    const messages = questTranscriptMessages(identity);
     if (!healthy && quest && participant) {
-      const fallback = generatedQuestFallbackText(quest, id),
+      const fallback = generatedQuestFallbackText(quest, identity),
         next = structuredClone(current);
       appendGeneratedQuestTranscript(next.tasks, {
         speaker: "npc",
@@ -892,7 +932,7 @@ export default function OriginalWorld({
         });
       }
       if (["visit-target", "challenge-target", "post-battle"].includes(interaction || ""))
-        advanceGeneratedQuestAfterDialogue(next.tasks, id);
+        advanceGeneratedQuestAfterDialogue(next.tasks, identity);
       sync(next);
       messages.push({
         role: "assistant",
@@ -905,6 +945,8 @@ export default function OriginalWorld({
     }
     setNpcChat({
       id,
+      mapId: identity.mapId,
+      eventId: identity.eventId,
       phase: "llm",
       originalLines: [],
       originalIndex: 0,
@@ -920,7 +962,7 @@ export default function OriginalWorld({
       questReady: Boolean(
         stateRef.current.tasks.generatedQuest &&
         ["battle-ready", "report"].includes(
-          generatedQuestInteraction(stateRef.current.tasks.generatedQuest, id) || "",
+          generatedQuestInteraction(stateRef.current.tasks.generatedQuest, identity) || "",
         )
       ),
       questReplyMode,
@@ -937,6 +979,9 @@ export default function OriginalWorld({
   }, [fixedNpcDialogue, questTranscriptMessages, sync]);
   const chooseNpc = useCallback(
     (id: number, option: NpcOption) => {
+      const identity: GeneratedQuestNpcRef = npcMenu?.id === id
+        ? { npcId: id, mapId: npcMenu.mapId, eventId: npcMenu.eventId }
+        : { npcId: id, mapId: stateRef.current.position.mapId, eventId: -1 };
       setEventNpcId(["talk", "status", "join"].includes(option) ? id : null);
       if (option === "forge") {
         setNpcMenu(null);
@@ -956,7 +1001,7 @@ export default function OriginalWorld({
         if (tasks.visitId === id) {
           tasks.visitId = -1;
           sync(next);
-          openOriginalNpcConversation(id, "拜访已经完成，回村长处复命吧。");
+          openOriginalNpcConversation(id, "拜访已经完成，回村长处复命吧。", identity);
           setNpcMenu(null);
           return;
         }
@@ -965,7 +1010,7 @@ export default function OriginalWorld({
             Math.floor(Math.random() * Math.max(1, max)),
           );
           sync(next);
-          openOriginalNpcConversation(id, result.text);
+          openOriginalNpcConversation(id, result.text, identity);
           setNpcMenu(null);
           return;
         }
@@ -975,7 +1020,7 @@ export default function OriginalWorld({
               ? startStoneTask(next.actor, tasks)
               : finishStoneTask(next.actor, tasks);
           sync(next);
-          openOriginalNpcConversation(id, result.text);
+          openOriginalNpcConversation(id, result.text, identity);
           setNpcMenu(null);
           return;
         }
@@ -988,7 +1033,7 @@ export default function OriginalWorld({
             next.position,
           );
           sync(next);
-          openOriginalNpcConversation(id, result.text);
+          openOriginalNpcConversation(id, result.text, identity);
           setNpcMenu(null);
           return;
         }
@@ -996,7 +1041,7 @@ export default function OriginalWorld({
           const altar = startTanQuest(next.actor);
           if (altar.ok) {
             sync(next);
-            openOriginalNpcConversation(id, altar.text);
+            openOriginalNpcConversation(id, altar.text, identity);
             setNpcMenu(null);
             return;
           }
@@ -1023,21 +1068,21 @@ export default function OriginalWorld({
                   .text;
           }
           sync(next);
-          openOriginalNpcConversation(id, text);
+          openOriginalNpcConversation(id, text, identity);
           setNpcMenu(null);
           return;
         }
         if (id === 31 && tasks.finishFlag) {
           const result = claimMainReward(next.actor, tasks, random);
           sync(next);
-          openOriginalNpcConversation(id, result.text);
+          openOriginalNpcConversation(id, result.text, identity);
           setNpcMenu(null);
           return;
         }
         const specialTalk = resolveSpecialNpcTalk(id, next.actor);
         if (specialTalk.handled) {
           sync(next);
-          openOriginalNpcConversation(id, specialTalk.text);
+          openOriginalNpcConversation(id, specialTalk.text, identity);
           setNpcMenu(null);
           return;
         }
@@ -1053,20 +1098,20 @@ export default function OriginalWorld({
             next.actor,
             id + next.position.mapId,
           );
-          openOriginalNpcConversation(id, r.lines);
+          openOriginalNpcConversation(id, r.lines, identity);
           setHiddenConfirm({ npcId: id, index: 0 });
-        } else void openNpcConversation(id);
+        } else void openNpcConversation(id, true, identity);
       } else if (option === "status") setEventText(npcStatus(id).join("\n"));
       else if (option === "battle") {
         const quest = next.tasks.generatedQuest,
-          interaction = quest ? generatedQuestInteraction(quest, id) : null;
-        if (quest && (quest.issuer.npcId === id || quest.target.npcId === id)) {
+          interaction = quest ? generatedQuestInteraction(quest, identity) : null;
+        if (quest && interaction !== null) {
           if (interaction === "battle-ready")
             setBattle(beginOriginalBattle(id, id + next.position.mapId, undefined, "spar", {
               questId: quest.id,
               enemyId: id,
             }));
-          else void openNpcConversation(id, false);
+          else void openNpcConversation(id, false, identity);
         } else
           setBattle(beginOriginalBattle(id, id + next.position.mapId, undefined, "lethal"));
       }
@@ -1082,7 +1127,7 @@ export default function OriginalWorld({
       }
       setNpcMenu(null);
     },
-    [openNpcConversation, openOriginalNpcConversation, sync, startSwordChallenge],
+    [npcMenu, openNpcConversation, openOriginalNpcConversation, sync, startSwordChallenge],
   );
   const closeNpcChat = useCallback(() => {
     chatAbort.current?.abort();
@@ -1097,7 +1142,7 @@ export default function OriginalWorld({
   }, [closeNpcChat]);
   const prepareGeneratedQuestOffer = useCallback((chat: NpcChatState) => {
     const current = stateRef.current,
-      issuer = generatedQuestParticipant(chat.id, current.position.mapId);
+      issuer = generatedQuestParticipant(chat.id, chat.mapId, chat.eventId);
     if (
       chat.offeredThisSession ||
       current.tasks.generatedQuest ||
@@ -1124,7 +1169,7 @@ export default function OriginalWorld({
     return { draft: planned, planned, preludeRound: 0 };
   }, []);
   const requestNpcReply = useCallback(async (
-    id: number,
+    ref: GeneratedQuestNpcRef,
     dialogueHistory: NpcDialogueMessage[],
     offerDraft: GeneratedQuestDraft | null = null,
     questReplyMode: NpcQuestReplyMode = null,
@@ -1132,6 +1177,7 @@ export default function OriginalWorld({
     plannedDraft: GeneratedQuestDraft | null = null,
     preludeRound = 0,
   ) => {
+    const id = ref.npcId;
     const history: ChatMessage[] = dialogueHistory.slice(-10).map((message) => ({
       role: message.role,
       content: message.speech,
@@ -1153,7 +1199,10 @@ export default function OriginalWorld({
     try {
       const current = stateRef.current;
       const activeQuest = current.tasks.generatedQuest,
-        questContext = activeQuest ? `\n\n${generatedQuestPrompt(activeQuest, id)}` : "",
+        activeInteraction = activeQuest ? generatedQuestInteraction(activeQuest, ref) : null,
+        questContext = activeQuest && activeInteraction !== null
+          ? `\n\n${generatedQuestPrompt(activeQuest, id)}`
+          : "",
         offerContext = offerDraft
           ? `\n\n${generatedQuestPrompt(offerDraft, id)}\n【本轮任务提议】你必须在本轮回复中自然提出上述委托，把目标人物和地点说清楚，但不要提及任务系统、概率、字段或规则。玩家之后会通过界面明确接受或婉拒；你不能替玩家接受。`
           : contextDraft
@@ -1199,7 +1248,7 @@ export default function OriginalWorld({
       const parsed = parseNpcDialogue(answer);
       const next = structuredClone(stateRef.current),
         quest = next.tasks.generatedQuest,
-        participant = Boolean(quest && (quest.issuer.npcId === id || quest.target.npcId === id)),
+        participant = Boolean(quest && generatedQuestInteraction(quest, ref) !== null),
         lastUser = [...dialogueHistory].reverse().find((message) => message.role === "user");
       if (quest && participant) {
         if (lastUser?.role === "user")
@@ -1215,9 +1264,9 @@ export default function OriginalWorld({
           action: parsed.action,
           speech: parsed.speech,
         });
-        const interaction = generatedQuestInteraction(quest, id);
+        const interaction = generatedQuestInteraction(quest, ref);
         if (["visit-target", "challenge-target", "post-battle"].includes(interaction || ""))
-          advanceGeneratedQuestAfterDialogue(next.tasks, id);
+          advanceGeneratedQuestAfterDialogue(next.tasks, ref);
         sync(next);
       } else if (offerDraft) {
         declineGeneratedQuest(next.tasks);
@@ -1229,7 +1278,7 @@ export default function OriginalWorld({
         messages[messages.length - 1] = { role: "assistant", npcId: id, raw: answer, ...parsed };
         const progressedQuest = stateRef.current.tasks.generatedQuest,
           progressedInteraction = progressedQuest
-            ? generatedQuestInteraction(progressedQuest, id)
+            ? generatedQuestInteraction(progressedQuest, ref)
             : null;
         return {
           ...chat,
@@ -1262,7 +1311,7 @@ export default function OriginalWorld({
       llmHealthCache.current = { checkedAt: Date.now(), ok: false };
       const current = stateRef.current,
         quest = current.tasks.generatedQuest,
-        participant = Boolean(quest && (quest.issuer.npcId === id || quest.target.npcId === id));
+        participant = Boolean(quest && generatedQuestInteraction(quest, ref) !== null);
       if (questReplyMode === "decline-close" && contextDraft) {
         const fallback = "既然你不愿接下此事，我也不再强求，今日便谈到这里。";
         setNpcChat((chat) => {
@@ -1279,7 +1328,7 @@ export default function OriginalWorld({
         fixedNpcDialogue(id);
         return;
       }
-      const fallback = generatedQuestFallbackText(quest, id),
+      const fallback = generatedQuestFallbackText(quest, ref),
         next = structuredClone(current),
         lastUser = [...dialogueHistory].reverse().find((message) => message.role === "user");
       if (lastUser?.role === "user")
@@ -1289,9 +1338,9 @@ export default function OriginalWorld({
           speech: lastUser.speech || "……",
         });
       appendGeneratedQuestTranscript(next.tasks, { speaker: "npc", npcId: id, speech: fallback });
-      const interaction = generatedQuestInteraction(quest, id);
+      const interaction = generatedQuestInteraction(quest, ref);
       if (["visit-target", "challenge-target", "post-battle"].includes(interaction || ""))
-        advanceGeneratedQuestAfterDialogue(next.tasks, id);
+        advanceGeneratedQuestAfterDialogue(next.tasks, ref);
       sync(next);
       setNpcChat((chat) => {
         if (!chat || chat.id !== id) return chat;
@@ -1349,7 +1398,7 @@ export default function OriginalWorld({
       mode: NpcQuestReplyMode = draft.kind === "duel" ? "accept-battle" : "accept-close";
     setNpcChat({ ...chat, messages, plannedQuest: null, pendingQuest: null, auto: false, questReady: false, questReplyMode: mode, terminal: null });
     setNotice(`已接受「${draft.title}」 · ${generatedQuestObjective(next.tasks.generatedQuest!)}`);
-    void requestNpcReply(chat.id, messages, null, mode);
+    void requestNpcReply(npcChatRef(chat), messages, null, mode);
   }, [npcChat, requestNpcReply, sync]);
   const declineNpcQuest = useCallback(() => {
     const chat = npcChat, draft = chat?.pendingQuest;
@@ -1358,12 +1407,12 @@ export default function OriginalWorld({
       messages = [...chat.messages, declinedLine];
     setNpcChat({ ...chat, messages, plannedQuest: null, pendingQuest: null, auto: false, questReplyMode: "decline-close", terminal: null });
     setNotice("你婉拒了这次委托。");
-    void requestNpcReply(chat.id, messages, null, "decline-close", draft);
+    void requestNpcReply(npcChatRef(chat), messages, null, "decline-close", draft);
   }, [npcChat, requestNpcReply]);
   const startGeneratedQuestBattle = useCallback(() => {
     if (!npcChat) return;
     const quest = stateRef.current.tasks.generatedQuest;
-    if (!quest || generatedQuestInteraction(quest, npcChat.id) !== "battle-ready") return;
+    if (!quest || generatedQuestInteraction(quest, npcChatRef(npcChat)) !== "battle-ready") return;
     setNpcChat(null);
     setBattle(beginOriginalBattle(npcChat.id, stateRef.current.tasks.clock + npcChat.id, undefined, "spar", {
       questId: quest.id,
@@ -1373,7 +1422,7 @@ export default function OriginalWorld({
   const claimNpcQuestReward = useCallback(() => {
     if (!npcChat?.questReady) return;
     const next = structuredClone(stateRef.current),
-      result = claimGeneratedQuestReward(next.actor, next.tasks, npcChat.id);
+      result = claimGeneratedQuestReward(next.actor, next.tasks, npcChatRef(npcChat));
     if (!result.ok) return;
     const persisted = { ...next, savedAt: new Date().toISOString() },
       written = writeJsonStorage(LOCAL_SAVE_KEY, persisted);
@@ -1393,6 +1442,7 @@ export default function OriginalWorld({
   }, [sync]);
   const generateAutoPlayerTurn = useCallback(async (chat: NpcChatState) => {
     const id = chat.id,
+      ref = npcChatRef(chat),
       controller = new AbortController(),
       history: ChatMessage[] = chat.messages.slice(-10).map((message) => ({
         role: message.role,
@@ -1403,8 +1453,10 @@ export default function OriginalWorld({
     setNpcChat((current) => current?.id === id ? { ...current, loading: true, error: "" } : current);
     try {
       const current = stateRef.current,
-        questContext = current.tasks.generatedQuest
-          ? `\n\n${generatedQuestPrompt(current.tasks.generatedQuest, id)}`
+        activeQuest = current.tasks.generatedQuest,
+        activeInteraction = activeQuest ? generatedQuestInteraction(activeQuest, ref) : null,
+        questContext = activeQuest && activeInteraction !== null
+          ? `\n\n${generatedQuestPrompt(activeQuest, id)}`
           : chat.plannedQuest
             ? `\n\n${generatedQuestPrompt(chat.plannedQuest, id)}\n【当前谈话主线】NPC正围绕这桩尚未正式提出的委托逐层说明背景。你必须像身在现场的主角一样，只回应这件事：追问细节、判断利害或回应其中的人情，不得突然换话题，也不得替NPC提前说出正式请求。`
             : "",
@@ -1436,7 +1488,7 @@ export default function OriginalWorld({
       if (!runtimeMounted.current || chatAbort.current !== controller) return;
       llmHealthCache.current = { checkedAt: Date.now(), ok: false };
       const quest = stateRef.current.tasks.generatedQuest,
-        participant = Boolean(quest && (quest.issuer.npcId === id || quest.target.npcId === id));
+        participant = Boolean(quest && generatedQuestInteraction(quest, ref) !== null);
       if (participant)
         setNpcChat((active) => active?.id === id
           ? { ...active, loading: false, auto: false, error: "" }
@@ -1471,7 +1523,7 @@ export default function OriginalWorld({
         });
       } else {
         const auto = npcChat.auto;
-        void openNpcConversation(npcChat.id, false).then(() => {
+        void openNpcConversation(npcChat.id, false, npcChatRef(npcChat)).then(() => {
           if (auto)
             setNpcChat((active) => active?.id === npcChat.id
               ? { ...active, auto: true }
@@ -1484,7 +1536,7 @@ export default function OriginalWorld({
     if (!last || last.role === "user") {
       const offer = prepareGeneratedQuestOffer(npcChat);
       void requestNpcReply(
-        npcChat.id,
+        npcChatRef(npcChat),
         npcChat.messages,
         offer.draft,
         null,
@@ -1503,7 +1555,7 @@ export default function OriginalWorld({
     const id = window.setTimeout(() => {
       if (npcChat.questReplyMode) {
         void requestNpcReply(
-          npcChat.id,
+          npcChatRef(npcChat),
           npcChat.messages,
           null,
           npcChat.questReplyMode,
@@ -1512,7 +1564,7 @@ export default function OriginalWorld({
       }
       const offer = prepareGeneratedQuestOffer(npcChat);
       void requestNpcReply(
-        npcChat.id,
+        npcChatRef(npcChat),
         npcChat.messages,
         offer.draft,
         null,
@@ -1665,7 +1717,7 @@ export default function OriginalWorld({
       const next = structuredClone(stateRef.current);
       let altarText = "",
         nextBattle: OriginalBattle | null = null,
-        postBattleNpcId: number | null = null;
+        postBattleTarget: GeneratedQuestNpcRef | null = null;
       if (battle.finished === "win") {
         if (battle.mode === "lethal") {
           const loot = settleVictoryLoot(next.actor, battle.enemyId, kill);
@@ -1766,7 +1818,11 @@ export default function OriginalWorld({
         )
       ) {
         const quest = next.tasks.generatedQuest;
-        postBattleNpcId = battle.enemyId;
+        postBattleTarget = quest ? {
+          npcId: quest.target.npcId,
+          mapId: quest.target.mapId,
+          eventId: quest.target.eventId,
+        } : null;
         altarText = quest
           ? `任务切磋获胜；${quest.target.name}将作战后交代。`
           : "任务切磋获胜。";
@@ -1826,9 +1882,9 @@ export default function OriginalWorld({
               ? "你退出了切磋"
               : "你脱离了战斗",
       );
-      if (postBattleNpcId && !nextBattle) {
-        const targetId = postBattleNpcId;
-        window.setTimeout(() => void openNpcConversation(targetId, false), 0);
+      if (postBattleTarget && !nextBattle) {
+        const target = postBattleTarget;
+        window.setTimeout(() => void openNpcConversation(target.npcId, false, target), 0);
       }
     },
     [battle, openNpcConversation, sync],
@@ -2478,7 +2534,7 @@ export default function OriginalWorld({
             } else if (cancel) declineNpcQuest();
           } else if (confirm && npcChat.questReady) {
             const interaction = stateRef.current.tasks.generatedQuest
-              ? generatedQuestInteraction(stateRef.current.tasks.generatedQuest, npcChat.id)
+              ? generatedQuestInteraction(stateRef.current.tasks.generatedQuest, npcChatRef(npcChat))
               : null;
             if (interaction === "battle-ready") startGeneratedQuestBattle();
             else if (interaction === "report") claimNpcQuestReward();
@@ -3408,7 +3464,7 @@ export default function OriginalWorld({
             speaker = latest?.role === "user" ? state.actor.name : npcLore(npcChat.id).name,
             npcSpeaking = latest?.role !== "user",
             interaction = state.tasks.generatedQuest
-              ? generatedQuestInteraction(state.tasks.generatedQuest, npcChat.id)
+              ? generatedQuestInteraction(state.tasks.generatedQuest, npcChatRef(npcChat))
               : null;
           return (
             <section

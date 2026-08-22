@@ -9,6 +9,7 @@ import {
   createGeneratedQuestDraft,
   generatedQuestEligibleKinds,
   generatedQuestFallbackText,
+  generatedQuestInteraction,
   generatedQuestObjective,
   generatedQuestParticipant,
   generatedQuestReward,
@@ -60,7 +61,7 @@ test("拜访任务保存目标地点、完整对话并在目标交谈后进入�
   appendGeneratedQuestTranscript(tasks, { speaker: "player", speech: "我接下了。" });
   appendGeneratedQuestTranscript(tasks, { speaker: "npc", npcId: issuer.npcId, speech: "一路小心。" });
   assert.equal(tasks.generatedQuest?.transcript.length, 2);
-  assert.equal(advanceGeneratedQuestAfterDialogue(tasks, tasks.generatedQuest!.target.npcId), true);
+  assert.equal(advanceGeneratedQuestAfterDialogue(tasks, tasks.generatedQuest!.target), true);
   assert.equal(tasks.generatedQuest?.stage, "report");
   assert.match(generatedQuestObjective(tasks.generatedQuest!), /复命/);
 });
@@ -75,12 +76,12 @@ test("委派战斗由目标一句承接后开战，只由匹配胜利推进并�
     npcId: draft!.target.npcId,
     speech: "先说清楚这桩旧怨。",
   });
-  assert.equal(advanceGeneratedQuestAfterDialogue(tasks, draft!.target.npcId), true);
+  assert.equal(advanceGeneratedQuestAfterDialogue(tasks, draft!.target), true);
   assert.equal(tasks.generatedQuest?.stage, "confrontation");
   assert.equal(markGeneratedQuestBattleWin(tasks, "wrong", draft!.target.npcId), false);
   assert.equal(markGeneratedQuestBattleWin(tasks, draft!.id, draft!.target.npcId), true);
   assert.equal(tasks.generatedQuest?.stage, "defeated");
-  assert.equal(advanceGeneratedQuestAfterDialogue(tasks, draft!.target.npcId), true);
+  assert.equal(advanceGeneratedQuestAfterDialogue(tasks, draft!.target), true);
   assert.equal(tasks.generatedQuest?.stage, "report");
 });
 
@@ -104,7 +105,7 @@ test("奖励公式固定、只结算一次且完成后清除完整任务记录",
   tasks.generatedQuest!.stage = "report";
   appendGeneratedQuestTranscript(tasks, { speaker: "npc", npcId: issuer.npcId, speech: "办得好。" });
   const before = { exp: actor.exp, potential: actor.potential, gold: actor.gold };
-  const claimed = claimGeneratedQuestReward(actor, tasks, issuer.npcId);
+  const claimed = claimGeneratedQuestReward(actor, tasks, issuer);
   assert.equal(claimed.ok, true);
   assert.equal(actor.exp, before.exp + draft.reward.exp);
   assert.equal(actor.potential, before.potential + draft.reward.potential);
@@ -114,7 +115,7 @@ test("奖励公式固定、只结算一次且完成后清除完整任务记录",
   assert.match(tasks.generatedQuestHistory[0].summary, /完成|拜访|切磋|挑战/);
   assert.equal(tasks.generatedQuestHistory[0].reward.exp, draft.reward.exp);
   assert.equal(tasks.generatedQuest, null);
-  assert.equal(claimGeneratedQuestReward(actor, tasks, issuer.npcId).ok, false);
+  assert.equal(claimGeneratedQuestReward(actor, tasks, issuer).ok, false);
   assert.equal(tasks.generatedQuestHistory.length, 1, "重复领奖不能重复写入日志");
   assert.equal(tasks.generatedQuestNextOfferAt, tasks.clock, "领奖后应立即允许下一名NPC重新开始三轮铺垫");
 });
@@ -123,11 +124,31 @@ test("任务中断线有含真实人物地点的固定文本，放弃后立即�
   const actor = newActor(), tasks = freshTaskState(), issuer = generatedQuestParticipant(2)!;
   const draft = createGeneratedQuestDraft({ issuer, actor, tasks, random: sequence(0, 0, 99) })!;
   acceptGeneratedQuest(tasks, draft);
-  const fallback = generatedQuestFallbackText(tasks.generatedQuest!, draft.target.npcId);
+  const fallback = generatedQuestFallbackText(tasks.generatedQuest!, draft.target);
   assert.match(fallback, new RegExp(draft.target.name));
   assert.match(fallback, new RegExp(draft.issuer.name));
   tasks.clock = 50;
   assert.equal(abandonGeneratedQuest(tasks), true);
   assert.equal(tasks.generatedQuest, null);
   assert.equal(tasks.generatedQuestNextOfferAt, 50);
+});
+
+test("生成任务只识别精确地图事件，第三方与同ID的其他事件保持普通交谈", () => {
+  const actor = newActor(), tasks = freshTaskState(), issuer = generatedQuestParticipant(2)!;
+  const draft = createGeneratedQuestDraft({ issuer, actor, tasks, random: sequence(0, 0, 99) })!;
+  acceptGeneratedQuest(tasks, draft);
+  const quest = tasks.generatedQuest!;
+  assert.equal(generatedQuestInteraction(quest, issuer), "issuer-reminder");
+  assert.equal(generatedQuestInteraction(quest, quest.target), "visit-target");
+  const wrongEvent = { ...quest.target, eventId: quest.target.eventId + 999 };
+  assert.equal(generatedQuestInteraction(quest, wrongEvent), null);
+  assert.equal(advanceGeneratedQuestAfterDialogue(tasks, wrongEvent), false);
+  const outsider = generatedQuestParticipant(13)!;
+  assert.equal(generatedQuestInteraction(quest, outsider), null);
+  assert.equal(generatedQuestFallbackText(quest, outsider), "");
+  assert.equal(
+    generatedQuestParticipant(draft.target.npcId, draft.target.mapId, draft.target.eventId + 999),
+    undefined,
+    "指定地图事件不存在时不得回退成同ID人物的另一处事件",
+  );
 });

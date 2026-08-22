@@ -373,7 +373,7 @@ test("原作交谈保持任务优先并统一进入双立绘底部 LLM", () => {
   const chooseStart = worldSource.indexOf("const chooseNpc"),
     chooseEnd = worldSource.indexOf("const closeNpcChat", chooseStart),
     talkFlow = worldSource.slice(chooseStart, chooseEnd),
-    llmEntry = talkFlow.lastIndexOf("openNpcConversation(id)");
+    llmEntry = talkFlow.lastIndexOf("openNpcConversation(id");
   assert.ok(chooseStart >= 0 && chooseEnd > chooseStart && llmEntry > 0);
   for (const originalBranch of [
     "tasks.visitId === id",
@@ -396,6 +396,9 @@ test("原作交谈保持任务优先并统一进入双立绘底部 LLM", () => {
   assert.match(worldSource, /eventText \|\|[\s\S]*npcChat \|\|[\s\S]*taskBook/);
   assert.match(rendererSource, /generatedQuest\.target\.mapId === map\.id/);
   assert.match(rendererSource, /generatedQuest\.target\.eventId === e\.id/);
+  assert.match(worldSource, /generatedQuestInteraction\(activeQuest, ref\)/);
+  assert.match(worldSource, /activeQuest && activeInteraction !== null/);
+  assert.match(worldSource, /generatedQuestParticipant\(chat\.id, chat\.mapId, chat\.eventId\)/);
 });
 
 test("生成奇遇提议和各任务节点按完整台词单句收束", () => {

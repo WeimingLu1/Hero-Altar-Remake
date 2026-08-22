@@ -106,7 +106,7 @@ test("v4 saves preserve completed generated-task summaries as a lasting journal"
     npcId: issuer.npcId,
     speech: "此事已了，报酬拿好。",
   });
-  assert.equal(claimGeneratedQuestReward(save.actor, save.tasks, issuer.npcId).ok, true);
+  assert.equal(claimGeneratedQuestReward(save.actor, save.tasks, issuer).ok, true);
   const parsed = parseSave(JSON.parse(JSON.stringify(save)));
   assert.equal(parsed.ok, true);
   if (parsed.ok) {

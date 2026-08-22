@@ -25,6 +25,20 @@ export type GeneratedQuestParticipant = {
   y: number;
 };
 
+export type GeneratedQuestNpcRef = Pick<
+  GeneratedQuestParticipant,
+  "npcId" | "mapId" | "eventId"
+>;
+
+export function generatedQuestParticipantMatches(
+  participant: GeneratedQuestParticipant,
+  ref: GeneratedQuestNpcRef,
+) {
+  return participant.npcId === ref.npcId &&
+    participant.mapId === ref.mapId &&
+    participant.eventId === ref.eventId;
+}
+
 export type GeneratedQuestReward = {
   exp: number;
   potential: number;
@@ -145,13 +159,14 @@ export function generatedQuestParticipant(
   preferredEventId?: number,
 ) {
   const rows = participantIndex.get(npcId) || [];
-  return (
-    rows.find(
+  if (preferredMapId !== undefined || preferredEventId !== undefined) {
+    return rows.find(
       (row) =>
-        row.mapId === preferredMapId &&
+        (preferredMapId === undefined || row.mapId === preferredMapId) &&
         (preferredEventId === undefined || row.eventId === preferredEventId),
-    ) || rows[0]
-  );
+    );
+  }
+  return rows[0];
 }
 
 export function normalizeGeneratedQuest(value: unknown): GeneratedQuest | null {
@@ -504,10 +519,13 @@ export function appendGeneratedQuestTranscript(
   return true;
 }
 
-export function generatedQuestInteraction(quest: GeneratedQuest, npcId: number) {
+export function generatedQuestInteraction(quest: GeneratedQuest, ref: GeneratedQuestNpcRef) {
+  const isIssuer = generatedQuestParticipantMatches(quest.issuer, ref),
+    isTarget = generatedQuestParticipantMatches(quest.target, ref);
+  if (!isIssuer && !isTarget) return null;
   if (quest.stage === "failed") return "failed" as const;
-  if (npcId === quest.issuer.npcId && quest.stage === "report") return "report" as const;
-  if (npcId !== quest.target.npcId) return null;
+  if (isIssuer && quest.stage === "report") return "report" as const;
+  if (!isTarget) return "issuer-reminder" as const;
   if (quest.kind === "visit" && quest.stage === "travel") return "visit-target" as const;
   if (quest.kind === "delegated-duel" && quest.stage === "travel")
     return "challenge-target" as const;
@@ -516,16 +534,16 @@ export function generatedQuestInteraction(quest: GeneratedQuest, npcId: number) 
     quest.stage === "confrontation"
   ) return "battle-ready" as const;
   if (quest.stage === "defeated") return "post-battle" as const;
-  if (npcId === quest.issuer.npcId) return "issuer-reminder" as const;
+  if (isIssuer) return "issuer-reminder" as const;
   return null;
 }
 
 export function advanceGeneratedQuestAfterDialogue(
   tasks: TaskState,
-  npcId: number,
+  ref: GeneratedQuestNpcRef,
 ) {
   const quest = tasks.generatedQuest;
-  if (!quest || npcId !== quest.target.npcId) return false;
+  if (!quest || !generatedQuestParticipantMatches(quest.target, ref)) return false;
   if (quest.kind === "visit" && quest.stage === "travel") {
     quest.stage = "report";
     return true;
@@ -577,10 +595,10 @@ export function abandonGeneratedQuest(tasks: TaskState) {
 export function claimGeneratedQuestReward(
   actor: SceneActorState,
   tasks: TaskState,
-  npcId: number,
+  ref: GeneratedQuestNpcRef,
 ) {
   const quest = tasks.generatedQuest;
-  if (!quest || quest.stage !== "report" || quest.issuer.npcId !== npcId)
+  if (!quest || quest.stage !== "report" || !generatedQuestParticipantMatches(quest.issuer, ref))
     return { ok: false, text: "当前没有可领取的生成任务奖励。" };
   const reward = quest.reward;
   actor.exp += reward.exp;
@@ -631,17 +649,19 @@ export function generatedQuestPrompt(quest: GeneratedQuest, currentNpcId: number
   return `【当前生成任务·不可改写】${quest.title}\n【任务缘由】${quest.premise}\n【发布人】${quest.issuer.name}，位于${quest.issuer.mapName}\n【目标】${quest.target.name}，位于${quest.target.mapName}\n【当前阶段】${quest.stage}\n【当前目标】${generatedQuestObjective(quest)}\n【固定奖励】经验${quest.reward.exp}、潜能${quest.reward.potential}、银两${quest.reward.gold}${quest.reward.item ? `、${quest.reward.item.name}` : ""}\n${transcript ? `【最近任务对话】\n${transcript}` : ""}\n规则：你只能用对白承接这条已经确定的任务，不得更换人物、地点、奖励、胜负或任务阶段，也不得宣称尚未发生的战斗已经完成。`;
 }
 
-export function generatedQuestFallbackText(quest: GeneratedQuest, npcId: number) {
-  if (quest.stage === "report" && npcId === quest.issuer.npcId)
+export function generatedQuestFallbackText(quest: GeneratedQuest, ref: GeneratedQuestNpcRef) {
+  const isIssuer = generatedQuestParticipantMatches(quest.issuer, ref),
+    isTarget = generatedQuestParticipantMatches(quest.target, ref);
+  if (quest.stage === "report" && isIssuer)
     return `${quest.issuer.name}确认你已经办妥此事，请领取约定的报酬。`;
-  if (npcId === quest.target.npcId) {
+  if (isTarget) {
     if (quest.kind === "visit")
       return `${quest.target.name}已经听明来意，请你回${quest.issuer.mapName}向${quest.issuer.name}复命。`;
     if (quest.stage === "defeated")
       return `${quest.target.name}认下这场胜负，请你回去向${quest.issuer.name}复命。`;
     return `${quest.target.name}已经听明来意，准备与你进行一场点到为止的切磋。`;
   }
-  if (npcId === quest.issuer.npcId)
+  if (isIssuer)
     return `此事尚未办妥：${generatedQuestObjective(quest)}办好再来见我。`;
-  return quest.premise;
+  return "";
 }
