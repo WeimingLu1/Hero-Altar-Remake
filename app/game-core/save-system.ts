@@ -2,6 +2,7 @@ import { MAX_PLAYER_EXP } from "./progression-limits";
 import { SAVE_FORMAT, SAVE_VERSION } from "./save-constants";
 import type { SceneActorState } from "./scene-event";
 import { freshTaskState, type TaskState } from "./task-system";
+import { normalizeGeneratedQuest } from "./generated-task-system";
 import {
   getOriginalMap,
   hasOriginalMap,
@@ -108,6 +109,7 @@ export const fresh = (): WorldSave => ({
 export function normalize(value: unknown): WorldSave {
   const source = (value && typeof value === "object" ? value : {}) as LegacySave;
   const oldActor = source.actor || {};
+  const oldTasks = (source.tasks || {}) as Partial<TaskState>;
   const swords = [...(oldActor.swords || [])];
   const inventory = { ...(oldActor.inventory || {}) };
 
@@ -167,7 +169,14 @@ export function normalize(value: unknown): WorldSave {
     },
     flags: (source.flags || {}) as Record<string, boolean>,
     variables: (source.variables || {}) as Record<string, number>,
-    tasks: { ...freshTaskState(), ...(source.tasks || {}) },
+    tasks: {
+      ...freshTaskState(),
+      ...oldTasks,
+      generatedQuest:
+        oldTasks.generatedQuest && typeof oldTasks.generatedQuest === "object"
+          ? normalizeGeneratedQuest(oldTasks.generatedQuest)
+          : null,
+    },
   };
 }
 

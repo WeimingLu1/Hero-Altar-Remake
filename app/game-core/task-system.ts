@@ -3,6 +3,7 @@ import type { SceneActorState } from "./scene-event";
 import { derivedStats } from "./inventory-system";
 import type { OriginalRecord } from "./original-data";
 import { getOriginalMap } from "./original-world";
+import type { GeneratedQuest } from "./generated-task-system";
 
 export type TaskState = {
   clock: number;
@@ -36,6 +37,9 @@ export type TaskState = {
   wantedPercent: number;
   stoneStarted: boolean;
   stoneStartedAt: number;
+  generatedQuest: GeneratedQuest | null;
+  generatedQuestNextOfferAt: number;
+  generatedQuestSerial: number;
 };
 
 export const freshTaskState = (): TaskState => ({
@@ -70,6 +74,9 @@ export const freshTaskState = (): TaskState => ({
   wantedPercent: 80,
   stoneStarted: false,
   stoneStartedAt: -180,
+  generatedQuest: null,
+  generatedQuestNextOfferAt: 0,
+  generatedQuestSerial: 0,
 });
 
 const reward = (
@@ -582,5 +589,7 @@ export function taskJournal(tasks: TaskState) {
     );
   if (tasks.stoneStarted) lines.push("石料：将石料送回工地");
   if (tasks.finishFlag) lines.push("顾炎武处有任务奖励待领");
+  if (tasks.generatedQuest)
+    lines.push(`奇遇：${tasks.generatedQuest.title}`);
   return lines.length ? lines : ["当前没有进行中的任务。"];
 }

@@ -50,6 +50,7 @@ export type OriginalBattle = {
     burnTurns: number;
   };
   enemyOverride?: OriginalRecord;
+  questContext?: { questId: string; enemyId: number };
   mode: "spar" | "lethal" | "story";
   escapeFactor: number;
 };
@@ -546,6 +547,7 @@ export function beginOriginalBattle(
   seed = 9527,
   enemyOverride?: OriginalRecord,
   mode: "spar" | "lethal" | "story" = "spar",
+  questContext?: { questId: string; enemyId: number },
 ): OriginalBattle {
   const e = enemyOverride || originalTables.enemies[enemyId] || {};
   return {
@@ -574,6 +576,7 @@ export function beginOriginalBattle(
     },
     enemyDebuff: { hit: 0, busy: 0, turns: 0, eagleTurns: 0, burnTurns: 0 },
     enemyOverride,
+    questContext,
     mode,
     escapeFactor: 0,
   };

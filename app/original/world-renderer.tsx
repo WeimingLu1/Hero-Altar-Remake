@@ -231,6 +231,12 @@ export function drawWorld(ctx: CanvasRenderingContext2D, state: WorldSave, ambie
           tanId: state.actor.tanId,
           killId: state.tasks.killId,
         }),
+        Boolean(
+          state.tasks.generatedQuest &&
+            state.tasks.generatedQuest.stage !== "failed" &&
+            state.tasks.generatedQuest.target.mapId === map.id &&
+            state.tasks.generatedQuest.target.eventId === e.id,
+        ),
       );
       // 每个 NPC 的台词显示在自己身上；双人成员一人在头顶、一人在脚下(按 eventId 奇偶分)，并错开 ±6px。
       if (roaming?.bubble) {
@@ -881,17 +887,28 @@ function drawNpcMarker(
   name: string,
   near: boolean,
   hostile = false,
+  quest = false,
 ) {
   const pulse = Math.sin(Date.now() / 180) > 0,
-    accent = hostile ? "#ff6a63" : "#ffd866";
+    accent = hostile ? "#ff6a63" : quest ? "#6df0c0" : "#ffd866";
   ctx.strokeStyle = near ? accent : "rgba(255,216,102,.72)";
   ctx.lineWidth = near ? 3 : 2;
   ctx.strokeRect(x - 11, y + 8, 22, near ? 5 : 3);
-  // 仅击杀目标/通缉犯保留红色感叹号；普通 NPC 头顶不显示感叹号。
+  // 击杀目标使用红色感叹号，生成任务目标使用青色菱形。
   if (hostile) {
     ctx.fillStyle = accent;
     ctx.fillRect(x - 2, y - 47 - (pulse ? 2 : 0), 5, 7);
     ctx.fillRect(x - 2, y - 38 - (pulse ? 2 : 0), 5, 3);
+  } else if (quest) {
+    const top = y - 45 - (pulse ? 2 : 0);
+    ctx.fillStyle = accent;
+    ctx.beginPath();
+    ctx.moveTo(x, top - 5);
+    ctx.lineTo(x + 6, top);
+    ctx.lineTo(x, top + 5);
+    ctx.lineTo(x - 6, top);
+    ctx.closePath();
+    ctx.fill();
   }
   if (!near) return;
   const label = name.length > 7 ? `${name.slice(0, 7)}…` : name;

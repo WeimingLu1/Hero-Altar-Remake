@@ -307,12 +307,66 @@
 .npc-chat textarea { width:100%; min-width: 0; height:68px; resize: none; padding: 9px 11px; border: 1px solid #566456; background: #071009; color: #f0e3bd; outline: none; font: inherit; line-height: 1.45; box-sizing:border-box; }
 .npc-chat textarea:focus { border-color: #c5a95e; box-shadow: 0 0 0 2px #c5a95e22; }
 .npc-chat > footer { padding: 0 14px 9px; text-align: right; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.generated-quest-offer,
+.generated-quest-progress {
+  margin: 0 12px 8px;
+  padding: 10px 12px;
+  border: 1px solid #c6a85c88;
+  background: linear-gradient(135deg, #2d2617ee, #111b13f2);
+  color: #e9dfbd;
+  box-shadow: 0 8px 22px #0007;
+}
+.generated-quest-offer h3 { margin: 3px 0 6px; color: #f0d27b; }
+.generated-quest-offer p,
+.generated-quest-progress p { margin: 3px 0; font-size: 10px; line-height: 1.5; }
+.generated-quest-offer > div { display: flex; gap: 8px; margin-top: 8px; }
+.generated-quest-offer button.active { border-color: #e7cb76; box-shadow: 0 0 0 2px #e7cb7630; color: #ffe8a3; }
+.generated-quest-progress { border-color: #6ebf9d88; background: #0d241bf0; }
+.generated-quest-progress small { color: #84d4b2; }
+.task-journal {
+  position: absolute;
+  inset: 18px;
+  z-index: 86;
+  display: grid;
+  grid-template-rows: auto minmax(0, 1fr) auto;
+  border: 2px solid #a98d4f;
+  background: linear-gradient(155deg, #101810fa, #080d09fd 72%);
+  color: #e6ddc2;
+  box-shadow: 0 16px 60px #000d, inset 0 0 42px #c3a4540c;
+}
+.task-journal > header,
+.task-journal > footer { display: flex; align-items: center; justify-content: space-between; gap: 10px; padding: 12px 16px; border-bottom: 1px solid #806d4188; }
+.task-journal > footer { justify-content: flex-end; border-top: 1px solid #806d4188; border-bottom: 0; }
+.task-journal h2,
+.task-journal h3,
+.task-journal p { margin: 0; }
+.task-journal h2 { color: #ebd387; letter-spacing: 4px; }
+.task-journal button { padding: 8px 14px; border: 1px solid #80734d; background: #111912; color: #ddd1af; }
+.task-journal button.active { border-color: #e2c66f; box-shadow: 0 0 0 2px #e2c66f22; color: #f1dc99; }
+.task-journal button.danger { border-color: #9b514b; color: #e5a49b; }
+.task-journal-body { min-height: 0; display: grid; grid-template-columns: minmax(190px, .7fr) minmax(0, 1.6fr); gap: 14px; padding: 14px; overflow: hidden; }
+.task-journal-body > section { min-height: 0; padding: 14px; border: 1px solid #61573c88; background: #0c120dcc; overflow: auto; }
+.task-journal-body ul { padding-left: 20px; line-height: 1.8; }
+.task-journal-generated { display: grid; align-content: start; gap: 8px; }
+.task-journal-generated > small,
+.task-journal-generated > strong { color: #79cfa9; }
+.task-transcript { min-height: 120px; margin-top: 6px; padding: 10px; border-top: 1px solid #5d533988; overflow: auto; }
+.task-transcript p { display: grid; grid-template-columns: 90px minmax(0, 1fr); gap: 8px; padding: 6px 0; border-bottom: 1px dotted #4c4937; line-height: 1.5; }
+.task-transcript b { color: #d8bd72; }
+.task-transcript p > :not(b) { grid-column: 2; }
+.task-transcript em,
+.task-transcript i { color: #98a99c; font-size: 9px; }
+.task-abandon-confirm { position: absolute; inset: 25% 20%; display: grid; align-content: center; gap: 12px; padding: 24px; border: 2px solid #a4554d; background: #170d0cf8; text-align: center; box-shadow: 0 10px 50px #000e; }
+.task-abandon-confirm > div { display: flex; justify-content: center; gap: 10px; }
 @media (max-width: 700px) {
   .npc-chat { left: 6px; right: 6px; top:6px; bottom: 6px; max-height: none; }
   .npc-chat-stage form { grid-template-columns: 1fr 1fr; }
   .npc-chat-stage form > button { grid-column: 1 / -1; width: 100%; height: 38px; }
   .dialogue-bubble { max-width: 92%; }
   .npc-chat-body { grid-template-columns: 94px minmax(0, 1fr); }
+  .task-journal { inset: 6px; }
+  .task-journal-body { grid-template-columns: 1fr; overflow: auto; }
+  .task-abandon-confirm { inset: 18% 8%; }
 }
 .world-shell footer {
   grid-column: 1/3;

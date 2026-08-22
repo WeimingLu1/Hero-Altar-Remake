@@ -119,7 +119,7 @@ test("world orchestration consumes ambient NPC runtime through its public hook",
   assert.doesNotMatch(worldSource, /ambientControllers = useRef/);
 });
 
-test("free chat has a fixed history region and continuous automatic dialogue", () => {
+test("unified active talk has a fixed history region and continuous automatic dialogue", () => {
   assert.match(source, /className="npc-chat-log"/);
   assert.match(source, /className="npc-chat-stage"/);
   assert.match(source, /自动对话中/);
@@ -181,7 +181,7 @@ test("战报生成期间仍可打开战斗药品且中止战报不会永久锁�
   assert.match(source, /openItem} disabled=\{Boolean\(battle\.finished\)\}/);
 });
 
-test("离开游玩界面或卸载世界会中止自由对话和战报请求", () => {
+test("离开游玩界面或卸载世界会中止主动交谈和战报请求", () => {
   assert.match(source, /runtimeMounted\.current = false/);
   assert.match(source, /activeChat\?\.abort\(\)/);
   assert.match(source, /activeNarration\?\.abort\(\)/);
@@ -363,4 +363,28 @@ test("factions and Pingan districts use full-map authored plans", () => {
   assert.match(source, /const pinganUrbanMapIds = new Set\(\[2, 3, 5, 15\]\)/);
   assert.match(source, /function drawPinganTownPlan/);
   assert.match(source, /landscapedEdge/);
+});
+
+test("统一交谈保持原作任务优先并独占环境 LLM 运行时", () => {
+  const chooseStart = worldSource.indexOf("const chooseNpc"),
+    chooseEnd = worldSource.indexOf("const closeNpcChat", chooseStart),
+    talkFlow = worldSource.slice(chooseStart, chooseEnd),
+    llmEntry = talkFlow.lastIndexOf("openNpcConversation(id)");
+  assert.ok(chooseStart >= 0 && chooseEnd > chooseStart && llmEntry > 0);
+  for (const originalBranch of [
+    "tasks.visitId === id",
+    "acceptFreeWork",
+    "startStoneTask",
+    "acceptWantedTask",
+    "startTanQuest",
+    "finishMainTask",
+    "claimMainReward",
+    "resolveSpecialNpcTalk",
+    "hiddenQuestOffer",
+  ])
+    assert.ok(talkFlow.indexOf(originalBranch) < llmEntry, originalBranch);
+  assert.match(worldSource, /probeLlmHealth\(controller\.signal\)/);
+  assert.match(worldSource, /eventText \|\|[\s\S]*npcChat \|\|[\s\S]*taskBook/);
+  assert.match(rendererSource, /generatedQuest\.target\.mapId === map\.id/);
+  assert.match(rendererSource, /generatedQuest\.target\.eventId === e\.id/);
 });

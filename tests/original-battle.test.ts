@@ -56,6 +56,12 @@ test("story battles preserve the original no-escape rule", () => {
   assert.equal(result.escaped, false);
   assert.match(result.battle.log.at(-1) || "", /无法逃走/);
 });
+test("生成任务切磋在战斗状态中保留精确任务上下文", () => {
+  const context = { questId: "llm-7", enemyId: 13 },
+    battle = beginOriginalBattle(13, 42, undefined, "spar", context);
+  assert.deepEqual(battle.questContext, context);
+  assert.equal(battle.mode, "spar");
+});
 test("high spell resources use diminishing formula inputs instead of a damage cap", () => {
   assert.equal(diminishingBattleResource(5000), 5000);
   assert.equal(diminishingBattleResource(65000), 22320);

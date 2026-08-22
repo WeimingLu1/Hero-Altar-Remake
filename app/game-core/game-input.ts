@@ -34,7 +34,8 @@ export type ModalKind =
   | "cultivation"
   | "npc"
   | "shop"
-  | "study";
+  | "study"
+  | "task-journal";
 
 export interface InputContext {
   screen: "title" | "intro" | "help" | "create" | "play";
@@ -206,7 +207,12 @@ const resolveDialogueCommand = (
   key: string,
 ): GameCommand | null => {
   if (kind === "npc-chat") {
-    return isCancelKey(key) ? { type: "cancel" } : null;
+    return navigationCommand(key, true) ??
+      (isConfirmKey(key)
+        ? { type: "confirm" }
+        : isCancelKey(key)
+          ? { type: "cancel" }
+          : null);
   }
   return isConfirmKey(key) || isCancelKey(key)
     ? { type: "screen-advance" }

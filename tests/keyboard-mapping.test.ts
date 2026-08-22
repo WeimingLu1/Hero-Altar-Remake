@@ -105,13 +105,34 @@ test("外部资源数值使用紧凑格式并保留完整提示", () => {
   assert.match(source, /title=\{`银两：/);
 });
 
-test("自由对话仅保留当前相遇并在移动时清空", () => {
+test("统一交谈仅持久化当前生成任务记录并在移动时清空普通相遇", () => {
   assert.doesNotMatch(source, /rmxp-npc-chat-v1/);
-  assert.match(source, /messages: \[\]/);
-  assert.match(source, /requestNpcReply\(npcChat\.id, \[\.\.\.npcChat\.messages/);
+  assert.match(source, /questTranscriptMessages/);
+  assert.match(source, /requestNpcReply\([\s\S]*npcChat\.messages/);
   assert.doesNotMatch(source, /messages: messages\.slice\(-10\)/);
   assert.match(source, /if \(npcChat\) \{[\s\S]*setNpcChat\(null\)/);
   assert.match(source, /closeNpcChat\(\)/);
   assert.match(source, /placeholder="例如：抱拳行礼/);
   assert.match(source, /状态 · \{message\.state\}/);
+});
+
+test("任务提议与任务簿都可完全使用键盘操作", () => {
+  assert.deepEqual(
+    resolveGameKey(
+      { key: "ArrowDown" },
+      { screen: "play", dialogue: "npc-chat" },
+    ).command,
+    { type: "navigate", direction: "down" },
+  );
+  assert.deepEqual(
+    resolveGameKey(
+      { key: "E" },
+      { screen: "play", modal: { kind: "task-journal" } },
+    ).command,
+    { type: "confirm" },
+  );
+  assert.match(worldSource, /npcChat\.pendingQuest[\s\S]*npcChat\.questChoice/);
+  assert.match(worldSource, /interaction === "battle-ready"[\s\S]*startGeneratedQuestBattle\(\)/);
+  assert.match(worldSource, /interaction === "report"[\s\S]*claimNpcQuestReward\(\)/);
+  assert.match(worldSource, /confirmAbandonGeneratedQuest/);
 });
