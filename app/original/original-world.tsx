@@ -446,9 +446,9 @@ export default function OriginalWorld({
   }, [restoreLocalSave, sync]);
   const save = useCallback(() => {
     const next = { ...stateRef.current, savedAt: new Date().toISOString() };
-    sync(next);
     const written = writeJsonStorage(LOCAL_SAVE_KEY, next);
     if (written.ok) {
+      sync(next);
       setHasSave(true);
       setNotice("原版世界进度已保存");
     } else {
@@ -1360,9 +1360,14 @@ export default function OriginalWorld({
     const next = structuredClone(stateRef.current),
       result = claimGeneratedQuestReward(next.actor, next.tasks, npcChat.id);
     if (!result.ok) return;
-    sync(next);
+    const persisted = { ...next, savedAt: new Date().toISOString() },
+      written = writeJsonStorage(LOCAL_SAVE_KEY, persisted);
+    sync(written.ok ? persisted : next);
+    setHasSave(written.ok);
     openOriginalNpcConversation(npcChat.id, result.text);
-    setNotice("奇遇任务完成，完整任务对话已从存档中清除。");
+    setNotice(written.ok
+      ? "奇遇任务完成并已自动保存；完整任务对话已清除，摘要已写入日志。"
+      : `奇遇任务完成，但自动保存失败：${storageFailureNotice(written.reason)}`);
   }, [npcChat, openOriginalNpcConversation, sync]);
   const confirmAbandonGeneratedQuest = useCallback(() => {
     const next = structuredClone(stateRef.current), title = next.tasks.generatedQuest?.title;

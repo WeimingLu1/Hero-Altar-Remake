@@ -415,4 +415,6 @@ test("奇遇选择保留完整委托对白并在任务簿展示完成日志", ()
   assert.match(worldSource, /className="task-journal-history"/);
   assert.match(worldSource, /已完成奇遇日志/);
   assert.match(worldSource, /generatedQuestHistory/);
+  assert.match(worldSource, /奇遇任务完成并已自动保存/);
+  assert.match(worldCss, /\.task-history-list[^}]*overflow-y:\s*auto/);
 });

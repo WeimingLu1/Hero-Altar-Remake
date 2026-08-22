@@ -126,6 +126,51 @@ test("JSON 存档可导入并进入完整世界", async ({ page }) => {
   ).toBe(true);
 });
 
+test("多轮奇遇日志仍可保存并在任务簿中纵向滚动", async ({ page }) => {
+  const history = Array.from({ length: 12 }, (_, index) => ({
+    version: 1,
+    id: `history-${index + 1}`,
+    kind: "visit",
+    title: `第 ${index + 1} 桩江湖委托`,
+    premise: "受人所托走访江湖人物，查明一桩旧事。",
+    summary: "已经找到目标人物并回到发布人处复命。",
+    issuerName: "发布人",
+    issuerMapName: "平安镇",
+    targetName: "受访者",
+    targetMapName: "郊外",
+    reward: { exp: 100, potential: 33, gold: 50 },
+    closingLine: "此事已了，报酬拿好。",
+    completedAt: index + 1,
+  }));
+  await page.goto("/");
+  await page.locator('input[type="file"]').setInputFiles({
+    name: "quest-history-save.json",
+    mimeType: "application/json",
+    buffer: Buffer.from(JSON.stringify({
+      format: "rmxp-hero-original-world-save",
+      version: 4,
+      savedAt: "",
+      position: { mapId: 1, x: 9, y: 7, direction: 2 },
+      actor: {},
+      tasks: { generatedQuestHistory: history },
+      flags: {},
+      variables: {},
+    })),
+  });
+  await page.getByRole("button", { name: "保存", exact: true }).click();
+  await expect(page.getByText("原版世界进度已保存")).toBeVisible();
+  await page.getByRole("button", { name: /任务 T/ }).click();
+  const log = page.locator(".task-history-list");
+  await expect(log).toBeVisible();
+  const metrics = await log.evaluate((element) => ({
+    overflowY: getComputedStyle(element).overflowY,
+    clientHeight: element.clientHeight,
+    scrollHeight: element.scrollHeight,
+  }));
+  expect(metrics.overflowY).toBe("auto");
+  expect(metrics.scrollHeight).toBeGreaterThan(metrics.clientHeight);
+});
+
 test("NPC 菜单只保留统一交谈，并支持双立绘与自由发展", async ({ page }) => {
   const llmPayloads: Array<Record<string, unknown>> = [];
   await page.route("**/api/lm-studio", async (route) => {
