@@ -81,10 +81,10 @@ test("NPC marker stays above the character face", () => {
   assert.match(rendererSource, /y - 47 - \(pulse \? 2 : 0\)/);
 });
 
-test("portraits are shared by dialogue chat status and battle", () => {
+test("portraits are shared by unified dialogue, status and battle", () => {
   assert.match(rendererSource, /function CharacterPortrait/);
   assert.match(worldSource, /className="dialog-portrait"/);
-  assert.match(worldSource, /className="chat-portrait"/);
+  assert.match(worldSource, /playerGender=\{state\.actor\.gender\}/);
   assert.match(uiSource, /className="status-portrait"/);
   assert.match(uiSource, /className="battle-portrait"/);
 });
@@ -119,13 +119,13 @@ test("world orchestration consumes ambient NPC runtime through its public hook",
   assert.doesNotMatch(worldSource, /ambientControllers = useRef/);
 });
 
-test("unified active talk has a fixed history region and continuous automatic dialogue", () => {
-  assert.match(source, /className="npc-chat-log"/);
-  assert.match(source, /className="npc-chat-stage"/);
-  assert.match(source, /自动对话中/);
+test("unified active talk has dual portraits and continuous automatic dialogue", () => {
+  assert.match(source, /npc-talk-portrait npc/);
+  assert.match(source, /npc-talk-portrait player/);
+  assert.match(source, /暂停发展/);
   assert.match(source, /function buildAutoPlayerPrompt|const buildAutoPlayerPrompt/);
   assert.match(source, /nextSpeaker: "主角"/);
-  assert.match(source, /last\?\.role === "user"/);
+  assert.match(source, /advanceNpcConversation/);
 });
 
 test("a nearby player can be addressed and join ambient NPC conversations", () => {
@@ -365,7 +365,7 @@ test("factions and Pingan districts use full-map authored plans", () => {
   assert.match(source, /landscapedEdge/);
 });
 
-test("原作交谈保持任务优先，普通分支才进入底部 LLM，多功能自由对话独立", () => {
+test("原作交谈保持任务优先并统一进入双立绘底部 LLM", () => {
   const chooseStart = worldSource.indexOf("const chooseNpc"),
     chooseEnd = worldSource.indexOf("const closeNpcChat", chooseStart),
     talkFlow = worldSource.slice(chooseStart, chooseEnd),
@@ -384,9 +384,12 @@ test("原作交谈保持任务优先，普通分支才进入底部 LLM，多功�
   ])
     assert.ok(talkFlow.indexOf(originalBranch) < llmEntry, originalBranch);
   assert.match(worldSource, /probeLlmHealth\(controller\.signal\)/);
-  assert.match(talkFlow, /option === "chat"[\s\S]*setNpcFreeChat\(\{/);
-  assert.match(worldSource, /className="world-dialog with-portrait npc-talk-dialog"/);
-  assert.match(worldSource, /eventText \|\|[\s\S]*npcChat \|\|[\s\S]*npcFreeChat \|\|[\s\S]*taskBook/);
+  assert.doesNotMatch(talkFlow, /option === "chat"/);
+  assert.match(worldSource, /className=\{`npc-talk-dialog/);
+  assert.match(worldSource, /npc-talk-portrait npc/);
+  assert.match(worldSource, /npc-talk-portrait player/);
+  assert.match(worldSource, /openOriginalNpcConversation/);
+  assert.match(worldSource, /eventText \|\|[\s\S]*npcChat \|\|[\s\S]*taskBook/);
   assert.match(rendererSource, /generatedQuest\.target\.mapId === map\.id/);
   assert.match(rendererSource, /generatedQuest\.target\.eventId === e\.id/);
 });

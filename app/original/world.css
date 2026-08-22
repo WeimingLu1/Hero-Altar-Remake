@@ -221,103 +221,173 @@
   right: 14px;
   bottom: 10px;
 }
-.npc-talk-dialog { z-index: 44; cursor: pointer; }
-.npc-talk-dialog .world-dialog-copy { min-width: 0; justify-content: center; }
-.npc-talk-dialog .world-dialog-copy > strong { color: #f0d27b; }
-.npc-talk-dialog .world-dialog-copy > em,
-.npc-talk-dialog .world-dialog-copy > small { color: #aeb8ae; font-style: normal; font-size: 9px; }
-.npc-talk-hint { margin-top: 5px; color: #839087 !important; }
-.npc-talk-offer { display: grid; gap: 4px; margin-top: 7px; padding-top: 7px; border-top: 1px solid #b3955766; }
-.npc-talk-offer > b { color: #f0d27b; }
-.npc-talk-actions { display: flex; gap: 8px; margin-top: 5px; }
-.npc-talk-actions button { min-width: 88px; padding: 6px 12px; }
-.npc-talk-actions button.active { border-color: #e7cb76; box-shadow: 0 0 0 2px #e7cb7630; color: #ffe8a3; }
-.npc-chat {
+.npc-talk-dialog {
   position: absolute;
+  z-index: 44;
   left: 14px;
   right: 14px;
   bottom: 14px;
-  top: 18px;
-  max-height: none;
-  z-index: 42;
+  height: 236px;
+  min-height: 158px;
+  max-height: 236px;
+  padding: 12px;
   display: grid;
-  grid-template-rows: auto minmax(0, 1fr);
-  min-height: 0;
+  grid-template-columns: 112px minmax(0, 1fr) 112px;
+  align-items: stretch;
+  gap: 12px;
+  overflow: hidden;
+  cursor: pointer;
   color: #eadcb7;
-  background: linear-gradient(145deg, rgba(13, 24, 17, 0.96), rgba(5, 10, 7, 0.97));
-  border: 1px solid #b39557;
-  box-shadow: 0 12px 38px #000c, inset 0 0 24px #8dad7a0b;
+  border: 1px solid #c4a75f;
+  border-radius: 12px 3px 12px 3px;
+  background:
+    linear-gradient(100deg, #18251df7, #080e0af8 28%, #080e0af8 72%, #15231bf7),
+    repeating-linear-gradient(90deg, transparent 0 31px, #d3b66308 32px);
+  box-shadow: 0 14px 36px #000d, inset 0 0 34px #d8bb6810;
   backdrop-filter: blur(3px);
 }
-.npc-chat-body { min-height: 0; display: grid; grid-template-columns: 164px minmax(0, 1fr); overflow: hidden; }
-.npc-chat-stage { min-width: 0; min-height: 0; display: grid; grid-template-rows: minmax(0, 1fr) auto auto; overflow: hidden; background: rgba(3, 8, 5, .32); }
-.npc-chat-body > aside { display: grid; grid-template-rows: 142px auto auto; align-content: start; gap: 4px; padding: 10px; border-right: 1px solid #77653b66; text-align: center; }
-.npc-chat-body > aside b { color: #e6c66f; font-size: 12px; }
-.npc-chat-body > aside small { color: #839087; font-size: 9px; }
-.chat-portrait { width: 142px; height: 142px; }
-.npc-chat > header {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  padding: 12px 14px;
-  border-bottom: 1px solid #77653b88;
+.npc-talk-dialog::before {
+  content: "";
+  position: absolute;
+  inset: 5px;
+  pointer-events: none;
+  border: 1px solid #c4a75f2b;
+  border-radius: 8px 1px 8px 1px;
 }
-.npc-chat > header div { display: grid; gap: 3px; }
-.npc-chat > header .npc-chat-controls { display: flex; grid-auto-flow: column; gap: 8px; }
-.npc-chat-controls .active { border-color: #c7aa5f; color: #f1d986; box-shadow: inset 0 0 14px #c7aa5f22; }
-.npc-chat > header b { color: #e6c66f; font-size: 15px; }
-.npc-chat > header small, .npc-chat > footer { color: #839087; font-size: 9px; }
-.npc-chat button {
-  border: 1px solid #59695a;
-  background: #1b2a20;
-  color: #ddcfaa;
-  padding: 8px 12px;
+.npc-talk-portrait {
+  position: relative;
+  z-index: 1;
+  min-width: 0;
+  display: grid;
+  align-content: center;
+  justify-items: center;
+  gap: 6px;
+  opacity: 1;
+  transform: translateY(-2px);
+  transition: opacity 160ms ease, filter 160ms ease, transform 160ms ease;
 }
-.npc-chat-log {
+.npc-talk-portrait .dialog-portrait {
+  width: 104px;
+  height: 104px;
+  border-width: 2px;
+}
+.npc-talk-portrait b {
+  max-width: 100%;
+  overflow: hidden;
+  color: #ddc87e;
+  font-size: 10px;
+  letter-spacing: .08em;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.npc-talk-portrait.npc.active .dialog-portrait {
+  border-color: #e8c96d;
+  box-shadow: inset 0 0 24px #0008, 0 0 18px #dcb95655;
+}
+.npc-talk-portrait.player.active .dialog-portrait {
+  border-color: #8ecce8;
+  box-shadow: inset 0 0 24px #0008, 0 0 18px #6fbee055;
+}
+.npc-talk-portrait.player b { color: #a9d9ef; }
+.npc-talk-portrait.muted { opacity: .7; filter: saturate(.72) brightness(.88); transform: none; }
+.npc-talk-center {
+  position: relative;
+  z-index: 2;
+  min-width: 0;
+  display: grid;
+  grid-template-rows: minmax(0, 1fr) auto auto;
+  align-content: center;
+  gap: 7px;
+  padding: 4px 2px 1px;
+  overflow: hidden;
+}
+.npc-talk-copy {
+  min-width: 0;
   min-height: 0;
-  height: 100%;
-  overflow-y: auto;
-  padding: 10px 16px;
   display: flex;
   flex-direction: column;
-  gap: 10px;
+  justify-content: flex-start;
+  gap: 3px;
+  padding-right: 5px;
+  overflow-y: auto;
+  scrollbar-color: #8d7848 transparent;
+  scrollbar-width: thin;
+  text-align: left;
+  animation: npc-talk-line-in 150ms ease-out;
 }
-.dialogue-bubble {
-  position: relative;
+.npc-talk-advance-surface {
+  width: 100%;
+  min-height: 0;
+  align-self: stretch;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  cursor: pointer;
+}
+.npc-talk-advance-surface:disabled { cursor: default; }
+.npc-talk-advance-surface:focus-visible {
+  outline: 1px solid #cdb66e88;
+  outline-offset: 4px;
+}
+.npc-talk-copy strong { font-size: 13px; letter-spacing: .12em; }
+.npc-talk-copy strong.npc-speaker { color: #f0d27b; }
+.npc-talk-copy strong.player-speaker { color: #9fdaf2; }
+.npc-talk-copy em,
+.npc-talk-copy small { color: #9daaa0; font-size: 9px; font-style: normal; }
+.npc-talk-copy p {
+  min-height: 2.8em;
+  margin: 3px 0 0;
+  color: #f1e6c5;
+  font-size: 12px;
+  line-height: 1.55;
+  text-shadow: 0 1px 1px #000;
+}
+.npc-talk-copy p.thinking { color: #9eaa9f; font-style: italic; }
+.npc-talk-hint { color: #7f8e84 !important; font-size: 8px; text-align: center; }
+.npc-talk-offer {
   display: grid;
-  gap: 5px;
-  width: fit-content;
-  max-width: 78%;
-  padding: 8px 11px;
-  border: 1px solid #536253;
-  background: #142119ee;
-  border-radius: 3px 12px 12px 12px;
+  gap: 4px;
+  padding: 8px 10px;
+  border: 1px solid #b3955788;
+  background: linear-gradient(120deg, #342a18e8, #111a13e8);
+  box-shadow: inset 0 0 16px #e4c5680d;
 }
-.dialogue-bubble.user {
-  align-self: flex-end;
-  border-color: #6f856e;
-  background: #27352bee;
-  border-radius: 12px 3px 12px 12px;
+.npc-talk-offer > b { color: #f0d27b; }
+.npc-talk-offer > small { color: #b8b5a1; line-height: 1.4; }
+.npc-talk-actions,
+.npc-talk-controls { display: flex; justify-content: center; gap: 7px; }
+.npc-talk-actions button,
+.npc-talk-controls button {
+  min-width: 82px;
+  min-height: 30px;
+  padding: 6px 11px;
+  border: 1px solid #6f704f;
+  border-radius: 2px;
+  background: #101912;
+  color: #d8cfb3;
+  font: inherit;
+  cursor: pointer;
 }
-.dialogue-bubble small { color: #d8b95f; font-size: 9px; }
-.dialogue-bubble.user small { color: #a9c7a5; text-align: right; }
-.dialogue-bubble p { margin: 0; color: #efe2bd; line-height: 1.5; }
-.dialogue-bubble i,
-.dialogue-bubble em {
-  color: #91a498;
-  font-size: 10px;
-  line-height: 1.4;
+.npc-talk-actions button:hover,
+.npc-talk-controls button:hover:not(:disabled),
+.npc-talk-actions button:focus-visible,
+.npc-talk-controls button:focus-visible,
+.npc-talk-actions button.active,
+.npc-talk-controls button.active {
+  border-color: #e7cb76;
+  box-shadow: 0 0 0 2px #e7cb7630;
+  color: #ffe8a3;
+  outline: none;
 }
-.dialogue-bubble em { color: #b6a57d; }
-.dialogue-bubble .thinking { color: #87958a; font-style: italic; }
-.npc-chat-log .npc-chat-hint { max-width: none; color: #a6b1a7; text-align: center; margin: 18px auto; }
-.npc-chat-error { margin: 0; padding: 7px 12px; color: #e1a79a; background: #6d262655; border-top: 1px solid #8b484855; font-size: 10px; }
-.npc-chat-stage form { flex: none; display: grid; grid-template-columns: minmax(180px, .85fr) minmax(260px, 1.5fr) 138px; align-items: end; gap: 9px; padding: 10px 12px 12px; border-top: 1px solid #b3955788; background:#050a07fc; box-shadow: 0 -8px 20px #0008; }
-.npc-chat-stage form label { min-width: 0; display: grid; grid-template-rows: auto 68px; gap: 4px; color: #a3afa5; font-size: 9px; }
-.npc-chat-stage form > button { align-self: end; width: 138px; height: 68px; padding: 8px 10px; white-space: normal; }
-.npc-chat textarea { width:100%; min-width: 0; height:68px; resize: none; padding: 9px 11px; border: 1px solid #566456; background: #071009; color: #f0e3bd; outline: none; font: inherit; line-height: 1.45; box-sizing:border-box; }
-.npc-chat textarea:focus { border-color: #c5a95e; box-shadow: 0 0 0 2px #c5a95e22; }
-.npc-chat > footer { padding: 0 14px 9px; text-align: right; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.npc-talk-controls button.active { background: #263d2c; border-color: #83c19b; color: #bde8ca; }
+.npc-talk-controls button:disabled { cursor: default; opacity: .45; }
+.npc-talk-actions.quest-action { margin-top: 3px; }
+@keyframes npc-talk-line-in {
+  from { opacity: .25; transform: translateY(3px); }
+  to { opacity: 1; transform: translateY(0); }
+}
 .generated-quest-offer,
 .generated-quest-progress {
   margin: 0 12px 8px;
@@ -370,11 +440,24 @@
 .task-abandon-confirm { position: absolute; inset: 25% 20%; display: grid; align-content: center; gap: 12px; padding: 24px; border: 2px solid #a4554d; background: #170d0cf8; text-align: center; box-shadow: 0 10px 50px #000e; }
 .task-abandon-confirm > div { display: flex; justify-content: center; gap: 10px; }
 @media (max-width: 700px) {
-  .npc-chat { left: 6px; right: 6px; top:6px; bottom: 6px; max-height: none; }
-  .npc-chat-stage form { grid-template-columns: 1fr 1fr; }
-  .npc-chat-stage form > button { grid-column: 1 / -1; width: 100%; height: 38px; }
-  .dialogue-bubble { max-width: 92%; }
-  .npc-chat-body { grid-template-columns: 94px minmax(0, 1fr); }
+  .npc-talk-dialog {
+    left: 6px;
+    right: 6px;
+    bottom: 6px;
+    height: 255px;
+    min-height: 142px;
+    max-height: 255px;
+    grid-template-columns: 76px minmax(0, 1fr) 76px;
+    gap: 7px;
+    padding: 8px;
+  }
+  .npc-talk-portrait .dialog-portrait { width: 70px; height: 70px; }
+  .npc-talk-portrait b { font-size: 8px; }
+  .npc-talk-copy strong { font-size: 11px; }
+  .npc-talk-copy p { font-size: 10px; }
+  .npc-talk-controls { flex-wrap: wrap; }
+  .npc-talk-controls button { min-width: 70px; min-height: 28px; padding: 5px 7px; }
+  .npc-talk-hint { display: none; }
   .task-journal { inset: 6px; }
   .task-journal-body { grid-template-columns: 1fr; overflow: auto; }
   .task-abandon-confirm { inset: 18% 8%; }

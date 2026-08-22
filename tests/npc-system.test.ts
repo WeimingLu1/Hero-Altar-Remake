@@ -55,7 +55,6 @@ test("merchant menu and stock come from enemy database", () => {
   const a = actor();
   assert.deepEqual(npcOptions(1, a), [
     "talk",
-    "chat",
     "status",
     "battle",
     "trade",
@@ -64,14 +63,13 @@ test("merchant menu and stock come from enemy database", () => {
   assert.equal(goods.length, 2);
   assert.equal(goods[0].name, "白玉豆腐");
   assert.equal(npcOptionLabel.battle, "战斗");
-  assert.equal(npcOptionLabel.chat, "自由对话");
+  assert.equal(npcOptionLabel.talk, "交谈");
 });
 
 test("干匠(148) 提供铸剑挑战入口", () => {
   const a = actor();
   assert.deepEqual(npcOptions(148, a), [
     "talk",
-    "chat",
     "status",
     "battle",
     "forge",

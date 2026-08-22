@@ -126,7 +126,7 @@ test("JSON 存档可导入并进入完整世界", async ({ page }) => {
   ).toBe(true);
 });
 
-test("NPC 菜单同时保留原作交谈和独立自由对话", async ({ page }) => {
+test("NPC 菜单只保留统一交谈，并支持双立绘与自由发展", async ({ page }) => {
   const llmPayloads: Array<Record<string, unknown>> = [];
   await page.route("**/api/lm-studio", async (route) => {
     if (route.request().method() === "GET") {
@@ -154,7 +154,7 @@ test("NPC 菜单同时保留原作交谈和独立自由对话", async ({ page })
       savedAt: "",
       position: { mapId: 3, x: 9, y: 10, direction: 8 },
       actor: {},
-      tasks: {},
+      tasks: { generatedQuestNextOfferAt: 9999 },
       flags: {},
       variables: {},
     })),
@@ -165,15 +165,17 @@ test("NPC 菜单同时保留原作交谈和独立自由对话", async ({ page })
   const npcMenu = page.getByRole("dialog", { name: "道德和尚" });
   await expect(npcMenu).toBeVisible();
   await expect(npcMenu.getByRole("button", { name: "交谈" })).toBeVisible();
-  await expect(npcMenu.getByRole("button", { name: "自由对话" })).toBeVisible();
+  await expect(npcMenu.getByRole("button", { name: "自由对话" })).toHaveCount(0);
 
   await npcMenu.getByRole("button", { name: "交谈" }).click();
-  await expect(page.locator(".npc-talk-dialog")).toContainText("这是一句模型生成的开场");
+  const dialogue = page.locator(".npc-talk-dialog");
+  await expect(dialogue).toContainText("这是一句模型生成的开场");
+  await expect(dialogue.locator(".npc-talk-portrait")).toHaveCount(2);
+  await expect(dialogue.getByRole("button", { name: "自由发展" })).toBeVisible();
   expect(llmPayloads.map((payload) => String(payload.transcript || "")))
     .toContainEqual(expect.stringContaining("准备交谈"));
-  await page.keyboard.press("Escape");
-  await page.keyboard.press("E");
-  await page.getByRole("dialog", { name: "道德和尚" })
-    .getByRole("button", { name: "自由对话" }).click();
-  await expect(page.getByRole("dialog", { name: "与道德和尚自由对话" })).toBeVisible();
+  await page.keyboard.press("Space");
+  await expect(dialogue.getByRole("button", { name: "暂停发展" })).toBeVisible();
+  await page.keyboard.press("Space");
+  await expect(dialogue.getByRole("button", { name: "自由发展" })).toBeVisible();
 });

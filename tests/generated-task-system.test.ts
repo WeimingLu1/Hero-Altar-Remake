@@ -10,6 +10,7 @@ import {
   generatedQuestEligibleKinds,
   generatedQuestFallbackText,
   generatedQuestObjective,
+  generatedQuestOfferPercent,
   generatedQuestParticipant,
   generatedQuestReward,
   markGeneratedQuestBattleWin,
@@ -23,14 +24,19 @@ const sequence = (...values: number[]) => {
   return (max: number) => Math.abs(values[index++] || 0) % Math.max(1, max);
 };
 
-test("生成任务从第四轮起按百分比检查，并遵守任务槽和冷却", () => {
+test("生成任务从首轮以10%起步、失败递增5%，并遵守任务槽和冷却", () => {
   const tasks = freshTaskState();
-  assert.equal(shouldOfferGeneratedQuest({ replyCount: 3, offeredThisSession: false, tasks, random: () => 0 }), false);
-  assert.equal(shouldOfferGeneratedQuest({ replyCount: 4, offeredThisSession: true, tasks, random: () => 0 }), false);
-  assert.equal(shouldOfferGeneratedQuest({ replyCount: 4, offeredThisSession: false, tasks, random: () => 11 }), true);
-  assert.equal(shouldOfferGeneratedQuest({ replyCount: 4, offeredThisSession: false, tasks, random: () => 12 }), false);
+  assert.equal(generatedQuestOfferPercent(0), 10);
+  assert.equal(generatedQuestOfferPercent(1), 15);
+  assert.equal(generatedQuestOfferPercent(18), 100);
+  assert.equal(shouldOfferGeneratedQuest({ failedAttempts: 0, offeredThisSession: false, tasks, random: () => 9 }), true);
+  assert.equal(shouldOfferGeneratedQuest({ failedAttempts: 0, offeredThisSession: false, tasks, random: () => 10 }), false);
+  assert.equal(shouldOfferGeneratedQuest({ failedAttempts: 1, offeredThisSession: false, tasks, random: () => 14 }), true);
+  assert.equal(shouldOfferGeneratedQuest({ failedAttempts: 1, offeredThisSession: false, tasks, random: () => 15 }), false);
+  assert.equal(shouldOfferGeneratedQuest({ failedAttempts: 18, offeredThisSession: false, tasks, random: () => 99 }), true);
+  assert.equal(shouldOfferGeneratedQuest({ failedAttempts: 0, offeredThisSession: true, tasks, random: () => 0 }), false);
   tasks.generatedQuestNextOfferAt = 20;
-  assert.equal(shouldOfferGeneratedQuest({ replyCount: 8, offeredThisSession: false, tasks, random: () => 0 }), false);
+  assert.equal(shouldOfferGeneratedQuest({ failedAttempts: 8, offeredThisSession: false, tasks, random: () => 0 }), false);
 });
 
 test("任务候选使用真实地图事件并按人物条件过滤三种类型", () => {

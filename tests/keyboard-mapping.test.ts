@@ -105,17 +105,16 @@ test("外部资源数值使用紧凑格式并保留完整提示", () => {
   assert.match(source, /title=\{`银两：/);
 });
 
-test("底部交谈仅持久化当前生成任务记录，自由对话仍是独立面板", () => {
+test("底部交谈是唯一主动对话界面，普通闲聊仍不持久化", () => {
   assert.doesNotMatch(source, /rmxp-npc-chat-v1/);
   assert.match(source, /questTranscriptMessages/);
   assert.match(source, /requestNpcReply\([\s\S]*npcChat\.messages/);
   assert.doesNotMatch(source, /messages: messages\.slice\(-10\)/);
   assert.match(source, /if \(npcChat\) \{[\s\S]*setNpcChat\(null\)/);
   assert.match(source, /closeNpcChat\(\)/);
-  assert.match(source, /setNpcFreeChat\(\{/);
-  assert.match(source, /aria-label=\{`与\$\{npcLore\(npcFreeChat\.id\)\.name\}自由对话`\}/);
-  assert.match(source, /placeholder="例如：抱拳行礼/);
-  assert.match(source, /状态 · \{message\.state\}/);
+  assert.doesNotMatch(source, /NpcFreeChat|npcFreeChat|自由对话/);
+  assert.match(source, /playerGender=\{state\.actor\.gender\}/);
+  assert.match(source, /自由发展/);
 });
 
 test("任务提议与任务簿都可完全使用键盘操作", () => {
@@ -126,13 +125,14 @@ test("任务提议与任务簿都可完全使用键盘操作", () => {
     ).command,
     { type: "navigate", direction: "down" },
   );
-  assert.equal(
+  assert.deepEqual(
     resolveGameKey(
-      { key: "ArrowDown" },
-      { screen: "play", dialogue: "npc-chat" },
+      { key: " " },
+      { screen: "play", dialogue: "npc-talk" },
     ).command,
-    null,
+    { type: "dialogue-auto-toggle" },
   );
+  assert.equal(resolveGameKey({ key: " " }, { screen: "play" }).blocked, true);
   assert.deepEqual(
     resolveGameKey(
       { key: "E" },

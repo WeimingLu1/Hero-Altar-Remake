@@ -24,7 +24,7 @@ export type InputLayer =
   | "world";
 
 export type ConfirmationKind = "cheat" | "hidden-quest" | "item";
-export type DialogueKind = "npc-talk" | "npc-chat" | "event-text";
+export type DialogueKind = "npc-talk" | "event-text";
 export type BattleView = "action" | "outcome" | "items" | "specials";
 export type ArcadeKind = "select" | "dance" | "ball";
 export type ModalKind =
@@ -64,6 +64,7 @@ export type GameCommand =
   | { type: "navigate"; direction: Direction }
   | { type: "confirm" }
   | { type: "cancel" }
+  | { type: "dialogue-auto-toggle" }
   | { type: "screen-advance" }
   | { type: "screen-back" }
   | { type: "world-move"; direction: Direction }
@@ -206,12 +207,11 @@ const resolveDialogueCommand = (
   kind: DialogueKind,
   key: string,
 ): GameCommand | null => {
-  if (kind === "npc-chat") {
-    return isCancelKey(key) ? { type: "cancel" } : null;
-  }
   if (kind === "npc-talk") {
     return navigationCommand(key, true) ??
-      (isConfirmKey(key)
+      (key === "space"
+        ? { type: "dialogue-auto-toggle" }
+        : isConfirmKey(key)
         ? { type: "confirm" }
         : isCancelKey(key)
           ? { type: "cancel" }
@@ -351,7 +351,9 @@ export const resolveGameKey = (
   }
 
   const layer = resolveInputLayer(context);
-  const blocked = isForbiddenGameKey(key);
+  const dialogueSpace =
+    layer === "dialogue" && context.dialogue === "npc-talk" && key === "space";
+  const blocked = isForbiddenGameKey(key) && !dialogueSpace;
   let command: GameCommand | null = null;
   if (!blocked) {
     if (
@@ -383,7 +385,7 @@ export const resolveGameKey = (
     layer,
     command,
     preventDefault:
-      !blocked && (key.startsWith("arrow") || key === "tab"),
+      !blocked && (key.startsWith("arrow") || key === "tab" || dialogueSpace),
     trackHeld: layer === "world" && command?.type === "world-move",
     blocked,
   };

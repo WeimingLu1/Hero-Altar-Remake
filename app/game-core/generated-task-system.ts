@@ -81,8 +81,16 @@ const GENERATED_STAGES = new Set<GeneratedQuestStage>([
 ]);
 
 export const GENERATED_QUEST_COOLDOWN_SECONDS = 300;
-export const GENERATED_QUEST_MIN_REPLIES = 4;
-export const GENERATED_QUEST_OFFER_PERCENT = 12;
+export const GENERATED_QUEST_OFFER_PERCENT = 10;
+export const GENERATED_QUEST_OFFER_STEP_PERCENT = 5;
+
+export function generatedQuestOfferPercent(failedAttempts: number) {
+  return Math.min(
+    100,
+    GENERATED_QUEST_OFFER_PERCENT +
+      Math.max(0, Math.floor(failedAttempts)) * GENERATED_QUEST_OFFER_STEP_PERCENT,
+  );
+}
 
 const RESERVED_NPC_IDS = new Set([
   3, 6, 10, 14, 15, 25, 26, 31, 111, 139, 148, 149, 162, 163, 164, 165,
@@ -273,17 +281,16 @@ export function generatedQuestEligibleKinds(
 }
 
 export function shouldOfferGeneratedQuest(options: {
-  replyCount: number;
+  failedAttempts: number;
   offeredThisSession: boolean;
   tasks: TaskState;
   random: (max: number) => number;
 }) {
   return (
-    options.replyCount >= GENERATED_QUEST_MIN_REPLIES &&
     !options.offeredThisSession &&
     !options.tasks.generatedQuest &&
     options.tasks.clock >= options.tasks.generatedQuestNextOfferAt &&
-    options.random(100) < GENERATED_QUEST_OFFER_PERCENT
+    options.random(100) < generatedQuestOfferPercent(options.failedAttempts)
   );
 }
 
