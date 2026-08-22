@@ -119,7 +119,7 @@ test("底部交谈是唯一主动对话界面，普通闲聊仍不持久化", ()
   assert.doesNotMatch(source, /<small>动作 · \{latest\.action\}<\/small>/);
   assert.doesNotMatch(source, /entry\.state && <em>状态/);
   assert.doesNotMatch(source, /entry\.action && <i>动作/);
-  assert.match(source, /generatedQuestOfferMisses \+= 1/);
+  assert.match(source, /completedNpcReplies: chat\.replyCount/);
 });
 
 test("任务提议与任务簿都可完全使用键盘操作", () => {

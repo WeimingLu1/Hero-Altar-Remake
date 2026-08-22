@@ -10,8 +10,6 @@ import {
   generatedQuestEligibleKinds,
   generatedQuestFallbackText,
   generatedQuestObjective,
-  generatedQuestOfferPercent,
-  generatedQuestOfferRoll,
   generatedQuestParticipant,
   generatedQuestReward,
   markGeneratedQuestBattleWin,
@@ -26,23 +24,13 @@ const sequence = (...values: number[]) => {
   return (max: number) => Math.abs(values[index++] || 0) % Math.max(1, max);
 };
 
-test("生成任务从首轮以10%起步、失败递增5%，并遵守任务槽和冷却", () => {
+test("生成任务在第二次NPC回复固定触发，并遵守任务槽和拒绝冷却", () => {
   const tasks = freshTaskState();
-  assert.equal(generatedQuestOfferPercent(0), 10);
-  assert.equal(generatedQuestOfferPercent(1), 15);
-  assert.equal(generatedQuestOfferPercent(18), 100);
-  const rolls = Array.from({ length: 19 }, (_, failedAttempts) =>
-    generatedQuestOfferRoll({ npcId: 125, failedAttempts, serial: 0, clock: 0 }),
-  );
-  assert.ok(new Set(rolls).size > 12, "每轮判定必须充分打散，不能与递增概率线性同步");
-  assert.equal(shouldOfferGeneratedQuest({ failedAttempts: 0, offeredThisSession: false, tasks, random: () => 9 }), true);
-  assert.equal(shouldOfferGeneratedQuest({ failedAttempts: 0, offeredThisSession: false, tasks, random: () => 10 }), false);
-  assert.equal(shouldOfferGeneratedQuest({ failedAttempts: 1, offeredThisSession: false, tasks, random: () => 14 }), true);
-  assert.equal(shouldOfferGeneratedQuest({ failedAttempts: 1, offeredThisSession: false, tasks, random: () => 15 }), false);
-  assert.equal(shouldOfferGeneratedQuest({ failedAttempts: 18, offeredThisSession: false, tasks, random: () => 99 }), true);
-  assert.equal(shouldOfferGeneratedQuest({ failedAttempts: 0, offeredThisSession: true, tasks, random: () => 0 }), false);
+  assert.equal(shouldOfferGeneratedQuest({ completedNpcReplies: 0, offeredThisSession: false, tasks }), false);
+  assert.equal(shouldOfferGeneratedQuest({ completedNpcReplies: 1, offeredThisSession: false, tasks }), true);
+  assert.equal(shouldOfferGeneratedQuest({ completedNpcReplies: 8, offeredThisSession: true, tasks }), false);
   tasks.generatedQuestNextOfferAt = 20;
-  assert.equal(shouldOfferGeneratedQuest({ failedAttempts: 8, offeredThisSession: false, tasks, random: () => 0 }), false);
+  assert.equal(shouldOfferGeneratedQuest({ completedNpcReplies: 8, offeredThisSession: false, tasks }), false);
 });
 
 test("任务候选使用真实地图事件并按人物条件过滤三种类型", () => {
@@ -126,6 +114,7 @@ test("奖励公式固定、只结算一次且完成后清除完整任务记录",
   assert.equal(tasks.generatedQuest, null);
   assert.equal(claimGeneratedQuestReward(actor, tasks, issuer.npcId).ok, false);
   assert.equal(tasks.generatedQuestHistory.length, 1, "重复领奖不能重复写入日志");
+  assert.equal(tasks.generatedQuestNextOfferAt, tasks.clock, "领奖后应立即允许下一名NPC按两轮触发");
 });
 
 test("任务中断线有含真实人物地点的固定文本，放弃后进入冷却", () => {

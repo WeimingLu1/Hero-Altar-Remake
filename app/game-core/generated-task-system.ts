@@ -97,32 +97,7 @@ const GENERATED_STAGES = new Set<GeneratedQuestStage>([
 ]);
 
 export const GENERATED_QUEST_COOLDOWN_SECONDS = 300;
-export const GENERATED_QUEST_OFFER_PERCENT = 10;
-export const GENERATED_QUEST_OFFER_STEP_PERCENT = 5;
-
-export function generatedQuestOfferPercent(failedAttempts: number) {
-  return Math.min(
-    100,
-    GENERATED_QUEST_OFFER_PERCENT +
-      Math.max(0, Math.floor(failedAttempts)) * GENERATED_QUEST_OFFER_STEP_PERCENT,
-  );
-}
-
-export function generatedQuestOfferRoll(options: {
-  npcId: number;
-  failedAttempts: number;
-  serial: number;
-  clock: number;
-}) {
-  let value =
-    Math.imul(options.npcId + 1, 0x9e3779b1) ^
-    Math.imul(options.failedAttempts + 1, 0x85ebca6b) ^
-    Math.imul(options.serial + 1, 0xc2b2ae35) ^
-    Math.floor(options.clock);
-  value = Math.imul(value ^ (value >>> 16), 0x7feb352d);
-  value = Math.imul(value ^ (value >>> 15), 0x846ca68b);
-  return ((value ^ (value >>> 16)) >>> 0) % 100;
-}
+export const GENERATED_QUEST_OFFER_REPLY_COUNT = 2;
 
 const RESERVED_NPC_IDS = new Set([
   3, 6, 10, 14, 15, 25, 26, 31, 111, 139, 148, 149, 162, 163, 164, 165,
@@ -399,16 +374,15 @@ export function generatedQuestEligibleKinds(
 }
 
 export function shouldOfferGeneratedQuest(options: {
-  failedAttempts: number;
+  completedNpcReplies: number;
   offeredThisSession: boolean;
   tasks: TaskState;
-  random: (max: number) => number;
 }) {
   return (
     !options.offeredThisSession &&
     !options.tasks.generatedQuest &&
     options.tasks.clock >= options.tasks.generatedQuestNextOfferAt &&
-    options.random(100) < generatedQuestOfferPercent(options.failedAttempts)
+    options.completedNpcReplies + 1 >= GENERATED_QUEST_OFFER_REPLY_COUNT
   );
 }
 
@@ -632,10 +606,9 @@ export function claimGeneratedQuestReward(
   );
   tasks.generatedQuest = null;
   tasks.generatedQuestOfferMisses = 0;
-  tasks.generatedQuestNextOfferAt = Math.max(
-    tasks.generatedQuestNextOfferAt,
-    tasks.clock + GENERATED_QUEST_COOLDOWN_SECONDS,
-  );
+  // A successfully completed story immediately reopens discovery: the next
+  // eligible NPC can offer another quest on their second reply.
+  tasks.generatedQuestNextOfferAt = tasks.clock;
   return {
     ok: true,
     text: `获得经验 ${reward.exp}、潜能 ${reward.potential}、银两 ${reward.gold}${reward.item ? `，以及${reward.item.name}` : ""}。`,

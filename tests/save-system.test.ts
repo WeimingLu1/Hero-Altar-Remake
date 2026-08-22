@@ -134,7 +134,7 @@ test("v2 saves migrate with an empty generated-task slot", () => {
   assert.deepEqual(migrated.tasks.generatedQuestHistory, []);
 });
 
-test("生成任务保底计数跨对话和存档保留，并规范非法值", () => {
+test("旧版生成任务概率计数仍可迁移并规范非法值", () => {
   const save = fresh();
   save.tasks.generatedQuestOfferMisses = 7;
   assert.equal(normalize(JSON.parse(JSON.stringify(save))).tasks.generatedQuestOfferMisses, 7);

@@ -89,7 +89,6 @@ import {
   generatedQuestEligibleKinds,
   generatedQuestInteraction,
   generatedQuestObjective,
-  generatedQuestOfferRoll,
   generatedQuestParticipant,
   generatedQuestPrompt,
   markGeneratedQuestBattleWin,
@@ -1094,26 +1093,18 @@ export default function OriginalWorld({
       current.tasks.clock < current.tasks.generatedQuestNextOfferAt ||
       !issuer ||
       !generatedQuestEligibleKinds(issuer, current.actor, current.tasks).length
-    ) return { draft: null, checked: false };
-    const failedAttempts = current.tasks.generatedQuestOfferMisses,
-      offerRoll = generatedQuestOfferRoll({
-        npcId: chat.id,
-        failedAttempts,
-        serial: current.tasks.generatedQuestSerial,
-        clock: current.tasks.clock,
-      }),
-      random = seeded(
+    ) return { draft: null };
+    if (!shouldOfferGeneratedQuest({
+      completedNpcReplies: chat.replyCount,
+      offeredThisSession: chat.offeredThisSession,
+      tasks: current.tasks,
+    })) return { draft: null };
+    const random = seeded(
         Math.imul(chat.id + 1, 0x9e3779b1) ^
-          Math.imul(failedAttempts + 1, 0x85ebca6b) ^
+          Math.imul(chat.replyCount + 1, 0x85ebca6b) ^
           Math.imul(current.tasks.generatedQuestSerial + 1, 0xc2b2ae35) ^
           Math.floor(current.tasks.clock),
       );
-    if (!shouldOfferGeneratedQuest({
-      failedAttempts,
-      offeredThisSession: chat.offeredThisSession,
-      tasks: current.tasks,
-      random: () => offerRoll,
-    })) return { draft: null, checked: true };
     return {
       draft: createGeneratedQuestDraft({
         issuer,
@@ -1121,14 +1112,12 @@ export default function OriginalWorld({
         tasks: current.tasks,
         random,
       }),
-      checked: true,
     };
   }, []);
   const requestNpcReply = useCallback(async (
     id: number,
     dialogueHistory: NpcDialogueMessage[],
     offerDraft: GeneratedQuestDraft | null = null,
-    missedOffer = false,
     questReplyMode: NpcQuestReplyMode = null,
     contextDraft: GeneratedQuestDraft | null = null,
   ) => {
@@ -1218,9 +1207,6 @@ export default function OriginalWorld({
         sync(next);
       } else if (offerDraft) {
         declineGeneratedQuest(next.tasks);
-        sync(next);
-      } else if (missedOffer) {
-        next.tasks.generatedQuestOfferMisses += 1;
         sync(next);
       }
       setNpcChat((chat) => {
@@ -1349,7 +1335,7 @@ export default function OriginalWorld({
       mode: NpcQuestReplyMode = draft.kind === "duel" ? "accept-battle" : "accept-close";
     setNpcChat({ ...chat, messages, pendingQuest: null, auto: false, questReady: false, questReplyMode: mode, terminal: null });
     setNotice(`已接受「${draft.title}」 · ${generatedQuestObjective(next.tasks.generatedQuest!)}`);
-    void requestNpcReply(chat.id, messages, null, false, mode);
+    void requestNpcReply(chat.id, messages, null, mode);
   }, [npcChat, requestNpcReply, sync]);
   const declineNpcQuest = useCallback(() => {
     const chat = npcChat, draft = chat?.pendingQuest;
@@ -1358,7 +1344,7 @@ export default function OriginalWorld({
       messages = [...chat.messages, declinedLine];
     setNpcChat({ ...chat, messages, pendingQuest: null, auto: false, questReplyMode: "decline-close", terminal: null });
     setNotice("你婉拒了这次委托。");
-    void requestNpcReply(chat.id, messages, null, false, "decline-close", draft);
+    void requestNpcReply(chat.id, messages, null, "decline-close", draft);
   }, [npcChat, requestNpcReply]);
   const startGeneratedQuestBattle = useCallback(() => {
     if (!npcChat) return;
@@ -1480,7 +1466,6 @@ export default function OriginalWorld({
         npcChat.id,
         npcChat.messages,
         offer.draft,
-        offer.checked && !offer.draft,
       );
     } else void generateAutoPlayerTurn(npcChat);
   }, [generateAutoPlayerTurn, npcChat, openNpcConversation, prepareGeneratedQuestOffer, requestNpcReply]);
@@ -1496,7 +1481,6 @@ export default function OriginalWorld({
           npcChat.id,
           npcChat.messages,
           null,
-          false,
           npcChat.questReplyMode,
         );
         return;
@@ -1506,7 +1490,6 @@ export default function OriginalWorld({
         npcChat.id,
         npcChat.messages,
         offer.draft,
-        offer.checked && !offer.draft,
       );
     }, 0);
     return () => window.clearTimeout(id);
