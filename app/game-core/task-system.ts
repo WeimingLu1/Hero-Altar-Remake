@@ -3,7 +3,10 @@ import type { SceneActorState } from "./scene-event";
 import { derivedStats } from "./inventory-system";
 import type { OriginalRecord } from "./original-data";
 import { getOriginalMap } from "./original-world";
-import type { GeneratedQuest } from "./generated-task-system";
+import type {
+  GeneratedQuest,
+  GeneratedQuestHistoryEntry,
+} from "./generated-task-system";
 
 export type TaskState = {
   clock: number;
@@ -41,6 +44,7 @@ export type TaskState = {
   generatedQuestNextOfferAt: number;
   generatedQuestSerial: number;
   generatedQuestOfferMisses: number;
+  generatedQuestHistory: GeneratedQuestHistoryEntry[];
 };
 
 export const freshTaskState = (): TaskState => ({
@@ -79,6 +83,7 @@ export const freshTaskState = (): TaskState => ({
   generatedQuestNextOfferAt: 0,
   generatedQuestSerial: 0,
   generatedQuestOfferMisses: 0,
+  generatedQuestHistory: [],
 });
 
 const reward = (

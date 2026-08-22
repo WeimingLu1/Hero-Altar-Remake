@@ -119,8 +119,13 @@ test("奖励公式固定、只结算一次且完成后清除完整任务记录",
   assert.equal(actor.exp, before.exp + draft.reward.exp);
   assert.equal(actor.potential, before.potential + draft.reward.potential);
   assert.equal(actor.gold, before.gold + draft.reward.gold);
+  assert.equal(tasks.generatedQuestHistory.length, 1);
+  assert.equal(tasks.generatedQuestHistory[0].id, draft.id);
+  assert.match(tasks.generatedQuestHistory[0].summary, /完成|拜访|切磋|挑战/);
+  assert.equal(tasks.generatedQuestHistory[0].reward.exp, draft.reward.exp);
   assert.equal(tasks.generatedQuest, null);
   assert.equal(claimGeneratedQuestReward(actor, tasks, issuer.npcId).ok, false);
+  assert.equal(tasks.generatedQuestHistory.length, 1, "重复领奖不能重复写入日志");
 });
 
 test("任务中断线有含真实人物地点的固定文本，放弃后进入冷却", () => {

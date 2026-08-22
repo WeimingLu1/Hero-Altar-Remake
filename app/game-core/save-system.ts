@@ -2,7 +2,10 @@ import { MAX_PLAYER_EXP } from "./progression-limits";
 import { SAVE_FORMAT, SAVE_VERSION } from "./save-constants";
 import type { SceneActorState } from "./scene-event";
 import { freshTaskState, type TaskState } from "./task-system";
-import { normalizeGeneratedQuest } from "./generated-task-system";
+import {
+  normalizeGeneratedQuest,
+  normalizeGeneratedQuestHistory,
+} from "./generated-task-system";
 import {
   getOriginalMap,
   hasOriginalMap,
@@ -175,6 +178,9 @@ export function normalize(value: unknown): WorldSave {
       generatedQuestOfferMisses: Math.max(
         0,
         Math.floor(Number(oldTasks.generatedQuestOfferMisses || 0)),
+      ),
+      generatedQuestHistory: normalizeGeneratedQuestHistory(
+        oldTasks.generatedQuestHistory,
       ),
       generatedQuest:
         oldTasks.generatedQuest && typeof oldTasks.generatedQuest === "object"

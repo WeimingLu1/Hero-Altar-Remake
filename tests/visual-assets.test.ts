@@ -408,3 +408,11 @@ test("生成奇遇提议和各任务节点按完整台词单句收束", () => {
   assert.match(worldSource, /className="generated-quest-sidebar"/);
   assert.doesNotMatch(worldSource, /当前奇遇尚未走到交手阶段/);
 });
+
+test("奇遇选择保留完整委托对白并在任务簿展示完成日志", () => {
+  assert.match(worldSource, /pendingQuest \? " has-offer"/);
+  assert.match(worldSource, /委托原委保留在上方对白中，可滚动查看/);
+  assert.match(worldSource, /className="task-journal-history"/);
+  assert.match(worldSource, /已完成奇遇日志/);
+  assert.match(worldSource, /generatedQuestHistory/);
+});

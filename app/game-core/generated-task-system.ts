@@ -70,6 +70,22 @@ export type GeneratedQuest =
 
 export type GeneratedQuestDraft = GeneratedQuest;
 
+export type GeneratedQuestHistoryEntry = {
+  version: 1;
+  id: string;
+  kind: GeneratedQuestKind;
+  title: string;
+  premise: string;
+  summary: string;
+  issuerName: string;
+  issuerMapName: string;
+  targetName: string;
+  targetMapName: string;
+  reward: GeneratedQuestReward;
+  closingLine?: string;
+  completedAt: number;
+};
+
 const GENERATED_KINDS = new Set<GeneratedQuestKind>(["duel", "visit", "delegated-duel"]);
 const GENERATED_STAGES = new Set<GeneratedQuestStage>([
   "accepted",
@@ -253,6 +269,80 @@ export function normalizeGeneratedQuest(value: unknown): GeneratedQuest | null {
     },
     transcript,
   } as GeneratedQuest;
+}
+
+export function normalizeGeneratedQuestHistory(
+  value: unknown,
+): GeneratedQuestHistoryEntry[] {
+  if (!Array.isArray(value)) return [];
+  return value.flatMap((entry): GeneratedQuestHistoryEntry[] => {
+    if (!entry || typeof entry !== "object") return [];
+    const row = entry as Partial<GeneratedQuestHistoryEntry>;
+    if (!row.kind || !GENERATED_KINDS.has(row.kind) || !row.id) return [];
+    const rawReward = row.reward;
+    if (!rawReward || typeof rawReward !== "object") return [];
+    const reward: GeneratedQuestReward = {
+      exp: Math.max(0, Math.floor(Number(rawReward.exp) || 0)),
+      potential: Math.max(0, Math.floor(Number(rawReward.potential) || 0)),
+      gold: Math.max(0, Math.floor(Number(rawReward.gold) || 0)),
+    };
+    if (
+      rawReward.item &&
+      Number(rawReward.item.kind) === 1 &&
+      Number(rawReward.item.id) > 0 &&
+      Number(rawReward.item.id) < 19
+    ) reward.item = {
+      kind: 1,
+      id: Math.floor(Number(rawReward.item.id)),
+      name: String(rawReward.item.name || "物品"),
+      amount: 1,
+    };
+    return [{
+      version: 1,
+      id: String(row.id),
+      kind: row.kind,
+      title: String(row.title || "江湖奇遇"),
+      premise: String(row.premise || "一桩已经了结的江湖委托。"),
+      summary: String(row.summary || "这桩江湖委托已经圆满完成。"),
+      issuerName: String(row.issuerName || "江湖人物"),
+      issuerMapName: String(row.issuerMapName || "江湖某处"),
+      targetName: String(row.targetName || "江湖人物"),
+      targetMapName: String(row.targetMapName || "江湖某处"),
+      reward,
+      ...(row.closingLine ? { closingLine: String(row.closingLine) } : {}),
+      completedAt: Math.max(0, Math.floor(Number(row.completedAt) || 0)),
+    }];
+  });
+}
+
+export function generatedQuestHistoryEntry(
+  quest: GeneratedQuest,
+  completedAt: number,
+): GeneratedQuestHistoryEntry {
+  const summary = quest.kind === "duel"
+    ? `应${quest.issuer.name}之邀，在${quest.target.mapName}完成了一场点到为止的切磋。`
+    : quest.kind === "visit"
+      ? `受${quest.issuer.name}所托，前往${quest.target.mapName}拜访${quest.target.name}，并返回${quest.issuer.mapName}复命。`
+      : `受${quest.issuer.name}委派，前往${quest.target.mapName}挑战${quest.target.name}，取胜后返回${quest.issuer.mapName}复命。`;
+  const closingLine = [...quest.transcript]
+    .reverse()
+    .find((entry) => entry.speaker === "npc" && entry.speech.trim())
+    ?.speech.trim();
+  return {
+    version: 1,
+    id: quest.id,
+    kind: quest.kind,
+    title: quest.title,
+    premise: quest.premise,
+    summary,
+    issuerName: quest.issuer.name,
+    issuerMapName: quest.issuer.mapName,
+    targetName: quest.target.name,
+    targetMapName: quest.target.mapName,
+    reward: structuredClone(quest.reward),
+    ...(closingLine ? { closingLine } : {}),
+    completedAt: Math.max(0, Math.floor(completedAt)),
+  };
 }
 
 const excludedNpcIds = (actor: SceneActorState, tasks: TaskState) =>
@@ -537,6 +627,9 @@ export function claimGeneratedQuestReward(
     const key = `${reward.item.kind}:${reward.item.id}`;
     actor.inventory[key] = (actor.inventory[key] || 0) + reward.item.amount;
   }
+  tasks.generatedQuestHistory.push(
+    generatedQuestHistoryEntry(quest, tasks.clock),
+  );
   tasks.generatedQuest = null;
   tasks.generatedQuestOfferMisses = 0;
   tasks.generatedQuestNextOfferAt = Math.max(

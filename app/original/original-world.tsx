@@ -3332,7 +3332,7 @@ export default function OriginalWorld({
               : null;
           return (
             <section
-              className={`npc-talk-dialog${npcChat.auto ? " auto" : ""}`}
+              className={`npc-talk-dialog${npcChat.auto ? " auto" : ""}${npcChat.pendingQuest ? " has-offer" : ""}`}
               role="dialog"
               aria-modal="true"
               aria-label={`与${npcLore(npcChat.id).name}交谈`}
@@ -3360,10 +3360,12 @@ export default function OriginalWorld({
                 </button>
                 {npcChat.pendingQuest && (
                   <div className="npc-talk-offer">
-                    <b>江湖委托 · {npcChat.pendingQuest.title}</b>
-                    <small>{npcChat.pendingQuest.premise}</small>
-                    <small>
-                      奖励：经验 {npcChat.pendingQuest.reward.exp} · 潜能 {npcChat.pendingQuest.reward.potential} · 银两 {npcChat.pendingQuest.reward.gold}
+                    <span className="npc-talk-offer-summary">
+                      <b>是否接受「{npcChat.pendingQuest.title}」？</b>
+                      <small>委托原委保留在上方对白中，可滚动查看。</small>
+                    </span>
+                    <small className="npc-talk-offer-reward">
+                      经验 {npcChat.pendingQuest.reward.exp} · 潜能 {npcChat.pendingQuest.reward.potential} · 银两 {npcChat.pendingQuest.reward.gold}
                       {npcChat.pendingQuest.reward.item ? ` · ${npcChat.pendingQuest.reward.item.name}` : ""}
                     </small>
                     <span className="npc-talk-actions">
@@ -3470,6 +3472,39 @@ export default function OriginalWorld({
                   <p>与普通江湖人物深入交谈，偶尔会有人自然提出委托。</p>
                 </section>
               )}
+              <section className="task-journal-history">
+                <div className="task-history-heading">
+                  <div>
+                    <small>江湖足迹</small>
+                    <h3>已完成奇遇日志</h3>
+                  </div>
+                  <b>{state.tasks.generatedQuestHistory.length} 件</b>
+                </div>
+                {state.tasks.generatedQuestHistory.length ? (
+                  <div className="task-history-list">
+                    {[...state.tasks.generatedQuestHistory].reverse().map((entry) => (
+                      <article key={entry.id}>
+                        <header>
+                          <b>{entry.title}</b>
+                          <time>{formatQuestClock(entry.completedAt)}</time>
+                        </header>
+                        <p>{entry.summary}</p>
+                        <small>{entry.premise}</small>
+                        {entry.closingLine && <blockquote>“{entry.closingLine}”</blockquote>}
+                        <footer>
+                          <span>发布人：{entry.issuerName} · {entry.issuerMapName}</span>
+                          <span>
+                            奖励：经验 {entry.reward.exp} · 潜能 {entry.reward.potential} · 银两 {entry.reward.gold}
+                            {entry.reward.item ? ` · ${entry.reward.item.name}` : ""}
+                          </span>
+                        </footer>
+                      </article>
+                    ))}
+                  </div>
+                ) : (
+                  <p className="task-history-empty">完成并领取第一桩奇遇奖励后，这里会留下故事摘要。</p>
+                )}
+              </section>
             </div>
             <footer>
               <button type="button" className={taskBook.index === 0 ? "active" : ""} onClick={() => setTaskBook(null)}>返回</button>
@@ -3821,3 +3856,12 @@ const compactNumber = (value: number) =>
     notation: "compact",
     maximumFractionDigits: 1,
   }).format(value);
+
+const formatQuestClock = (seconds: number) => {
+  const totalMinutes = Math.max(0, Math.floor(seconds / 60)),
+    day = Math.floor(totalMinutes / 720) + 1,
+    minuteOfDay = totalMinutes % 720,
+    hour = Math.floor(minuteOfDay / 60),
+    minute = minuteOfDay % 60;
+  return `第 ${day} 天 ${String(hour).padStart(2, "0")}:${String(minute).padStart(2, "0")}`;
+};
