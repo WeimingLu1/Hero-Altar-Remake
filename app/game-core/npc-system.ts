@@ -9,7 +9,7 @@ import type { SceneActorState } from "./scene-event";
 import { npcLoreStatus } from "./npc-lore";
 
 export type NpcOption =
-  "talk" | "status" | "battle" | "trade" | "join" | "study" | "forge";
+  "talk" | "chat" | "status" | "battle" | "trade" | "join" | "study" | "forge";
 export type ShopGood = {
   kind: 1 | 2 | 3;
   id: number;
@@ -29,7 +29,7 @@ const table = (kind: number) =>
 export function npcOptions(id: number, actor: SceneActorState): NpcOption[] {
   const npc = enemy(id),
     type = Number(npc.type || 0);
-  const result: NpcOption[] = ["talk", "status", "battle"];
+  const result: NpcOption[] = ["talk", "chat", "status", "battle"];
   if (type === -1) result.push("trade");
   else if (type > 0) result.push(actor.teacherId === id ? "study" : "join");
   else if (id === 7 || id === 31) result.push("study");
@@ -39,6 +39,7 @@ export function npcOptions(id: number, actor: SceneActorState): NpcOption[] {
 }
 export const npcOptionLabel: Record<NpcOption, string> = {
   talk: "交谈",
+  chat: "自由对话",
   status: "查看",
   battle: "战斗",
   trade: "交易",

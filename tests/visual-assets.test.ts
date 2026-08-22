@@ -365,7 +365,7 @@ test("factions and Pingan districts use full-map authored plans", () => {
   assert.match(source, /landscapedEdge/);
 });
 
-test("统一交谈保持原作任务优先并独占环境 LLM 运行时", () => {
+test("原作交谈保持任务优先，普通分支才进入底部 LLM，多功能自由对话独立", () => {
   const chooseStart = worldSource.indexOf("const chooseNpc"),
     chooseEnd = worldSource.indexOf("const closeNpcChat", chooseStart),
     talkFlow = worldSource.slice(chooseStart, chooseEnd),
@@ -384,7 +384,9 @@ test("统一交谈保持原作任务优先并独占环境 LLM 运行时", () => 
   ])
     assert.ok(talkFlow.indexOf(originalBranch) < llmEntry, originalBranch);
   assert.match(worldSource, /probeLlmHealth\(controller\.signal\)/);
-  assert.match(worldSource, /eventText \|\|[\s\S]*npcChat \|\|[\s\S]*taskBook/);
+  assert.match(talkFlow, /option === "chat"[\s\S]*setNpcFreeChat\(\{/);
+  assert.match(worldSource, /className="world-dialog with-portrait npc-talk-dialog"/);
+  assert.match(worldSource, /eventText \|\|[\s\S]*npcChat \|\|[\s\S]*npcFreeChat \|\|[\s\S]*taskBook/);
   assert.match(rendererSource, /generatedQuest\.target\.mapId === map\.id/);
   assert.match(rendererSource, /generatedQuest\.target\.eventId === e\.id/);
 });

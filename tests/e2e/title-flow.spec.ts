@@ -125,3 +125,41 @@ test("JSON 存档可导入并进入完整世界", async ({ page }) => {
     page.evaluate(() => Boolean(window.localStorage.getItem("rmxp-original-world-v1"))),
   ).toBe(true);
 });
+
+test("NPC 菜单同时保留原作交谈和独立自由对话", async ({ page }) => {
+  await page.route("**/api/lm-studio", (route) => route.fulfill({
+    status: 503,
+    contentType: "application/json",
+    body: JSON.stringify({ error: "offline in test" }),
+  }));
+  await page.goto("/");
+  await page.locator('input[type="file"]').setInputFiles({
+    name: "npc-menu-save.json",
+    mimeType: "application/json",
+    buffer: Buffer.from(JSON.stringify({
+      format: "rmxp-hero-original-world-save",
+      version: 3,
+      savedAt: "",
+      position: { mapId: 3, x: 9, y: 10, direction: 8 },
+      actor: {},
+      tasks: {},
+      flags: {},
+      variables: {},
+    })),
+  });
+  await expect(page.getByRole("img", { name: /地图，主角位于/ })).toBeVisible();
+  await page.keyboard.press("E");
+
+  const npcMenu = page.getByRole("dialog", { name: "道德和尚" });
+  await expect(npcMenu).toBeVisible();
+  await expect(npcMenu.getByRole("button", { name: "交谈" })).toBeVisible();
+  await expect(npcMenu.getByRole("button", { name: "自由对话" })).toBeVisible();
+
+  await npcMenu.getByRole("button", { name: "交谈" }).click();
+  await expect(page.locator(".world-dialog")).toContainText("道德和尚");
+  await page.keyboard.press("Escape");
+  await page.keyboard.press("E");
+  await page.getByRole("dialog", { name: "道德和尚" })
+    .getByRole("button", { name: "自由对话" }).click();
+  await expect(page.getByRole("dialog", { name: "与道德和尚自由对话" })).toBeVisible();
+});

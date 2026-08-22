@@ -24,7 +24,7 @@ export type InputLayer =
   | "world";
 
 export type ConfirmationKind = "cheat" | "hidden-quest" | "item";
-export type DialogueKind = "npc-chat" | "event-text";
+export type DialogueKind = "npc-talk" | "npc-chat" | "event-text";
 export type BattleView = "action" | "outcome" | "items" | "specials";
 export type ArcadeKind = "select" | "dance" | "ball";
 export type ModalKind =
@@ -207,6 +207,9 @@ const resolveDialogueCommand = (
   key: string,
 ): GameCommand | null => {
   if (kind === "npc-chat") {
+    return isCancelKey(key) ? { type: "cancel" } : null;
+  }
+  if (kind === "npc-talk") {
     return navigationCommand(key, true) ??
       (isConfirmKey(key)
         ? { type: "confirm" }

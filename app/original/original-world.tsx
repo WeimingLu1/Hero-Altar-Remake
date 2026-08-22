@@ -217,6 +217,16 @@ type NpcChatState = {
   pendingQuest: GeneratedQuestDraft | null;
   questChoice: 0 | 1;
   questReady: boolean;
+  started: boolean;
+};
+type NpcFreeChatState = {
+  id: number;
+  speech: string;
+  action: string;
+  messages: NpcDialogueMessage[];
+  loading: boolean;
+  auto: boolean;
+  error: string;
 };
 type NpcDialogueMessage =
   | { role: "user"; speech: string; action: string }
@@ -286,6 +296,7 @@ export default function OriginalWorld({
       null,
     ),
     [npcChat, setNpcChat] = useState<NpcChatState | null>(null),
+    [npcFreeChat, setNpcFreeChat] = useState<NpcFreeChatState | null>(null),
     [shop, setShop] = useState<{ id: number; index: number } | null>(null),
     [study, setStudy] = useState<{
       id: number;
@@ -335,6 +346,7 @@ export default function OriginalWorld({
     nameInput = useRef<HTMLInputElement>(null),
     chatEnd = useRef<HTMLDivElement>(null),
     chatAbort = useRef<AbortController | null>(null),
+    freeChatAbort = useRef<AbortController | null>(null),
     battleNarrationAbort = useRef<AbortController | null>(null),
     battleNarrativesRef = useRef<BattleNarrative[]>([]),
     llmHealthCache = useRef<{ checkedAt: number; ok: boolean } | null>(null),
@@ -348,6 +360,7 @@ export default function OriginalWorld({
         eventText ||
           npcMenu ||
           npcChat ||
+          npcFreeChat ||
           shop ||
           study ||
           battle ||
@@ -379,10 +392,13 @@ export default function OriginalWorld({
     return () => {
       runtimeMounted.current = false;
       const activeChat = chatAbort.current,
+        activeFreeChat = freeChatAbort.current,
         activeNarration = battleNarrationAbort.current;
       chatAbort.current = null;
+      freeChatAbort.current = null;
       battleNarrationAbort.current = null;
       activeChat?.abort();
+      activeFreeChat?.abort();
       activeNarration?.abort();
     };
   }, []);
@@ -665,6 +681,11 @@ export default function OriginalWorld({
           chatAbort.current = null;
           setNpcChat(null);
         }
+        if (npcFreeChat) {
+          freeChatAbort.current?.abort();
+          freeChatAbort.current = null;
+          setNpcFreeChat(null);
+        }
         s.position.x = nx;
         s.position.y = ny;
         sync(s);
@@ -688,6 +709,7 @@ export default function OriginalWorld({
       menu,
       npcMenu,
       npcChat,
+      npcFreeChat,
       runAt,
       shop,
       study,
@@ -776,6 +798,7 @@ export default function OriginalWorld({
       pendingQuest: null,
       questChoice: 0,
       questReady: false,
+      started: false,
     });
     const cached = llmHealthCache.current,
       now = Date.now();
@@ -805,6 +828,13 @@ export default function OriginalWorld({
         npcId: id,
         speech: fallback,
       });
+      if (interaction === "challenge-target") {
+        appendGeneratedQuestTranscript(next.tasks, {
+          speaker: "npc",
+          npcId: id,
+          speech: "既然你已经寻到这里，缘由便已说开。若准备好了，我们就开始切磋。",
+        });
+      }
       if (["visit-target", "challenge-target", "post-battle"].includes(interaction || ""))
         advanceGeneratedQuestAfterDialogue(next.tasks, id);
       sync(next);
@@ -829,15 +859,13 @@ export default function OriginalWorld({
       offeredThisSession: false,
       pendingQuest: null,
       questChoice: 0,
-      questReady:
-        (!healthy && participant) ||
-        Boolean(
-          quest &&
-            interaction === "battle-ready" &&
-            quest.transcript.some(
-              (entry) => entry.speaker === "npc" && entry.npcId === id,
-            ),
-        ),
+      questReady: Boolean(
+        stateRef.current.tasks.generatedQuest &&
+        ["battle-ready", "report"].includes(
+          generatedQuestInteraction(stateRef.current.tasks.generatedQuest, id) || "",
+        )
+      ),
+      started: !healthy,
     });
   }, [fixedNpcDialogue, questTranscriptMessages, sync]);
   const chooseNpc = useCallback(
@@ -961,6 +989,17 @@ export default function OriginalWorld({
           setEventText(`${npcDisplayName(id)}\n${r.lines.join("\n")}`);
           setHiddenConfirm({ npcId: id, index: 0 });
         } else void openNpcConversation(id);
+      } else if (option === "chat") {
+        setEventNpcId(null);
+        setNpcFreeChat({
+          id,
+          speech: "",
+          action: "",
+          messages: [],
+          loading: false,
+          auto: false,
+          error: "",
+        });
       } else if (option === "status") setEventText(npcStatus(id).join("\n"));
       else if (option === "battle") {
         const quest = next.tasks.generatedQuest,
@@ -995,11 +1034,17 @@ export default function OriginalWorld({
     setNpcChat(null);
     setEventNpcId(null);
   }, []);
+  const closeNpcFreeChat = useCallback(() => {
+    freeChatAbort.current?.abort();
+    freeChatAbort.current = null;
+    setNpcFreeChat(null);
+  }, []);
   const returnToTitle = useCallback(() => {
     closeNpcChat();
+    closeNpcFreeChat();
     battleNarrationAbort.current?.abort();
     setScreen("title");
-  }, [closeNpcChat]);
+  }, [closeNpcChat, closeNpcFreeChat]);
   const prepareGeneratedQuestOffer = useCallback((chat: NpcChatState) => {
     const current = stateRef.current,
       random = seeded(
@@ -1042,7 +1087,7 @@ export default function OriginalWorld({
     chatAbort.current?.abort();
     chatAbort.current = controller;
     setNpcChat((chat) => chat?.id === id ? {
-      ...chat, speech: "", action: "",
+      ...chat, speech: "", action: "", started: true,
       messages: [...dialogueHistory, { role: "assistant", npcId: id, state: "", action: "", speech: "", raw: "" }],
       loading: true, error: "", offeredThisSession: chat.offeredThisSession || Boolean(offerDraft),
     } : chat);
@@ -1102,6 +1147,10 @@ export default function OriginalWorld({
         if (!chat || chat.id !== id) return chat;
         const messages = [...chat.messages];
         messages[messages.length - 1] = { role: "assistant", npcId: id, raw: answer, ...parsed };
+        const progressedQuest = stateRef.current.tasks.generatedQuest,
+          progressedInteraction = progressedQuest
+            ? generatedQuestInteraction(progressedQuest, id)
+            : null;
         return {
           ...chat,
           messages,
@@ -1109,7 +1158,7 @@ export default function OriginalWorld({
           replyCount: chat.replyCount + 1,
           pendingQuest: offerDraft,
           questChoice: 0,
-          questReady: participant,
+          questReady: progressedInteraction === "battle-ready" || progressedInteraction === "report",
           auto: offerDraft ? false : chat.auto,
         };
       });
@@ -1155,17 +1204,6 @@ export default function OriginalWorld({
       if (chatAbort.current === controller) chatAbort.current = null;
     }
   }, [fixedNpcDialogue, sync]);
-  const sendNpcChat = useCallback(async () => {
-    if (!npcChat || npcChat.loading) return;
-    const speech = npcChat.speech.trim(), action = npcChat.action.trim();
-    if (!speech && !action) return;
-    const offerDraft = prepareGeneratedQuestOffer(npcChat);
-    await requestNpcReply(
-      npcChat.id,
-      [...npcChat.messages, { role: "user", speech, action }],
-      offerDraft,
-    );
-  }, [npcChat, prepareGeneratedQuestOffer, requestNpcReply]);
   const acceptNpcQuest = useCallback(() => {
     const chat = npcChat, draft = chat?.pendingQuest;
     if (!chat || !draft) return;
@@ -1202,7 +1240,7 @@ export default function OriginalWorld({
       }));
       setNotice(`已接受「${draft.title}」，切磋开始。`);
     } else {
-      setNpcChat({ ...chat, pendingQuest: null, auto: false, questReady: true });
+      setNpcChat({ ...chat, pendingQuest: null, auto: false, questReady: false });
       setNotice(`已接受「${draft.title}」 · ${generatedQuestObjective(next.tasks.generatedQuest!)}`);
     }
   }, [npcChat, sync]);
@@ -1293,6 +1331,24 @@ export default function OriginalWorld({
       if (chatAbort.current === controller) chatAbort.current = null;
     }
   }, [fixedNpcDialogue]);
+  const advanceNpcConversation = useCallback(() => {
+    if (!npcChat || npcChat.loading || npcChat.pendingQuest) return;
+    const last = npcChat.messages[npcChat.messages.length - 1];
+    if (!last || last.role === "user")
+      void requestNpcReply(
+        npcChat.id,
+        npcChat.messages,
+        prepareGeneratedQuestOffer(npcChat),
+      );
+    else void generateAutoPlayerTurn(npcChat);
+  }, [generateAutoPlayerTurn, npcChat, prepareGeneratedQuestOffer, requestNpcReply]);
+  useEffect(() => {
+    if (!npcChat || npcChat.loading || npcChat.started) return;
+    const id = window.setTimeout(() => {
+      void requestNpcReply(npcChat.id, npcChat.messages);
+    }, 0);
+    return () => window.clearTimeout(id);
+  }, [npcChat, requestNpcReply]);
   useEffect(() => {
     if (!npcChat?.auto || npcChat.loading || npcChat.error || npcChat.pendingQuest) return;
     const last = npcChat.messages[npcChat.messages.length - 1],
@@ -1307,9 +1363,187 @@ export default function OriginalWorld({
       }, 650);
     return () => window.clearTimeout(timer);
   }, [generateAutoPlayerTurn, npcChat, prepareGeneratedQuestOffer, requestNpcReply]);
+  const requestFreeNpcReply = useCallback(async (
+    id: number,
+    dialogueHistory: NpcDialogueMessage[],
+  ) => {
+    const history: ChatMessage[] = dialogueHistory.slice(-10).map((message) =>
+      message.role === "user"
+        ? {
+            role: "user",
+            content: [
+              message.action ? `行动：${message.action}` : "",
+              message.speech ? `语言：${message.speech}` : "",
+            ].filter(Boolean).join("\n"),
+          }
+        : {
+            role: "assistant",
+            content: `状态：${message.state}\n动作：${message.action}\n语言：${message.speech}`,
+          },
+    );
+    const controller = new AbortController();
+    freeChatAbort.current?.abort();
+    freeChatAbort.current = controller;
+    setNpcFreeChat((chat) => chat?.id === id ? {
+      ...chat,
+      speech: "",
+      action: "",
+      messages: [...dialogueHistory, {
+        role: "assistant",
+        npcId: id,
+        state: "",
+        action: "",
+        speech: "",
+        raw: "",
+      }],
+      loading: true,
+      error: "",
+    } : chat);
+    try {
+      const current = stateRef.current,
+        answer = await streamNpcReply({
+          system: buildNpcSystemPrompt(
+            id,
+            current.actor,
+            current.tasks,
+            getOriginalMap(current.position.mapId).name,
+          ),
+          messages: history,
+          signal: controller.signal,
+          onToken: (token) => {
+            if (!runtimeMounted.current || freeChatAbort.current !== controller) return;
+            setNpcFreeChat((chat) => {
+              if (!chat || chat.id !== id) return chat;
+              const messages = [...chat.messages], last = messages.length - 1,
+                currentReply = messages[last];
+              if (currentReply.role !== "assistant") return chat;
+              const raw = currentReply.raw + token,
+                parsed = parseNpcDialogue(raw);
+              messages[last] = { role: "assistant", npcId: id, raw, ...parsed };
+              return { ...chat, messages };
+            });
+          },
+        }),
+        parsed = parseNpcDialogue(answer);
+      if (!runtimeMounted.current || freeChatAbort.current !== controller) return;
+      setNpcFreeChat((chat) => {
+        if (!chat || chat.id !== id) return chat;
+        const messages = [...chat.messages];
+        messages[messages.length - 1] = {
+          role: "assistant",
+          npcId: id,
+          raw: answer,
+          ...parsed,
+        };
+        return { ...chat, messages, loading: false };
+      });
+    } catch (error) {
+      if (controller.signal.aborted) {
+        if (runtimeMounted.current && freeChatAbort.current === controller)
+          setNpcFreeChat((chat) => chat?.id === id
+            ? { ...chat, loading: false, auto: false }
+            : chat);
+        return;
+      }
+      if (!runtimeMounted.current || freeChatAbort.current !== controller) return;
+      const detail = error instanceof Error ? error.message : "连接失败",
+        corsHint = detail === "Failed to fetch"
+          ? "请在 LM Studio 的 Developer → Server Settings 打开 Enable CORS，然后重启服务。"
+          : "请确认 LM Studio 已启动且模型已加载。";
+      setNpcFreeChat((chat) => chat?.id === id ? {
+        ...chat,
+        messages: chat.messages.filter((message) => message.role === "user" || message.raw),
+        loading: false,
+        auto: false,
+        error: `${detail}。${corsHint}`,
+      } : chat);
+    } finally {
+      if (freeChatAbort.current === controller) freeChatAbort.current = null;
+    }
+  }, []);
+  const sendNpcFreeChat = useCallback(async () => {
+    if (!npcFreeChat || npcFreeChat.loading) return;
+    const speech = npcFreeChat.speech.trim(),
+      action = npcFreeChat.action.trim();
+    if (!speech && !action) return;
+    await requestFreeNpcReply(npcFreeChat.id, [
+      ...npcFreeChat.messages,
+      { role: "user", speech, action },
+    ]);
+  }, [npcFreeChat, requestFreeNpcReply]);
+  const generateFreeAutoPlayerTurn = useCallback(async (chat: NpcFreeChatState) => {
+    const id = chat.id,
+      controller = new AbortController(),
+      history: ChatMessage[] = chat.messages.slice(-10).map((message) =>
+        message.role === "user"
+          ? { role: "user", content: `行动：${message.action}\n语言：${message.speech}` }
+          : { role: "assistant", content: `状态：${message.state}\n动作：${message.action}\n语言：${message.speech}` },
+      );
+    freeChatAbort.current?.abort();
+    freeChatAbort.current = controller;
+    setNpcFreeChat((current) => current?.id === id
+      ? { ...current, loading: true, error: "" }
+      : current);
+    try {
+      const current = stateRef.current,
+        answer = await streamNpcReply({
+          system: buildAutoPlayerPrompt(
+            id,
+            current.actor,
+            getOriginalMap(current.position.mapId).name,
+          ),
+          messages: history.length ? history : [{
+            role: "assistant",
+            content: `${npcLore(id).name}正打量着你，等你先开口。挑一个具体话题自然开启交谈，不要只是寒暄。`,
+          }],
+          signal: controller.signal,
+          nextSpeaker: "主角",
+          onToken: () => {},
+        }),
+        parsed = parseNpcDialogue(answer);
+      if (!runtimeMounted.current || freeChatAbort.current !== controller) return;
+      setNpcFreeChat((active) => active?.id === id ? {
+        ...active,
+        messages: [...active.messages, {
+          role: "user",
+          action: parsed.action,
+          speech: parsed.speech,
+        }],
+        loading: false,
+      } : active);
+    } catch (error) {
+      if (controller.signal.aborted) {
+        if (runtimeMounted.current && freeChatAbort.current === controller)
+          setNpcFreeChat((active) => active?.id === id
+            ? { ...active, loading: false, auto: false }
+            : active);
+        return;
+      }
+      if (!runtimeMounted.current || freeChatAbort.current !== controller) return;
+      const detail = error instanceof Error ? error.message : "连接失败";
+      setNpcFreeChat((active) => active?.id === id ? {
+        ...active,
+        loading: false,
+        auto: false,
+        error: `${detail}。自动对话已停止。`,
+      } : active);
+    } finally {
+      if (freeChatAbort.current === controller) freeChatAbort.current = null;
+    }
+  }, []);
+  useEffect(() => {
+    if (!npcFreeChat?.auto || npcFreeChat.loading || npcFreeChat.error) return;
+    const last = npcFreeChat.messages[npcFreeChat.messages.length - 1],
+      timer = window.setTimeout(() => {
+        if (last?.role === "user")
+          void requestFreeNpcReply(npcFreeChat.id, npcFreeChat.messages);
+        else void generateFreeAutoPlayerTurn(npcFreeChat);
+      }, 650);
+    return () => window.clearTimeout(timer);
+  }, [generateFreeAutoPlayerTurn, npcFreeChat, requestFreeNpcReply]);
   useEffect(() => {
     chatEnd.current?.scrollIntoView({ behavior: "smooth", block: "nearest" });
-  }, [npcChat?.messages]);
+  }, [npcFreeChat?.messages]);
   useEffect(() => {
     if (battle && battle.turn > 0) return;
     battleNarrationAbort.current?.abort();
@@ -2064,7 +2298,13 @@ export default function OriginalWorld({
                 : itemConfirm
                   ? "item"
                   : null,
-            dialogue: npcChat ? "npc-chat" : eventText ? "event-text" : null,
+            dialogue: npcFreeChat
+              ? "npc-chat"
+              : npcChat
+                ? "npc-talk"
+                : eventText
+                  ? "event-text"
+                  : null,
             battle: battle
               ? {
                   view:
@@ -2176,6 +2416,10 @@ export default function OriginalWorld({
           else if (cancel) setCreator({ ...creator, step: 1, index: 0 });
           return;
         }
+        if (resolved.layer === "dialogue" && npcFreeChat) {
+          if (cancel) closeNpcFreeChat();
+          return;
+        }
         if (resolved.layer === "dialogue" && npcChat) {
           if (npcChat.pendingQuest) {
             if (["arrowup", "arrowdown", "w", "s"].includes(k))
@@ -2190,7 +2434,8 @@ export default function OriginalWorld({
               : null;
             if (interaction === "battle-ready") startGeneratedQuestBattle();
             else if (interaction === "report") claimNpcQuestReward();
-          } else if (cancel) closeNpcChat();
+          } else if (confirm) advanceNpcConversation();
+          else if (cancel) closeNpcChat();
           return;
         }
         if (resolved.layer === "confirmation" && cheatConfirm) {
@@ -2622,6 +2867,7 @@ export default function OriginalWorld({
     battleItem,
     battleOutcome,
     advanceEventText,
+    advanceNpcConversation,
     beginCultivation,
     beginStudyAt,
     buySelected,
@@ -2653,7 +2899,9 @@ export default function OriginalWorld({
     confirmAbandonGeneratedQuest,
     npcMenu,
     npcChat,
+    npcFreeChat,
     closeNpcChat,
+    closeNpcFreeChat,
     openBagEntry,
     openFlyMenu,
     startSwordChallenge,
@@ -3086,6 +3334,68 @@ export default function OriginalWorld({
             <i>▼</i>
           </button>
         )}
+        {npcChat && (() => {
+          const latest = npcChat.messages[npcChat.messages.length - 1],
+            speaker = latest?.role === "user" ? state.actor.name : npcLore(npcChat.id).name,
+            interaction = state.tasks.generatedQuest
+              ? generatedQuestInteraction(state.tasks.generatedQuest, npcChat.id)
+              : null;
+          return (
+            <section
+              className="world-dialog with-portrait npc-talk-dialog"
+              role="dialog"
+              aria-modal="true"
+              aria-label={`与${npcLore(npcChat.id).name}交谈`}
+            >
+              <CharacterPortrait
+                npcId={npcChat.id}
+                name={npcLore(npcChat.id).name}
+                className="dialog-portrait"
+              />
+              <span className="world-dialog-copy">
+                <strong>{speaker}</strong>
+                {latest?.role === "assistant" && latest.state && <em>状态 · {latest.state}</em>}
+                {latest?.action && <small>动作 · {latest.action}</small>}
+                <span>
+                  {latest?.speech || (npcChat.loading ? "正在斟酌如何回应……" : "……")}
+                </span>
+                {npcChat.pendingQuest && (
+                  <span className="npc-talk-offer">
+                    <b>江湖委托 · {npcChat.pendingQuest.title}</b>
+                    <small>{npcChat.pendingQuest.premise}</small>
+                    <small>
+                      奖励：经验 {npcChat.pendingQuest.reward.exp} · 潜能 {npcChat.pendingQuest.reward.potential} · 银两 {npcChat.pendingQuest.reward.gold}
+                      {npcChat.pendingQuest.reward.item ? ` · ${npcChat.pendingQuest.reward.item.name}` : ""}
+                    </small>
+                    <span className="npc-talk-actions">
+                      <button type="button" className={npcChat.questChoice === 0 ? "active" : ""}
+                        onClick={(event) => { event.stopPropagation(); acceptNpcQuest(); }}>接受</button>
+                      <button type="button" className={npcChat.questChoice === 1 ? "active" : ""}
+                        onClick={(event) => { event.stopPropagation(); declineNpcQuest(); }}>婉拒</button>
+                    </span>
+                  </span>
+                )}
+                {state.tasks.generatedQuest && npcChat.questReady && interaction === "battle-ready" && (
+                  <span className="npc-talk-actions">
+                    <button type="button" onClick={(event) => { event.stopPropagation(); startGeneratedQuestBattle(); }}>开始切磋</button>
+                  </span>
+                )}
+                {state.tasks.generatedQuest && npcChat.questReady && interaction === "report" && (
+                  <span className="npc-talk-actions">
+                    <button type="button" onClick={(event) => { event.stopPropagation(); claimNpcQuestReward(); }}>领取奖励</button>
+                  </span>
+                )}
+                {!npcChat.loading && !npcChat.pendingQuest && !npcChat.questReady && (
+                  <span className="npc-talk-actions">
+                    <button type="button" onClick={advanceNpcConversation}>继续交谈</button>
+                    <small className="npc-talk-hint">E / Enter 继续 · X / Esc 结束</small>
+                  </span>
+                )}
+              </span>
+              <i>{npcChat.loading ? "…" : "▼"}</i>
+            </section>
+          );
+        })()}
         {arcade && <Arcade game={arcade} actor={state.actor} />}
         {life && <LifeMenu menu={life} actor={state.actor} />}
         {taskBook && (
@@ -3171,43 +3481,43 @@ export default function OriginalWorld({
             }
           />
         )}{" "}
-        {npcChat && (
+        {npcFreeChat && (
           <section
             className="npc-chat"
             role="dialog"
             aria-modal="true"
-            aria-label={`与${npcLore(npcChat.id).name}交谈`}
+            aria-label={`与${npcLore(npcFreeChat.id).name}自由对话`}
           >
             <header>
               <div>
-                <b>{npcLore(npcChat.id).name}</b>
-                <small>{npcLore(npcChat.id).identity} · 当前相遇</small>
+                <b>{npcLore(npcFreeChat.id).name}</b>
+                <small>{npcLore(npcFreeChat.id).identity} · 自由对话</small>
               </div>
               <div className="npc-chat-controls">
-                <button type="button" className={npcChat.auto ? "active" : ""}
-                  disabled={npcChat.auto || npcChat.loading || Boolean(npcChat.pendingQuest)}
-                  onClick={() => setNpcChat({ ...npcChat, auto: true, error: "" })}>
-                  {npcChat.auto ? "自动对话中" : "自动对话"}
+                <button type="button" className={npcFreeChat.auto ? "active" : ""}
+                  disabled={npcFreeChat.auto || npcFreeChat.loading}
+                  onClick={() => setNpcFreeChat({ ...npcFreeChat, auto: true, error: "" })}>
+                  {npcFreeChat.auto ? "自动对话中" : "自动对话"}
                 </button>
-                <button type="button" onClick={closeNpcChat}>结束对话</button>
+                <button type="button" onClick={closeNpcFreeChat}>结束对话</button>
               </div>
             </header>
             <div className="npc-chat-body">
               <aside>
                 <CharacterPortrait
-                  npcId={npcChat.id}
-                  name={npcLore(npcChat.id).name}
+                  npcId={npcFreeChat.id}
+                  name={npcLore(npcFreeChat.id).name}
                   className="chat-portrait"
                 />
-                <b>{npcLore(npcChat.id).name}</b>
-                <small>{npcLore(npcChat.id).identity}</small>
+                <b>{npcLore(npcFreeChat.id).name}</b>
+                <small>{npcLore(npcFreeChat.id).identity}</small>
               </aside>
               <div className="npc-chat-stage">
                 <div className="npc-chat-log" aria-live="polite">
-                {npcChat.messages.length === 0 && (
-                  <p className="npc-chat-hint">{npcLore(npcChat.id).name}就在你面前。你可以开口，也可以先做一个动作。</p>
+                {npcFreeChat.messages.length === 0 && (
+                  <p className="npc-chat-hint">{npcLore(npcFreeChat.id).name}就在你面前。你可以开口，也可以先做一个动作。</p>
                 )}
-                {npcChat.messages.map((message, index) => message.role === "user" ? (
+                {npcFreeChat.messages.map((message, index) => message.role === "user" ? (
                   <article className="dialogue-bubble user" key={`user-${index}`}>
                     <small>{state.actor.name}</small>
                     {message.action && <i>行动 · {message.action}</i>}
@@ -3215,63 +3525,31 @@ export default function OriginalWorld({
                   </article>
                 ) : (
                   <article className="dialogue-bubble assistant" key={`assistant-${index}`}>
-                    <small>{npcLore(message.npcId || npcChat.id).name}</small>
+                    <small>{npcLore(message.npcId || npcFreeChat.id).name}</small>
                     {message.state && <em>状态 · {message.state}</em>}
                     {message.action && <i>动作 · {message.action}</i>}
                     {message.speech && <p>{message.speech}</p>}
-                    {!message.raw && npcChat.loading && <p className="thinking">正在观察你的反应……</p>}
+                    {!message.raw && npcFreeChat.loading && <p className="thinking">正在观察你的反应……</p>}
                   </article>
                 ))}
                 <div ref={chatEnd} />
                 </div>
-                {npcChat.pendingQuest && (
-                  <section className="generated-quest-offer">
-                    <small>江湖委托</small>
-                    <h3>{npcChat.pendingQuest.title}</h3>
-                    <p>{npcChat.pendingQuest.premise}</p>
-                    <p>
-                      奖励：经验 {npcChat.pendingQuest.reward.exp} · 潜能 {npcChat.pendingQuest.reward.potential} · 银两 {npcChat.pendingQuest.reward.gold}
-                      {npcChat.pendingQuest.reward.item ? ` · ${npcChat.pendingQuest.reward.item.name}` : ""}
-                    </p>
-                    <div>
-                      <button type="button" className={npcChat.questChoice === 0 ? "active" : ""} onClick={acceptNpcQuest}>接受</button>
-                      <button type="button" className={npcChat.questChoice === 1 ? "active" : ""} onClick={declineNpcQuest}>婉拒</button>
-                    </div>
-                    <small>W/S 选择 · E/Enter 确认 · X/Esc 婉拒</small>
-                  </section>
-                )}
-                {state.tasks.generatedQuest &&
-                  (state.tasks.generatedQuest.issuer.npcId === npcChat.id ||
-                    state.tasks.generatedQuest.target.npcId === npcChat.id) && (
-                    <section className="generated-quest-progress">
-                      <small>当前奇遇 · {state.tasks.generatedQuest.title}</small>
-                      <p>{generatedQuestObjective(state.tasks.generatedQuest)}</p>
-                      {generatedQuestInteraction(state.tasks.generatedQuest, npcChat.id) === "battle-ready" &&
-                        npcChat.questReady && (
-                          <button type="button" onClick={startGeneratedQuestBattle}>开始切磋</button>
-                        )}
-                      {generatedQuestInteraction(state.tasks.generatedQuest, npcChat.id) === "report" &&
-                        npcChat.questReady && (
-                          <button type="button" onClick={claimNpcQuestReward}>领取奖励</button>
-                        )}
-                    </section>
-                  )}
-                {npcChat.error && <p className="npc-chat-error">{npcChat.error}</p>}
-                <form onSubmit={(event) => { event.preventDefault(); void sendNpcChat(); }}>
+                {npcFreeChat.error && <p className="npc-chat-error">{npcFreeChat.error}</p>}
+                <form onSubmit={(event) => { event.preventDefault(); void sendNpcFreeChat(); }}>
                   <label>
                     <span>行动</span>
                     <textarea maxLength={180} rows={2} placeholder="例如：抱拳行礼、递上一壶酒、拔剑后退……"
-                      value={npcChat.action} disabled={npcChat.loading || npcChat.auto || Boolean(npcChat.pendingQuest)}
-                      onChange={(event) => setNpcChat({ ...npcChat, action: event.target.value, error: "" })} />
+                      value={npcFreeChat.action} disabled={npcFreeChat.loading || npcFreeChat.auto}
+                      onChange={(event) => setNpcFreeChat({ ...npcFreeChat, action: event.target.value, error: "" })} />
                   </label>
                   <label>
                     <span>语言</span>
                     <textarea maxLength={300} rows={2} placeholder="输入你想对他说的话……"
-                      value={npcChat.speech} disabled={npcChat.loading || npcChat.auto || Boolean(npcChat.pendingQuest)}
-                      onChange={(event) => setNpcChat({ ...npcChat, speech: event.target.value, error: "" })} />
+                      value={npcFreeChat.speech} disabled={npcFreeChat.loading || npcFreeChat.auto}
+                      onChange={(event) => setNpcFreeChat({ ...npcFreeChat, speech: event.target.value, error: "" })} />
                   </label>
-                  <button type="submit" disabled={npcChat.auto || npcChat.loading || Boolean(npcChat.pendingQuest) || (!npcChat.action.trim() && !npcChat.speech.trim())}>
-                    {npcChat.auto ? "自动推进中" : npcChat.loading ? "对方回应中" : "行动并交谈"}
+                  <button type="submit" disabled={npcFreeChat.auto || npcFreeChat.loading || (!npcFreeChat.action.trim() && !npcFreeChat.speech.trim())}>
+                    {npcFreeChat.auto ? "自动推进中" : npcFreeChat.loading ? "对方回应中" : "行动并交谈"}
                   </button>
                 </form>
               </div>

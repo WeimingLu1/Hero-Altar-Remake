@@ -221,6 +221,17 @@
   right: 14px;
   bottom: 10px;
 }
+.npc-talk-dialog { z-index: 44; cursor: pointer; }
+.npc-talk-dialog .world-dialog-copy { min-width: 0; justify-content: center; }
+.npc-talk-dialog .world-dialog-copy > strong { color: #f0d27b; }
+.npc-talk-dialog .world-dialog-copy > em,
+.npc-talk-dialog .world-dialog-copy > small { color: #aeb8ae; font-style: normal; font-size: 9px; }
+.npc-talk-hint { margin-top: 5px; color: #839087 !important; }
+.npc-talk-offer { display: grid; gap: 4px; margin-top: 7px; padding-top: 7px; border-top: 1px solid #b3955766; }
+.npc-talk-offer > b { color: #f0d27b; }
+.npc-talk-actions { display: flex; gap: 8px; margin-top: 5px; }
+.npc-talk-actions button { min-width: 88px; padding: 6px 12px; }
+.npc-talk-actions button.active { border-color: #e7cb76; box-shadow: 0 0 0 2px #e7cb7630; color: #ffe8a3; }
 .npc-chat {
   position: absolute;
   left: 14px;
