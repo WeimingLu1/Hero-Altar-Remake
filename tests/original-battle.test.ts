@@ -236,6 +236,32 @@ test("四十项绝招都能通过真实装备条件进入对应战斗状态转�
   }
 });
 
+test("流星飞掷只卸下自制杖，不删除武器实体或行囊入口", () => {
+  const a = specialActor(8);
+  a.weaponId = 33;
+  a.inventory["2:33"] = 1;
+  a.swords = [
+    { forged: false, name: "", atk: 0, mid: 0, suf: 0, times: 0 },
+    { forged: false, name: "", atk: 0, mid: 0, suf: 0, times: 0 },
+    { forged: true, name: "流云杖", atk: 55, mid: 304, suf: 210, times: 2 },
+    { forged: false, name: "", atk: 0, mid: 0, suf: 0, times: 0 },
+  ];
+  const battle = specialRound(beginOriginalBattle(1, 1008, sturdyEnemy), a, 8);
+  assert.equal(a.weaponId, 0);
+  assert.equal(a.inventory["2:33"], 1);
+  assert.equal(a.swords[2].name, "流云杖");
+  assert.equal(a.swords[2].times, 2);
+  assert.ok(battle.log.some((line) => /收回掷出的自制兵器/.test(line)));
+});
+
+test("流星飞掷仍按原作消耗普通杖", () => {
+  const a = specialActor(8), weaponId = a.weaponId;
+  assert.ok(weaponId > 0 && weaponId < 31);
+  specialRound(beginOriginalBattle(1, 1008, sturdyEnemy), a, 8);
+  assert.equal(a.weaponId, 0);
+  assert.equal(a.inventory[`2:${weaponId}`], undefined);
+});
+
 test("战斗动作在已结束、忙乱和不可用绝招状态下保持安全", () => {
   const a = actor();
   const finished = beginOriginalBattle(1, 3);

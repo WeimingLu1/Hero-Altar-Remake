@@ -66,6 +66,18 @@ function swordList(actor: SceneActorState): SwordData[] {
   return actor.swords;
 }
 
+/**
+ * 自制武器由 swords 保存唯一实体，inventory 只保存其行囊入口。
+ * 旧版流星飞掷可能误删入口；只要实体仍为 forged，就安全补回一件。
+ */
+export function ensureForgedWeaponInventory(actor: SceneActorState) {
+  for (let type = 0; type < 4; type += 1) {
+    if (!actor.swords?.[type]?.forged) continue;
+    const key = `2:${customWeaponSlot(type)}`;
+    actor.inventory[key] = Math.max(1, actor.inventory[key] || 0);
+  }
+}
+
 export function createSword(
   actor: SceneActorState,
   type: number,
@@ -129,6 +141,7 @@ export function reforgeSword(
   }
   data.times = (data.times || 0) + 1;
   swords[type] = { ...data };
+  ensureForgedWeaponInventory(actor);
   return {
     ok: true,
     text: `重铸完成！${customSwordBonus(data)}（福缘 ${actor.luck} 影响中缀与后缀品质）。`,

@@ -828,7 +828,8 @@ export function specialRound(
       turns: Math.max(battle.buff.turns, turns),
     };
   } else if (specialId === 8) {
-    const chaos = effectiveLevel(actor, 24),
+    const thrownWeaponId = actor.weaponId,
+      chaos = effectiveLevel(actor, 24),
       pc = player(actor, blank, battle);
     pc.hit += 15;
     const hitPower = kfPower(pc, 0),
@@ -841,8 +842,14 @@ export function specialRound(
       battle.enemyDebuff.busy = 4;
       battle.log.push(`${battle.enemyName}被兵刃贯穿，受到 ${damage} 点伤害。`);
     } else battle.log.push(`${battle.enemyName}凌空跃开，兵刃从身旁飞过。`);
-    const key = `2:${actor.weaponId}`;
-    if (actor.inventory[key]) {
+    const key = `2:${thrownWeaponId}`,
+      customType = thrownWeaponId - 31,
+      isForgedWeapon = customType >= 0 && customType < 4 &&
+        Boolean(actor.swords?.[customType]?.forged);
+    if (isForgedWeapon) {
+      actor.inventory[key] = Math.max(1, actor.inventory[key] || 0);
+      battle.log.push("你收回掷出的自制兵器，将它放回行囊。");
+    } else if (actor.inventory[key]) {
       actor.inventory[key]--;
       if (actor.inventory[key] <= 0) delete actor.inventory[key];
     }

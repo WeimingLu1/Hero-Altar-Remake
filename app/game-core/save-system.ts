@@ -145,6 +145,13 @@ export function normalize(value: unknown): WorldSave {
   }
   while (swords.length < 4)
     swords.push({ forged: false, name: "", atk: 0, mid: 0, suf: 0, times: 0 });
+  // v4 的流星飞掷曾可能只删除自制武器的 inventory 入口；实体仍在
+  // swords 时自动补回，避免玩家无法装备或重铸。
+  for (let type = 0; type < 4; type += 1)
+    if (swords[type]?.forged) {
+      const key = `2:${31 + type}`;
+      inventory[key] = Math.max(1, inventory[key] || 0);
+    }
 
   const requestedMapId = Number(source.position?.mapId);
   const mapId = hasOriginalMap(requestedMapId) ? requestedMapId : originalStart.mapId;

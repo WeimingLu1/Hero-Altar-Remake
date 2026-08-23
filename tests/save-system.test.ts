@@ -45,6 +45,23 @@ test("v1 custom swords migrate while legal unknown fields survive", () => {
   assert.equal(migrated.actor.inventory["2:31"], undefined);
 });
 
+test("读档会修复旧版流星飞掷误删的自制武器行囊入口", () => {
+  const damaged = fresh();
+  damaged.actor.swords![2] = {
+    forged: true,
+    name: "流云杖",
+    atk: 50,
+    mid: 304,
+    suf: 210,
+    times: 2,
+  };
+  delete damaged.actor.inventory["2:33"];
+  const repaired = normalize(damaged);
+  assert.equal(repaired.actor.inventory["2:33"], 1);
+  assert.equal(repaired.actor.swords?.[2].name, "流云杖");
+  assert.equal(repaired.actor.swords?.[2].times, 2);
+});
+
 test("imports reject unknown maps and clamp coordinates on valid maps", () => {
   const invalid = fresh();
   invalid.position.mapId = 9999;

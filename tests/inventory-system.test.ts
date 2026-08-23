@@ -201,6 +201,20 @@ test("自制武器按武器类型分组且丢弃后可重新铸造", () => {
   assert.equal(a.swords![0].forged, false, "丢弃后该类型重置为未铸造");
 });
 
+test("行囊会自动补回旧版流星飞掷误删的自制武器入口", () => {
+  const a = actor();
+  a.swords = [
+    { forged: false, name: "", atk: 0, mid: 0, suf: 0, times: 0 },
+    { forged: false, name: "", atk: 0, mid: 0, suf: 0, times: 0 },
+    { forged: true, name: "流云杖", atk: 50, mid: 0, suf: 0, times: 1 },
+    { forged: false, name: "", atk: 0, mid: 0, suf: 0, times: 0 },
+  ];
+  delete a.inventory["2:33"];
+  const entry = bagEntries(a).find((item) => item.key === "2:33");
+  assert.equal(entry?.name, "流云杖");
+  assert.equal(a.inventory["2:33"], 1);
+});
+
 test("丢弃行囊条目会移除物品并卸下已装备的武器/防具", () => {
   const a = actor();
   a.inventory = { "1:5": 2, "2:8": 1, "3:4": 1 };

@@ -80,6 +80,15 @@ test("重铸按类型独立计费并增长该类型的重铸次数", () => {
   assert.equal(a.swords![0].times, 1);
 });
 
+test("重铸会补回缺失的自制武器行囊入口", () => {
+  const a = actor();
+  createSword(a, 2, "流云杖");
+  delete a.inventory["2:33"];
+  assert.equal(reforgeSword(a, 2, () => 0).ok, true);
+  assert.equal(a.inventory["2:33"], 1);
+  assert.equal(a.swords![2].forged, true);
+});
+
 test("自制武器31号槽将前中后缀数值计入人物属性", () => {
   const a = actor();
   a.swords = [

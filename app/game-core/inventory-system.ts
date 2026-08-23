@@ -4,6 +4,7 @@ import { altarEntranceHint } from "./altar-map";
 import {
   customSwordBonus,
   customSwordDescription,
+  ensureForgedWeaponInventory,
   swordTypes,
 } from "./life-system";
 
@@ -52,6 +53,8 @@ export function fullHp(actor: SceneActorState) {
   return value;
 }
 export function bagEntries(actor: SceneActorState): BagEntry[] {
+  // 自动修复旧版流星飞掷误删的自制武器行囊入口。
+  ensureForgedWeaponInventory(actor);
   const entries = Object.entries(actor.inventory).flatMap(([key, amount]) => {
     const [kind, id] = key.split(":").map(Number);
     if (amount <= 0 || kind < 1 || kind > 3) return [];
