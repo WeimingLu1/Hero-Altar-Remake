@@ -16,6 +16,26 @@ export function parseNpcDialogue(raw: string): ParsedNpcDialogue {
   };
 }
 
+/**
+ * Active-talk output keeps natural vocatives but removes model formatting and
+ * stage directions so the dual-portrait layer always receives spoken dialogue.
+ */
+export function cleanActiveDialogue(raw: string, speakerName = "") {
+  const parsed = parseNpcDialogue(raw),
+    source = parsed.speech || raw,
+    escapedName = escapedPattern([speakerName]),
+    cleaned = source
+      .replace(/[*_`#]/g, "")
+      .replace(/(?:^|\n)\s*(?:状态|动作|神态|表情|姿态|旁白|环境)[：:].*(?=\n|$)/g, " ")
+      .replace(/[（(【[][^）)】\]]{0,120}[）)】\]]/g, " ")
+      .replace(new RegExp(`^\\s*(?:${escapedName})(?:说道|问道|答道|说|问|答|道)?[：:,，]?\\s*`, "i"), "")
+      .replace(/^\s*(?:语言|台词)[：:]\s*/, "")
+      .replace(/^\s*[“"]|[”"]\s*$/g, "")
+      .replace(/\s+/g, " ")
+      .trim();
+  return cleaned || "……";
+}
+
 function escapedPattern(values: string[]) {
   const escaped = values
     .filter(Boolean)

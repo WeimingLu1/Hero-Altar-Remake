@@ -73,7 +73,36 @@ export function saveLlmSettings(
   return written.ok ? { ok: true, value: settings } : written;
 }
 
-export type ChatMessage = { role: "user" | "assistant"; content: string };
+export type ChatMessage = {
+  role: "user" | "assistant";
+  content: string;
+  /** Human-readable speaker/source label retained across multi-NPC and narration contexts. */
+  speaker?: string;
+};
+
+/** Keep imported/editable save text inside one prompt data field. */
+export function promptData(value: unknown, maxLength = 320) {
+  return Array.from(String(value ?? ""), (character) => {
+    const code = character.charCodeAt(0);
+    return code < 32 || code === 127 ? " " : character;
+  }).join("")
+    .replace(/\s+/g, " ")
+    .trim()
+    .slice(0, maxLength);
+}
+
+function safeSpeakerLabel(value: string | undefined, fallback: string) {
+  const cleaned = promptData(value, 24)
+    .replace(/[：:]/g, " ")
+    .slice(0, 24);
+  return cleaned || fallback;
+}
+
+export function formatChatTranscript(messages: ChatMessage[]) {
+  return messagesWithinContext(messages).map((message) =>
+    `${safeSpeakerLabel(message.speaker, message.role === "user" ? "玩家" : "NPC")}：${message.content}`,
+  ).join("\n");
+}
 
 export function messagesWithinContext(messages: ChatMessage[]) {
   let remaining = NPC_TRANSCRIPT_CHAR_BUDGET;
@@ -139,12 +168,13 @@ export async function streamNpcReply(options: {
   nextSpeaker?: string;
   maxOutputTokens?: number;
   timeoutMs?: number;
+  temperature?: number;
+  topP?: number;
 }) {
   const settings = loadLlmSettings();
   const endpoint = (options.endpoint || settings.endpoint).replace(/\/$/, "");
-  const transcript = messagesWithinContext(options.messages).map((message) =>
-    `${message.role === "user" ? "玩家" : "NPC"}：${message.content}`,
-  ).join("\n") || "玩家：我来到对方面前准备交谈，请对方结合此地情境自然开口。";
+  const transcript = formatChatTranscript(options.messages) ||
+    "现场情境：玩家来到对方面前准备交谈，请对方结合此地情境自然开口。";
   const transportUrl = options.transportUrl ||
     (options.endpoint || settings.endpoint !== LM_STUDIO_ENDPOINT
       ? `${endpoint}/api/v1/chat`
@@ -166,6 +196,8 @@ export async function streamNpcReply(options: {
         transcript,
         nextSpeaker,
         maxOutputTokens: options.maxOutputTokens,
+        temperature: options.temperature,
+        topP: options.topP,
         model: options.model || settings.model,
       } : {
           model: options.model || settings.model,
@@ -174,8 +206,8 @@ export async function streamNpcReply(options: {
           stream: true,
           reasoning: "off",
           store: false,
-          temperature: 0.8,
-          top_p: 0.9,
+          temperature: Math.max(0, Math.min(2, options.temperature ?? 0.8)),
+          top_p: Math.max(0.05, Math.min(1, options.topP ?? 0.9)),
           max_output_tokens: options.maxOutputTokens || NPC_MAX_OUTPUT_TOKENS,
         }),
       signal: controller.signal,

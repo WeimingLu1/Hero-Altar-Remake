@@ -133,6 +133,7 @@ import { actorStatusProfile } from "../game-core/status-system";
 import { buildNpcSystemPrompt, npcLore } from "../game-core/npc-lore";
 import {
   battleEffectKind,
+  battleNarrationMatchesFacts,
   buildBattleNarrationFallback,
   buildBattleNarrationFacts,
   buildBattleNarrationPrompt,
@@ -144,7 +145,7 @@ import {
   streamNpcReply,
   type ChatMessage,
 } from "../game-core/lm-studio";
-import { parseNpcDialogue } from "../game-core/ambient-dialogue";
+import { cleanActiveDialogue, parseNpcDialogue } from "../game-core/ambient-dialogue";
 import { FixedStepClock } from "../game-core/fixed-step-clock";
 import {
   normalizeGameKey,
@@ -1177,10 +1178,14 @@ export default function OriginalWorld({
     plannedDraft: GeneratedQuestDraft | null = null,
     preludeRound = 0,
   ) => {
-    const id = ref.npcId;
+    const id = ref.npcId,
+      actorName = stateRef.current.actor.name || "主角";
     const history: ChatMessage[] = dialogueHistory.slice(-10).map((message) => ({
       role: message.role,
       content: message.speech,
+      speaker: message.role === "user"
+        ? actorName
+        : npcLore(message.npcId || id).name,
     }));
     const controller = new AbortController();
     chatAbort.current?.abort();
@@ -1201,14 +1206,14 @@ export default function OriginalWorld({
       const activeQuest = current.tasks.generatedQuest,
         activeInteraction = activeQuest ? generatedQuestInteraction(activeQuest, ref) : null,
         questContext = activeQuest && activeInteraction !== null
-          ? `\n\n${generatedQuestPrompt(activeQuest, id)}`
+          ? `\n\n${generatedQuestPrompt(activeQuest, id, { includeTranscript: false })}`
           : "",
         offerContext = offerDraft
-          ? `\n\n${generatedQuestPrompt(offerDraft, id)}\n【本轮任务提议】你必须在本轮回复中自然提出上述委托，把目标人物和地点说清楚，但不要提及任务系统、概率、字段或规则。玩家之后会通过界面明确接受或婉拒；你不能替玩家接受。`
+          ? `\n\n${generatedQuestPrompt(offerDraft, id, { includeTranscript: false, disclosure: "offer" })}\n【本轮任务提议】你必须在本轮回复中自然提出上述委托，把目标人物和地点说清楚，但不要提及任务系统、概率、字段或规则。玩家之后会通过界面明确接受或婉拒；你不能替玩家接受。`
           : contextDraft
-            ? `\n\n${generatedQuestPrompt(contextDraft, id)}`
+            ? `\n\n${generatedQuestPrompt(contextDraft, id, { includeTranscript: false, disclosure: "offer" })}`
             : plannedDraft
-              ? `\n\n${generatedQuestPrompt(plannedDraft, id)}\n【同一委托的铺垫 · 第${preludeRound}轮】引擎已经确定了这桩事件，但现在还不能正式下达任务，也不能询问玩家是否接受。你和玩家此前及本轮的谈话必须始终围绕这同一件事，不得另起闲聊话题。${preludeRound === 1 ? "先从近期发生的异状、你的顾虑或你为何留意此事说起，给出具体细节，但暂时保留最终请求。" : preludeRound === 2 ? "承接上一轮，补充相关人物关系、旧因或这件事对当地与当事人的影响，让玩家理解利害。" : "承接前两轮，讲清迫切风险与为何需要玩家相助，自然把话头引向下一轮的正式委派，但本轮仍不得要求玩家表态。"}`
+              ? `\n\n${generatedQuestPrompt(plannedDraft, id, { includeTranscript: false, disclosure: "prelude" })}\n【同一委托的铺垫 · 第${preludeRound}轮】引擎已经确定了这桩事件，但现在还不能正式下达任务，也不能询问玩家是否接受。你和玩家此前及本轮的谈话必须始终围绕这同一件事，不得另起闲聊话题。${preludeRound === 1 ? "先从近期发生的异状、你的顾虑或你为何留意此事说起，给出具体细节，但暂时保留最终请求。" : preludeRound === 2 ? "承接上一轮，补充相关人物关系、旧因或这件事对当地与当事人的影响，让玩家理解利害。" : "承接前两轮，讲清迫切风险与为何需要玩家相助，自然把话头引向下一轮的正式委派，但本轮仍不得要求玩家表态。"}`
             : "",
         forcedInstruction = questReplyMode === "issuer-reminder"
           ? "\n\n【本轮唯一任务】你是发布人。只说一句催办对白，必须清楚重申目标人物、任务内容和地图位置；不要寒暄、提问或继续闲聊。"
@@ -1230,6 +1235,10 @@ export default function OriginalWorld({
       const answer = await streamNpcReply({
         system: `${buildNpcSystemPrompt(id, current.actor, current.tasks, getOriginalMap(current.position.mapId).name)}${questContext}${offerContext}${forcedInstruction}`,
         messages: history,
+        nextSpeaker: npcLore(id).name,
+        maxOutputTokens: questReplyMode ? 120 : offerDraft ? 280 : 220,
+        temperature: questReplyMode ? 0.5 : offerDraft || plannedDraft ? 0.65 : 0.8,
+        topP: questReplyMode ? 0.8 : 0.9,
         signal: controller.signal,
         onToken: (token) => {
           if (!runtimeMounted.current || chatAbort.current !== controller) return;
@@ -1238,14 +1247,26 @@ export default function OriginalWorld({
             const messages = [...chat.messages], last = messages.length - 1;
             const currentReply = messages[last];
             if (currentReply.role !== "assistant") return chat;
-            const raw = currentReply.raw + token, parsed = parseNpcDialogue(raw);
-            messages[last] = { role: "assistant", npcId: id, raw, ...parsed };
+            const raw = currentReply.raw + token;
+            messages[last] = {
+              role: "assistant",
+              npcId: id,
+              raw,
+              state: "",
+              action: "",
+              speech: cleanActiveDialogue(raw, npcLore(id).name),
+            };
             return { ...chat, messages };
           });
         },
       });
       if (!runtimeMounted.current || chatAbort.current !== controller) return;
-      const parsed = parseNpcDialogue(answer);
+      const parsed = {
+        ...parseNpcDialogue(answer),
+        state: "",
+        action: "",
+        speech: cleanActiveDialogue(answer, npcLore(id).name),
+      };
       const next = structuredClone(stateRef.current),
         quest = next.tasks.generatedQuest,
         participant = Boolean(quest && generatedQuestInteraction(quest, ref) !== null),
@@ -1447,6 +1468,9 @@ export default function OriginalWorld({
       history: ChatMessage[] = chat.messages.slice(-10).map((message) => ({
         role: message.role,
         content: message.speech,
+        speaker: message.role === "user"
+          ? stateRef.current.actor.name || "主角"
+          : npcLore(message.npcId || id).name,
       }));
     chatAbort.current?.abort();
     chatAbort.current = controller;
@@ -1456,22 +1480,25 @@ export default function OriginalWorld({
         activeQuest = current.tasks.generatedQuest,
         activeInteraction = activeQuest ? generatedQuestInteraction(activeQuest, ref) : null,
         questContext = activeQuest && activeInteraction !== null
-          ? `\n\n${generatedQuestPrompt(activeQuest, id)}`
+          ? `\n\n${generatedQuestPrompt(activeQuest, id, { includeTranscript: false, perspective: "player" })}`
           : chat.plannedQuest
-            ? `\n\n${generatedQuestPrompt(chat.plannedQuest, id)}\n【当前谈话主线】NPC正围绕这桩尚未正式提出的委托逐层说明背景。你必须像身在现场的主角一样，只回应这件事：追问细节、判断利害或回应其中的人情，不得突然换话题，也不得替NPC提前说出正式请求。`
+            ? `\n\n${generatedQuestPrompt(chat.plannedQuest, id, { includeTranscript: false, disclosure: "prelude", perspective: "player" })}\n【当前谈话主线】NPC正围绕这桩尚未正式提出的委托逐层说明背景。你必须像身在现场的主角一样，只回应这件事：追问细节、判断利害或回应其中的人情，不得突然换话题，也不得替NPC提前说出正式请求。`
             : "",
         answer = await streamNpcReply({
           system: `${buildAutoPlayerPrompt(id, current.actor, getOriginalMap(current.position.mapId).name)}${questContext}`,
-          messages: history.length ? history : [{ role: "assistant", content: `${npcLore(id).name}正打量着你，等你先开口。挑一个具体话题——江湖近况、门派见闻、一个传闻或一桩旧事——自然开启交谈，不要只是寒暄。` }],
+          messages: history.length ? history : [{ role: "assistant", speaker: "现场情境", content: `${npcLore(id).name}正打量着你，等你先开口。挑一个具体话题——江湖近况、门派见闻、一个传闻或一桩旧事——自然开启交谈，不要只是寒暄。` }],
           signal: controller.signal,
           nextSpeaker: "主角",
+          maxOutputTokens: 160,
+          temperature: 0.75,
+          topP: 0.9,
           onToken: () => {},
         }),
-        parsed = parseNpcDialogue(answer);
+        speech = cleanActiveDialogue(answer, current.actor.name || "主角");
       if (!runtimeMounted.current || chatAbort.current !== controller) return;
       setNpcChat((active) => active?.id === id ? {
         ...active,
-        messages: [...active.messages, { role: "user", action: parsed.action, speech: parsed.speech }],
+        messages: [...active.messages, { role: "user", action: "", speech }],
         loading: false,
         shownAt: Date.now(),
       } : active);
@@ -1624,8 +1651,9 @@ export default function OriginalWorld({
       ...previous.filter((item) => item.text).slice(-6).map((item) => ({
         role: "assistant" as const,
         content: item.text,
+        speaker: `战斗叙事·第${item.turn}回合`,
       })),
-      { role: "user", content: buildBattleNarrationFacts(event) } as const,
+      { role: "user", speaker: "战斗引擎事实", content: buildBattleNarrationFacts(event) } as const,
     ];
     const updateEntry = (change: (item: BattleNarrative) => BattleNarrative) => {
       if (!runtimeMounted.current) return;
@@ -1639,11 +1667,20 @@ export default function OriginalWorld({
       const answer = await streamNpcReply({
         system: buildBattleNarrationPrompt(event),
         messages: history,
+        nextSpeaker: "战斗叙事",
         maxOutputTokens: 420,
+        temperature: 0.62,
+        topP: 0.85,
         signal: controller.signal,
         onToken: (token) => updateEntry((item) => ({ ...item, text: item.text + token })),
       });
-      updateEntry((item) => ({ ...item, text: answer, loading: false }));
+      const grounded = battleNarrationMatchesFacts(answer, event);
+      updateEntry((item) => ({
+        ...item,
+        text: grounded ? answer : buildBattleNarrationFallback(event),
+        loading: false,
+        error: grounded ? "" : "模型战报段落与引擎攻防顺序不一致，已使用确定性战报。",
+      }));
     } catch (error) {
       if (controller.signal.aborted) {
         if (battleNarrationAbort.current)

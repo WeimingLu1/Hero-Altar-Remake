@@ -13,6 +13,7 @@ import {
   generatedQuestInteraction,
   generatedQuestObjective,
   generatedQuestParticipant,
+  generatedQuestPrompt,
   generatedQuestReward,
   markGeneratedQuestBattleWin,
   normalizeGeneratedQuest,
@@ -167,4 +168,40 @@ test("生成任务只识别精确地图事件，第三方与同ID的其他事件
     undefined,
     "指定地图事件不存在时不得回退成同ID人物的另一处事件",
   );
+});
+
+test("任务提示按铺垫、发布人和目标身份裁剪事实且使用中文阶段", () => {
+  const actor = newActor(), tasks = freshTaskState(), issuer = generatedQuestParticipant(2)!;
+  const draft = createGeneratedQuestDraft({ issuer, actor, tasks, random: sequence(0, 0, 99) })!;
+  appendGeneratedQuestTranscript({ ...tasks, generatedQuest: draft }, {
+    speaker: "npc",
+    npcId: issuer.npcId,
+    speech: "这句话只应在消息历史里出现。",
+  });
+  const prelude = generatedQuestPrompt(draft, issuer.npcId, {
+    disclosure: "prelude",
+    includeTranscript: false,
+  });
+  assert.match(prelude, /尚未正式委托/);
+  assert.doesNotMatch(prelude, /约定奖励|经验\d|最近任务对话/);
+  assert.doesNotMatch(prelude, /这句话只应/);
+
+  const offer = generatedQuestPrompt(draft, issuer.npcId, { disclosure: "offer" });
+  assert.match(offer, /约定奖励/);
+  assert.match(offer, /最近任务对话/);
+  assert.doesNotMatch(offer, /【当前阶段】accepted/);
+
+  const target = generatedQuestPrompt(draft, draft.target.npcId, {
+    disclosure: "active",
+    includeTranscript: false,
+  });
+  assert.match(target, /目标人物/);
+  assert.doesNotMatch(target, /约定奖励/);
+
+  const player = generatedQuestPrompt(draft, issuer.npcId, {
+    disclosure: "active",
+    perspective: "player",
+  });
+  assert.match(player, /玩家本人/);
+  assert.match(player, /约定奖励/);
 });

@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import {
   battleEffectKind,
+  battleNarrationMatchesFacts,
   buildBattleNarrationFallback,
   buildBattleNarrationFacts,
   buildBattleNarrationPrompt,
@@ -72,6 +73,19 @@ test("battle narration follows the original attack-response order with distinct 
   assert.deepEqual(parseBattleNarrativeSections("旧模型的普通正文。"), [
     { speaker: "clash", text: "旧模型的普通正文。" },
   ]);
+});
+
+test("battle narration rejects missing or reordered engine-derived sections", () => {
+  const input = event();
+  assert.equal(battleNarrationMatchesFacts(
+    "【你出招】踏步递掌。\n【对手应招】横肘封架。",
+    input,
+  ), true);
+  assert.equal(battleNarrationMatchesFacts(
+    "【对手应招】横肘封架。\n【你出招】踏步递掌。",
+    input,
+  ), false);
+  assert.equal(battleNarrationMatchesFacts("双方打得难解难分。", input), false);
 });
 
 test("battle effect classification follows actual weapon, spell, special and item facts", () => {

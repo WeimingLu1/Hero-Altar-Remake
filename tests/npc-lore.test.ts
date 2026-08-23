@@ -56,6 +56,8 @@ test("NPC prompt combines world, personal, player, location and task context", (
   assert.match(prompt, /综合武境/);
   assert.match(prompt, /气宇轩昂/);
   assert.match(prompt, /颇有侠名/);
+  assert.match(prompt, /不能天然知道其银两、精确气血内力/);
+  assert.doesNotMatch(prompt, /银两88/);
   assert.match(prompt, /师承、武境差距、年龄、容貌和名声/);
   assert.match(prompt, /称谓和代词必须符合明确性别/);
   assert.match(prompt, /只输出角色实际说出口的纯台词/);

@@ -13,6 +13,8 @@ type ProxyPayload = {
   nextSpeaker?: string;
   maxOutputTokens?: number;
   model?: string;
+  temperature?: number;
+  topP?: number;
 };
 
 export async function GET(request: Request) {
@@ -35,6 +37,14 @@ export async function POST(request: Request) {
     const nextSpeaker = payload.nextSpeaker?.trim().slice(0, 12) || "NPC";
     const model = payload.model?.trim().slice(0, 160) || LM_STUDIO_MODEL;
     const maxOutputTokens = Math.max(64, Math.min(NPC_MAX_OUTPUT_TOKENS, Number(payload.maxOutputTokens) || NPC_MAX_OUTPUT_TOKENS));
+    const requestedTemperature = Number(payload.temperature),
+      requestedTopP = Number(payload.topP),
+      temperature = Number.isFinite(requestedTemperature)
+        ? Math.max(0, Math.min(2, requestedTemperature))
+        : 0.8,
+      topP = Number.isFinite(requestedTopP)
+        ? Math.max(0.05, Math.min(1, requestedTopP))
+        : 0.9;
     if (!system || !transcript || system.length > 16_000 || transcript.length > NPC_TRANSCRIPT_CHAR_BUDGET)
       return Response.json({ error: "对话上下文无效" }, { status: 400 });
 
@@ -48,8 +58,8 @@ export async function POST(request: Request) {
         stream: true,
         reasoning: "off",
         store: false,
-        temperature: 0.8,
-        top_p: 0.9,
+        temperature,
+        top_p: topP,
         max_output_tokens: maxOutputTokens,
       }),
       signal: request.signal,

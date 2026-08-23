@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import {
+  cleanActiveDialogue,
   cleanAmbientAction,
   cleanAmbientSpeech,
   parseNpcDialogue,
@@ -22,6 +23,17 @@ test("ambient speech removes routing and stage directions", () => {
   );
   assert.equal(cleanAmbientSpeech("动作：缓缓抬手"), null);
   assert.equal(cleanAmbientSpeech("……"), null);
+});
+
+test("active dialogue keeps only spoken text while preserving natural vocatives", () => {
+  assert.equal(
+    cleanActiveDialogue("状态：迟疑\n动作：抱拳\n语言：李兄，此事容我想想。", "潘小莲"),
+    "李兄，此事容我想想。",
+  );
+  assert.equal(
+    cleanActiveDialogue("**潘小莲说道：**（轻轻摇头）今日不便。", "潘小莲"),
+    "今日不便。",
+  );
 });
 
 test("ambient action uses null instead of a visible fallback sentinel", () => {
