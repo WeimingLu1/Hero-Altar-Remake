@@ -4,6 +4,7 @@ import {
   autoEquipSpecialRequirements,
   battleSpecials,
   specialCheck,
+  specialCooldownTurns,
   specialFpCost,
   specialMpCost,
 } from "../app/game-core/special-system";
@@ -288,4 +289,42 @@ test("连珠雷支付组合术与三个子法术的原始消耗", () => {
     battle.log.some((line) => /第 1 击/.test(line)),
     false,
   );
+});
+test("绝招菜单效果说明：连击数与固定冷却", () => {
+  const a = actor();
+  a.skills["24"] = { level: 120, points: 0 }; // 乱披风杖法 → 流星飞掷
+  a.skills["14"] = { level: 120, points: 0 }; // 八卦刀
+  const list = battleSpecials(a);
+  const lianhuan = list.find((special) => special.id === 3);
+  assert.ok(lianhuan);
+  assert.match(lianhuan.effect, /连出两招/);
+  assert.match(lianhuan.effect, /冷却8回合/);
+  assert.equal(specialCooldownTurns(a, 3), 8);
+  assert.equal(specialCooldownTurns(a, 6), 7);
+});
+
+test("雪花六出完整形态在说明中标注二十二剑", () => {
+  const a = actor();
+  a.skills["39"] = { level: 150, points: 0 }; // 雪山剑法 → 雪花六出
+  const partial = battleSpecials(a).find((special) => special.id === 23)!;
+  // 未传承第六出：按等级连出四剑，并提示完整形态的去处。
+  assert.match(partial.effect, /连出4剑/);
+  assert.match(partial.effect, /获白瑞德传授第六出后连出二十二剑/);
+  a.xue6 = true;
+  const complete = battleSpecials(a).find((special) => special.id === 23)!;
+  assert.match(complete.effect, /一气连出二十二剑/);
+});
+
+test("变熊术说明计入灵通心诀学识加成", () => {
+  const a = actor();
+  a.skills["47"] = { level: 120, points: 0 }; // 龙象般若功 → 变熊术
+  const plain = battleSpecials(a).find((special) => special.id === 28)!;
+  assert.doesNotMatch(plain.effect, /灵通心诀/);
+  // 有效等级 = 基本内功120的一半 + 本身120 = 180
+  assert.match(plain.effect, /膂力\+18·防御\+90/);
+  a.skills["48"] = { level: 160, points: 0 };
+  a.skillUse[6] = 48;
+  const boosted = battleSpecials(a).find((special) => special.id === 28)!;
+  assert.match(boosted.effect, /含灵通心诀加成/);
+  assert.match(boosted.effect, /防御\+250/);
 });

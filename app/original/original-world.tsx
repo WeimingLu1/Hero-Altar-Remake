@@ -2089,18 +2089,19 @@ export default function OriginalWorld({
     },
     [sync],
   );
-  // 使用、研读、装备或卸下都先进入同一确认流程。
+  // 武器防具与武学运用一致：点击/确认即直接切换，不再弹确认框；
+  // 使用消耗品或研读秘籍仍先进同一确认流程。
   const openBagEntry = useCallback(
     (entry?: BagEntry) => {
       if (!entry) return;
+      if (entry.kind !== 1) {
+        activateBagEntry(entry);
+        return;
+      }
       setItemConfirm({ entry, index: 0, source: "menu" });
     },
-    [],
+    [activateBagEntry],
   );
-  const openBattleBagEntry = useCallback((entry?: BagEntry) => {
-    if (!entry) return;
-    setItemConfirm({ entry, index: 0, source: "battle" });
-  }, []);
   const activateBattleEquipment = useCallback(
     (entry?: BagEntry) => {
       if (!entry) return;
@@ -2116,6 +2117,18 @@ export default function OriginalWorld({
       );
     },
     [sync],
+  );
+  // 战斗行囊同样只对消耗品保留确认；换装直接生效且不耗回合。
+  const openBattleBagEntry = useCallback(
+    (entry?: BagEntry) => {
+      if (!entry) return;
+      if (entry.kind !== 1) {
+        activateBattleEquipment(entry);
+        return;
+      }
+      setItemConfirm({ entry, index: 0, source: "battle" });
+    },
+    [activateBattleEquipment],
   );
   // 隐藏交换确认。
   const confirmHiddenQuest = useCallback(
@@ -3997,7 +4010,7 @@ export default function OriginalWorld({
         )}
         {itemConfirm && (
           <Choice
-            title={`${itemConfirm.entry.equipped ? "卸下" : itemConfirm.entry.kind === 1 ? "使用" : "装备"}「${itemConfirm.entry.name}」？`}
+            title={`${itemConfirm.entry.kind === 1 ? (originalTables.items[itemConfirm.entry.id]?.is_book ? "研读" : "使用") : itemConfirm.entry.equipped ? "卸下" : "装备"}「${itemConfirm.entry.name}」？`}
             items={["确定", "取消"]}
             index={itemConfirm.index}
             choose={confirmBagAction}

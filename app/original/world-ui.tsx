@@ -14,7 +14,11 @@ import {
   maxWater,
   type BagEntry,
 } from "../game-core/inventory-system";
-import { learnedSkills } from "../game-core/skill-system";
+import {
+  canParryWith,
+  learnedSkills,
+  skillEffectSummary,
+} from "../game-core/skill-system";
 import { battleSpecials } from "../game-core/special-system";
 import {
   customSwordBonus,
@@ -613,10 +617,11 @@ export function SpecialPicker({
               <span>
                 {special.name}
                 <small>{special.description}</small>
+                <small className="special-effect">{special.effect}</small>
               </span>
               <em>
                 {special.enabled
-                  ? `内力 ${special.fpCost}${special.mpCost ? ` · 法力 ${special.mpCost}` : ""}${special.needsAutoEquip ? " · 施展时自动换装" : ""}`
+                  ? `内力 ${special.fpCost}${special.mpCost ? ` · 法力 ${special.mpCost}` : ""}${special.hpCost ? ` · 气血 ${special.hpCost}` : ""}${special.needsAutoEquip ? " · 施展时自动换装" : ""}`
                   : special.reason}
               </em>
             </button>
@@ -761,12 +766,23 @@ export function BattleSkillPicker({
                     {!skill.equipped && !skill.parrying && <span>已习得</span>}
                   </i>
                 </button>
-                <button
-                  className="battle-parry-toggle"
-                  onClick={() => activate(skill.id, true)}
-                >
-                  {skill.parrying ? "取消招架" : "设为招架"}
-                </button>
+                {/* 原作规则下只有基本招架与当前攻防武学可招架，
+                    其余武学（如内功）不显示招架入口。 */}
+                {canParryWith(actor, skill.id) && (
+                  <button
+                    className="battle-parry-toggle"
+                    onClick={() => activate(skill.id, true)}
+                  >
+                    {skill.parrying ? "取消招架" : "设为招架"}
+                  </button>
+                )}
+                {index === i && (
+                  <i className="skill-effect">
+                    {skillEffectSummary(actor, skill).map((line, li) => (
+                      <span key={li}>{line}</span>
+                    ))}
+                  </i>
+                )}
               </div>
             </div>
           ))}
@@ -774,7 +790,7 @@ export function BattleSkillPicker({
       ) : (
         <p className="special-picker-empty">尚未学会任何功夫，可向江湖人物拜师请教。</p>
       )}
-      <footer>W/S 选择 · E/Enter 运用或卸下 · R 招架 · M/X 返回</footer>
+      <footer>W/S 选择 · E/Enter 运用或卸下 · R 仅当前攻防武学与基本招架可设招架 · M/X 返回</footer>
     </div>
   );
 }
@@ -1066,7 +1082,7 @@ export function GameMenu({
         />
       )}
       <footer>
-        W/A/S/D 或方向键选择 · Tab/数字键切页 · E/Enter 装配 · C/R 设为招架 · X/Esc 关闭
+        W/A/S/D 或方向键选择 · Tab/数字键切页 · E/Enter 装配 · C/R 仅当前攻防武学与基本招架可设招架 · X/Esc 关闭
       </footer>
     </div>
   );
@@ -1507,6 +1523,14 @@ export function SkillRows({
               {skill.parrying && <span className="tag-parrying">用于招架</span>}
               {!skill.equipped && !skill.parrying && <span>已习得</span>}
             </i>
+            {/* 选中行展开效果数据：攻防数值与学识类武学的生效条件。 */}
+            {index === i && (
+              <i className="skill-effect">
+                {skillEffectSummary(actor, skill).map((line, li) => (
+                  <span key={li}>{line}</span>
+                ))}
+              </i>
+            )}
           </button>
           </div>
         ))

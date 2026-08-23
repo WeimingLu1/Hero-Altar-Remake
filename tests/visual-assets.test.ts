@@ -36,6 +36,10 @@ const specialCss = readFileSync(
   new URL("../app/original/special.css", import.meta.url),
   "utf8",
 );
+const menuCss = readFileSync(
+  new URL("../app/original/menu.css", import.meta.url),
+  "utf8",
+);
 const ambientSource = readFileSync(
   new URL("../app/game-core/ambient-npc.ts", import.meta.url),
   "utf8",
@@ -449,7 +453,12 @@ test("战斗界面提供完整行囊与临阵武学切换入口", () => {
   assert.match(uiSource, /item-pixel kind-\$\{entry\.kind\}/);
   // 战斗武学与主菜单「功夫」页同一份完整清单，运用规则一致。
   assert.match(uiSource, /className="kungfu-list battle-kungfu-list"/);
-  assert.match(uiSource, /E\/Enter 运用或卸下 · R 招架 · M\/X 返回/);
+  assert.match(uiSource, /E\/Enter 运用或卸下 · R 仅当前攻防武学与基本招架可设招架 · M\/X 返回/);
+  // 招架入口只对原作允许的武学渲染(基本招架与当前攻防武学)。
+  assert.match(uiSource, /canParryWith\(actor, skill\.id\) && \(/);
+  // 选中行展开效果数据块。
+  assert.match(uiSource, /skillEffectSummary\(actor, skill\)/);
+  assert.match(menuCss, /\.skill-effect\s*\{[\s\S]*?grid-column: 1\/-1/);
   assert.match(worldSource, /battleBagEntries/);
   assert.match(worldSource, /临阵换装不消耗回合/);
 });

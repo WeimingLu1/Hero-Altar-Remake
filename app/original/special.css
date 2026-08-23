@@ -99,6 +99,15 @@
   white-space: nowrap;
 }
 
+/* 绝招效果说明行：按人物换算的威力/增益/冷却，允许换行完整展示 */
+.special-picker-list small.special-effect {
+  overflow: visible;
+  color: #96ad8d;
+  text-overflow: clip;
+  white-space: normal;
+}
+.special-picker-list > button.active small.special-effect { color: #a9c69e; }
+
 .special-picker-list em {
   max-width: 180px;
   color: #bdad7b;

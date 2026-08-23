@@ -4,6 +4,7 @@ import { derivedStats } from "./inventory-system";
 import {
   effectiveLevel,
   naturalSlot,
+  skillLevel,
   skillType,
   weaponBasicId,
 } from "./skill-system";
@@ -21,6 +22,8 @@ export type BattleSpecial = {
   needsAutoEquip: boolean;
   type: number;
   useText: string;
+  /** 按当前人物换算的效果说明：威力、增益幅度、控制回合与冷却。 */
+  effect: string;
 };
 const skillRecord = (id: number) =>
   (originalTables.skills[id] || {}) as OriginalRecord;
@@ -235,8 +238,268 @@ export function battleSpecials(
       useText: completedSnowflake
         ? "你长啸一声，使出雪山神技雪花六出，剑势依照雪花六角之形层叠展开，一气连出二十二剑！"
         : String((s.use_text as string[])?.[0] || `${s.name}！`),
+      effect: specialEffectSummary(actor, id),
     };
   });
+}
+// 绝招冷却回合数：从 original-battle 的结算公式中抽出供菜单说明共用，
+// 数值必须与 specialRound 保持一致。
+export function specialCooldownTurns(actor: SceneActorState, id: number) {
+  const dynamic =
+    id === 7
+      ? Math.min(Math.floor(effectiveLevel(actor, 21) / 20), 8) + 1
+      : id === 9 || id === 10
+        ? Math.floor(effectiveLevel(actor, 26) / 20) + 1
+        : id === 14
+          ? Math.floor(effectiveLevel(actor, 31) / 20) + 1
+          : 0;
+  const fixed: Record<number, number> = {
+    3: 8,
+    4: 8,
+    5: 8,
+    6: 7,
+    8: 10,
+    11: 6,
+    12: 8,
+  };
+  if (fixed[id]) return fixed[id];
+  if (dynamic) return dynamic;
+  if (id === 1 || id === 2) {
+    const level = effectiveLevel(actor, id === 1 ? 12 : 13);
+    return id === 1 ? Math.floor(level / 25) + 1 : Math.floor(level / 20) + 1;
+  }
+  return 0;
+}
+const spellStateText = (spellId: number) => {
+  const data = (originalTables.skills[spellId]?.magic_data as number[]) || [];
+  return Number(data[6] || 0) === 1
+    ? "命中可灼目，降低对手命中"
+    : Number(data[6] || 0) === 2
+      ? "命中可点燃法火持续灼烧"
+      : Number(data[6] || 0) === 3
+        ? "命中可寒气冻住对手"
+        : "";
+};
+// 绝招菜单的效果说明：按 specialRound 的真实公式换算成当前人物可达数值，
+// 只描述不结算；依赖对手数值的伤害用“约”表述。
+export function specialEffectSummary(actor: SceneActorState, id: number) {
+  const parts: string[] = [];
+  switch (id) {
+    case 1: {
+      const lv = effectiveLevel(actor, 12);
+      parts.push(
+        `命中+${Math.floor(lv / 15)}，持续${Math.floor(lv / 25) + 1}回合，随后接一击`,
+      );
+      break;
+    }
+    case 2: {
+      const lv = effectiveLevel(actor, 13);
+      parts.push(
+        `命中+${Math.floor(lv / 15)}·膂力+${Math.floor((lv * 2) / 15)}，持续${Math.floor(lv / 20) + 1}回合，随后接一击`,
+        "施展后自缚3回合",
+      );
+      break;
+    }
+    case 3:
+      parts.push("连出两招", "施展后硬直4回合");
+      break;
+    case 4:
+      parts.push("连出三招，每招附加15点伤害", "施展后硬直4回合");
+      break;
+    case 5:
+      parts.push("连出三招，每招劲道+10", "施展后硬直4回合");
+      break;
+    case 6:
+      parts.push(
+        `卷走对手兵刃；对手空手时卷入鞭圈，造成约${effectiveLevel(actor, 19)}点伤害并禁足2回合`,
+      );
+      break;
+    case 7: {
+      const flower = effectiveLevel(actor, 21);
+      parts.push(
+        `敏捷+${Math.floor(flower / 20)}·闪避+${Math.floor(flower / 5) - 6}，持续${Math.min(Math.floor(flower / 20), 8) + 1}回合`,
+      );
+      break;
+    }
+    case 8:
+      parts.push(
+        `掷出当前兵刃贯穿对手，命中约 ${(derivedStats(actor).str + effectiveLevel(actor, 24)) * 2} 点伤害`,
+        "无论掷中掷空都硬直4–5回合",
+        "普通杖掷出即损耗，自制杖自动收回",
+      );
+      break;
+    case 9: {
+      const lotus = effectiveLevel(actor, 26);
+      parts.push(`膂力+${Math.floor(lotus / 6)}，持续${Math.floor(lotus / 20) + 1}回合`);
+      break;
+    }
+    case 10: {
+      const lotus = effectiveLevel(actor, 26);
+      parts.push(
+        `命中+${Math.floor(lotus / 9)}，持续${Math.floor(lotus / 20) + 1}回合`,
+        "施展后硬直2回合",
+      );
+      break;
+    }
+    case 11:
+      parts.push("连出三招", "施展后硬直2回合");
+      break;
+    case 12: {
+      const blade = effectiveLevel(actor, 29);
+      parts.push(
+        `命中+15·攻击+${Math.floor(blade / 3) + 20}，强化接下来的一击`,
+        "施展后硬直2回合",
+      );
+      break;
+    }
+    case 13: {
+      const ninja = effectiveLevel(actor, 31);
+      parts.push(
+        `烟幕使对手命中下降至多${Math.min(Math.floor(ninja / 8), 20)}点，持续${Math.floor(ninja / 20) + 1}回合`,
+        "被震散则自缚3回合",
+      );
+      break;
+    }
+    case 14: {
+      const ninja = effectiveLevel(actor, 31);
+      parts.push(
+        `残影格挡至少${Math.max(Math.floor(ninja / 5), 30)}，持续${Math.floor(ninja / 20) + 1}回合`,
+      );
+      break;
+    }
+    case 15:
+      parts.push("刚劲伤害约内力/10+加力−对手内力/30", "落空可能自踉跄数回合");
+      break;
+    case 16:
+      parts.push("抽走对手约内力/10+350+加力点内力");
+      break;
+    case 17: {
+      const taiChi = effectiveLevel(actor, 32);
+      parts.push(
+        `将对手困入乱环2–${Math.floor(taiChi / 30) + 2}回合`,
+        "被挣脱则自缚3回合",
+      );
+      break;
+    }
+    case 18: {
+      const taiChi = effectiveLevel(actor, 32);
+      parts.push(
+        `对手受制时强化自身并追击一击（命中+15·膂力+${Math.floor(taiChi / 5)}）`,
+        "否则尝试困住对手",
+      );
+      break;
+    }
+    case 19:
+      parts.push(`缠住对手1–${Math.floor(effectiveLevel(actor, 33) / 20) + 1}回合`);
+      break;
+    case 20: {
+      const sword = effectiveLevel(actor, 33);
+      parts.push(
+        `命中+10·闪避+${Math.floor(sword / 15)}，持续${Math.floor(sword / 30) + 4}回合`,
+      );
+      break;
+    }
+    case 21:
+      parts.push(
+        `攻击+${Math.floor(effectiveLevel(actor, 33) / 5)}并连出三剑`,
+        "施展后硬直4回合",
+      );
+      break;
+    case 22: {
+      const snow = effectiveLevel(actor, 37);
+      parts.push(
+        `将对手摔倒，造成${Math.floor(snow / 3)}点伤害并禁足${Math.floor(snow / 35) + 3}回合`,
+      );
+      break;
+    }
+    case 23:
+      if (actor.xue6)
+        parts.push("一气连出二十二剑，命中+10", "施展后硬直4回合");
+      else {
+        const snow = effectiveLevel(actor, 39),
+          strikes = Math.max(1, Math.min(Math.floor((snow - 90) / 30) + 2, 5));
+        parts.push(
+          `连出${strikes}剑，命中+10`,
+          "施展后硬直4回合",
+          "获白瑞德传授第六出后连出二十二剑",
+        );
+      }
+      break;
+    case 24: {
+      const ice = effectiveLevel(actor, 41);
+      parts.push(
+        `防御+${Math.min(Math.floor(ice / 4), 100)}，持续${Math.min(Math.floor(ice / 20), 10) + 1}回合`,
+      );
+      break;
+    }
+    case 25: {
+      const dragon = effectiveLevel(actor, 47);
+      parts.push(
+        `虎啸伤害约${dragon + 5}点起（随对手内力上限衰减），并震慑${Math.floor(dragon / 30) + 1}回合`,
+      );
+      break;
+    }
+    case 26: {
+      const eagle = effectiveLevel(actor, 44);
+      parts.push(
+        `召唤苍鹰盘旋${Math.floor(eagle / 10) + 1}回合，每回合六成概率抓伤50点`,
+      );
+      break;
+    }
+    case 27: {
+      const eagle = effectiveLevel(actor, 44);
+      parts.push(
+        `闪避+${Math.floor(eagle / 2)}至${eagle}，持续${Math.floor(eagle / 20) + 1}回合`,
+      );
+      break;
+    }
+    case 28: {
+      const dragon = effectiveLevel(actor, 47),
+        knowledge = actor.skillUse[6] === 48 ? skillLevel(actor, 48) : 0;
+      parts.push(
+        `膂力+${Math.floor(dragon / 10) + Math.floor(knowledge / 8)}·防御+${Math.floor(dragon / 2) + knowledge}，持续${Math.floor(dragon / 20) + Math.floor(knowledge / 15) + 1}回合${knowledge ? "（含灵通心诀加成）" : ""}`,
+      );
+      break;
+    }
+    case 31:
+      parts.push("法术伤害随法力与法术精通提升", "施展后硬直2回合");
+      break;
+    case 32:
+    case 36:
+    case 40: {
+      const chain = ((originalTables.skills[id]?.magic_data as number[]) ||
+        []).slice(2, 5) as number[],
+        counts = new Map<string, number>();
+      for (const spellId of chain) {
+        const name = String(originalTables.skills[spellId]?.name || spellId);
+        counts.set(name, (counts.get(name) || 0) + 1);
+      }
+      parts.push(
+        `连环施放${[...counts].map(([name, count]) => (count > 1 ? `${name}×${count}` : name)).join("、")}`,
+      );
+      break;
+    }
+    case 35:
+      parts.push(
+        `命中造成约${effectiveLevel(actor, actor.skillUse[5] || 8)}点真火伤害，四分之一概率点燃法火`,
+        "施法失败硬直6回合",
+      );
+      break;
+    case 39:
+      parts.push("成功时冰封对手5–19回合", "失败被寒气反噬硬直");
+      break;
+    default: {
+      if (id >= 29 && id <= 40) {
+        const stateText = spellStateText(id);
+        parts.push(
+          `法术伤害随法力与法术精通提升${stateText ? `，${stateText}` : ""}`,
+        );
+      } else parts.push("无附加效果");
+    }
+  }
+  const cooldown = specialCooldownTurns(actor, id);
+  if (cooldown > 0) parts.push(`冷却${cooldown}回合`);
+  return parts.join("；");
 }
 export function paySpecialCost(actor: SceneActorState, special: BattleSpecial) {
   actor.fp = Math.max(0, actor.fp - special.fpCost);

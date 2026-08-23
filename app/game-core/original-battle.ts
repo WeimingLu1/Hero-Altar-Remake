@@ -12,6 +12,7 @@ import {
   battleSpecials,
   paySpecialCost,
   specialCheck,
+  specialCooldownTurns,
   specialFpCost,
   specialMpCost,
 } from "./special-system";
@@ -1172,29 +1173,8 @@ export function specialRound(
     applyVampiric(actor, battle, numericDamage(result));
     battle.log.push(`第 ${i + 1} 击：${resultText(result, battle.enemyName)}`);
   }
-  const fixedCooldown: Record<number, number> = {
-    3: 8,
-    4: 8,
-    5: 8,
-    6: 7,
-    8: 10,
-    11: 6,
-    12: 8,
-  };
-  const dynamicCooldown =
-    specialId === 7
-      ? Math.min(Math.floor(effectiveLevel(actor, 21) / 20), 8) + 1
-      : specialId === 9 || specialId === 10
-        ? Math.floor(effectiveLevel(actor, 26) / 20) + 1
-        : specialId === 14
-          ? Math.floor(effectiveLevel(actor, 31) / 20) + 1
-          : 0;
-  const cooldown =
-    fixedCooldown[specialId] ||
-    dynamicCooldown ||
-    ([1, 2].includes(specialId)
-      ? [0, Math.floor(level / 25) + 1, Math.floor(level / 20) + 1][specialId]
-      : 0);
+  // 冷却公式抽到 special-system 的 specialCooldownTurns，与绝招菜单说明共用。
+  const cooldown = specialCooldownTurns(actor, specialId);
   if (cooldown > 0) battle.cooldowns[String(specialId)] = cooldown;
   if (battle.enemyHp <= victoryAt) {
     battle.finished = "win";

@@ -370,6 +370,23 @@
   border-color: #c96a4f55;
   background: #74322f45;
 }
+/* 选中/悬停武学展开的效果数据块：攻防换算数值与学识类效果，
+   主菜单功夫页与战斗临阵武学面板共用。 */
+.skill-effect {
+  grid-column: 1/-1;
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  margin-top: 2px;
+  padding: 7px 9px 8px;
+  border-top: 1px dashed #ffffff1c;
+  background: #ffffff05;
+  color: #b0a88c;
+  font-style: normal;
+  font-size: 10px;
+  line-height: 1.55;
+}
+.battle-kungfu-row .skill-effect { border-top-color: #ffffff14; }
 .game-menu > footer {
   grid-area: help;
   padding-top: 10px;
