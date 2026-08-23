@@ -232,4 +232,4 @@ npm run start    # 启动生产构建
 
 ## 当前状态
 
-当前版本通过352项逻辑/视觉单元测试和3项服务端渲染测试，0失败；完整交互流程另在Chromium、Firefox、WebKit共执行30项E2E。项目同时通过类型检查、ESLint、核心源码覆盖率、依赖审计、生产构建与体积预算。生产地址为[首页](https://rmxp-hero-web.weminl.chatgpt.site)与[完整游戏](https://rmxp-hero-web.weminl.chatgpt.site/original)。项目仍在积极开发中，接口、存档结构和美术资源可能继续调整。
+当前版本通过353项逻辑/视觉单元测试和3项服务端渲染测试，0失败；完整交互流程另在Chromium、Firefox、WebKit共执行30项E2E。项目同时通过类型检查、ESLint、核心源码覆盖率、依赖审计、生产构建与体积预算。生产地址为[首页](https://rmxp-hero-web.weminl.chatgpt.site)与[完整游戏](https://rmxp-hero-web.weminl.chatgpt.site/original)。项目仍在积极开发中，接口、存档结构和美术资源可能继续调整。

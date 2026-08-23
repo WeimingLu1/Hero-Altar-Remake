@@ -158,18 +158,23 @@ export function battleSpecials(
   );
   return ids.map((id) => {
     const s = skillRecord(id),
-      check = specialCheck(actor, id, cooldowns);
+      check = specialCheck(actor, id, cooldowns),
+      completedSnowflake = id === 23 && actor.xue6;
     return {
       id,
       name: String(s.name || id),
-      description: String(s.description || ""),
+      description: completedSnowflake
+        ? "雪花六出完整形态，一气连出二十二剑"
+        : String(s.description || ""),
       fpCost: specialFpCost(actor, id),
       mpCost: specialMpCost(actor, id),
       hpCost: Number(s.hp_cost || 0),
       enabled: check.ok,
       reason: check.reason,
       type: Number(s.type || 0),
-      useText: String((s.use_text as string[])?.[0] || `${s.name}！`),
+      useText: completedSnowflake
+        ? "你长啸一声，使出雪山神技雪花六出，剑势依照雪花六角之形层叠展开，一气连出二十二剑！"
+        : String((s.use_text as string[])?.[0] || `${s.name}！`),
     };
   });
 }

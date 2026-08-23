@@ -1019,10 +1019,12 @@ export function specialRound(
     }
     battle.cooldowns["22"] = 6;
   } else if (specialId === 23) {
-    const snow = effectiveLevel(actor, 39),
-      maximum = actor.xue6 ? 6 : 5;
-    forcedAttacks = Math.min(Math.floor((snow - 90) / 30) + 2, maximum);
-    forcedAttacks = Math.max(1, forcedAttacks);
+    const snow = effectiveLevel(actor, 39);
+    // 白瑞德传授“第六出”后，雪花六出直接进入完整二十二剑形态；
+    // 未解锁时仍保留原本随等级成长、至多五剑的阶段。
+    forcedAttacks = actor.xue6
+      ? 22
+      : Math.max(1, Math.min(Math.floor((snow - 90) / 30) + 2, 5));
     battle.buff = {
       ...battle.buff,
       hit: battle.buff.hit + 10,

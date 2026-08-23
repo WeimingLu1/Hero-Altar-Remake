@@ -236,6 +236,35 @@ test("四十项绝招都能通过真实装备条件进入对应战斗状态转�
   }
 });
 
+test("雪花六出未圆满至多五剑，第六出解锁后固定连出二十二剑", () => {
+  const countStrikes = (xue6: boolean) => {
+    const a = specialActor(23);
+    a.xue6 = xue6;
+    const special = battleSpecials(a).find((item) => item.id === 23);
+    assert.ok(special?.enabled);
+    const battle = specialRound(
+      beginOriginalBattle(1, xue6 ? 2322 : 2305, {
+        ...sturdyEnemy,
+        hp: 1_000_000_000,
+        maxhp: 1_000_000_000,
+      }),
+      a,
+      23,
+    );
+    return {
+      count: battle.log.filter((line) => /^第 \d+ 击：/.test(line)).length,
+      description: special.description,
+      useText: special.useText,
+    };
+  };
+
+  assert.equal(countStrikes(false).count, 5);
+  const completed = countStrikes(true);
+  assert.equal(completed.count, 22);
+  assert.match(completed.description, /二十二剑/);
+  assert.match(completed.useText, /一气连出二十二剑/);
+});
+
 test("流星飞掷只卸下自制杖，不删除武器实体或行囊入口", () => {
   const a = specialActor(8);
   a.weaponId = 33;
