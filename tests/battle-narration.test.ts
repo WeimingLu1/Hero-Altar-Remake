@@ -87,7 +87,7 @@ test("battle prompt gives the model the exact engine-derived section outline", (
   assert.deepEqual(battleNarrationOutline(input), ["【交锋】", "【对手出招】", "【你应招】"]);
 
   input.facts = ["你受制于招式，本回合无法出手。", "潘小莲受制于招式，无法还手。"];
-  assert.deepEqual(battleNarrationOutline(input), ["【交锋】", "【对手应招】"]);
+  assert.deepEqual(battleNarrationOutline(input), ["【你应招】", "【对手应招】"]);
 });
 
 test("battle continuation preserves one output paragraph for every original log line", () => {
@@ -116,6 +116,27 @@ test("battle display colors prose from engine ownership even when the model omit
     { label: "你出招", speaker: "player" },
     { label: "对手应招", speaker: "enemy" },
   ]);
+});
+
+test("震字诀三条原始日志依次归属主角出招和对手两次应招", () => {
+  const input = event();
+  input.playerTechnique = "震字诀";
+  input.facts = [
+    "突然你双手左右连划，一个圆圈已将潘小莲套住，太极拳的震字诀随即使出！",
+    "太极刚劲造成 6453 点伤害。",
+    "潘小莲收招认输。",
+  ];
+  assert.deepEqual(battleNarrationOutline(input), ["【你出招】", "【对手应招】", "【对手应招】"]);
+  assert.match(buildBattleNarrationPrompt(input), /不得描写任何一方兵器坠地、脱手或损毁/);
+});
+
+test("绝招反震和双方拼力分别归属主角应招与中性交锋", () => {
+  const input = event();
+  input.playerTechnique = "震字诀";
+  input.facts = ["突然你双手左右连划。", "内力反震，你踉跄倒退。"];
+  assert.deepEqual(battleNarrationOutline(input), ["【你出招】", "【你应招】"]);
+  input.facts = ["突然你双手左右连划。", "双方内力相拼，各自退开。"];
+  assert.deepEqual(battleNarrationOutline(input), ["【你出招】", "【交锋】"]);
 });
 
 test("battle effect classification follows actual weapon, spell, special and item facts", () => {

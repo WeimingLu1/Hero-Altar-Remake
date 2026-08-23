@@ -132,22 +132,33 @@ export function battleNarrativeDisplaySections(
 export function buildBattleNarrationFallback(event: BattleNarrationEvent) {
   const sections: Array<{ label: string; lines: string[] }> = [],
     playerName = event.actor.name || "主角",
-    responsePattern = /受到|侧身|避开|闪开|架开|格开|挡开|未伤|未能|落空|残影|退开|退了|踉跄|倒下|认输|无力再战|无法还手|受制于|损失|被.*(?:伤|困|封|击|震|烧|冻)|身上燃起/;
+    responsePattern = /受到|侧身|避开|闪开|架开|格开|挡开|未伤|未能|落空|残影|退开|退了|踉跄|倒下|认输|无力再战|无法还手|受制于|损失|陷入|挣脱|震散|脱手|下降|被.*(?:伤|困|封|击|震|烧|冻)|身上燃起/,
+    damagePattern = /造成\s*\d+\s*点伤害|命中.*伤害|损失.*气血/,
+    playerActionPattern = /(?:^|[，。！？；、\s])你(?:忽|突|陡|旋|纵|横|双|单|左|右|上|下|手|脚|掌|拳|剑|刀|身|运|施|使|发|提|踏|跃|冲|攻|挥|刺|劈|击|喝|念|合|反|凝|招)/;
   const append = (label: string, line: string) => {
     sections.push({ label, lines: [line] });
   };
   for (const fact of event.facts) {
-    if (fact.startsWith("你") || fact.startsWith(playerName))
+    const lastLabel = sections.at(-1)?.label;
+    if (fact.startsWith(event.battle.enemyName))
+      append(responsePattern.test(fact) || lastLabel === "你出招" ? "对手应招" : "对手出招", fact);
+    else if (responsePattern.test(fact) && (fact.includes("你") || fact.includes(playerName)))
+      append("你应招", fact);
+    else if (fact.startsWith("你") || fact.startsWith(playerName) || playerActionPattern.test(fact))
       append(responsePattern.test(fact)
         ? sections.some((section) => section.label === "对手出招") ? "你应招" : "交锋"
         : "你出招", fact);
-    else if (fact.startsWith(event.battle.enemyName))
-      append(responsePattern.test(fact) ? "对手应招" : "对手出招", fact);
+    else if (/^双方/.test(fact))
+      append("交锋", fact);
+    else if (damagePattern.test(fact))
+      append(lastLabel === "对手出招" ? "你应招" : "对手应招", fact);
     else if (responsePattern.test(fact) && sections.at(-1)?.label === "你出招")
       append("对手应招", fact);
     else if (responsePattern.test(fact) && sections.at(-1)?.label === "对手出招")
       append("你应招", fact);
-    else append(sections.at(-1)?.label || "交锋", fact);
+    else if (!sections.length && event.playerTechnique && event.effectHint !== "item")
+      append("你出招", fact);
+    else append(lastLabel || "交锋", fact);
   }
   return sections.map((section) => `【${section.label}】${section.lines.join(" ")}`).join("\n") ||
     "【交锋】双方凝神对峙，胜负仍由下一回合决定。";
@@ -202,6 +213,7 @@ export function buildBattleNarrationPrompt(event: BattleNarrationEvent) {
 5. 每个实际出招者至少写清起手、发力、行进路线或变招中的两项，并写出双方距离和攻防节奏；只加入有助于看清交锋的兵刃碰撞、内力或可观察伤势，不要逐项堆砌无关环境、衣袂、神态和呼吸。
 6. 非必要不加入对话；允许一声极短的喝声或闷哼，不能聊天，也不能凭空泄露隐秘设定。
 7. 伤害数字只用于你判断轻重，正文不要机械念出“造成多少点伤害”；应转写成与气血比例一致的伤势表现，也不要渲染成超出结算结果的断肢或死亡。
+7a. 除非对应原始日志明确写出兵器脱手、折断、毁坏或掉落，否则不得描写任何一方兵器坠地、脱手或损毁；小说描写不能暗示游戏里没有发生的装备变化。
 8. 严格按本回合损失占最大气血的比例控制伤势：零伤害只能写卸力或未破防；不足一成只能是轻微疼痛、擦伤或气息波动；一至三成可以写明显疼痛、淤伤、踉跄，但事实未注明时不得写骨折、内伤或吐血；超过三成才可描写重创。只有结算明确落败或死亡时才能写失去战力或死亡。
 9. 采用经典金庸式武侠叙事所强调的清峻、明快和人招合一的效果，但不得照抄任何现成作品：既写招式，也写攻守双方一瞬间的判断、胆气和身份气度；以准确动词和攻防因果制造画面，不靠空泛成语与形容词堆砌。避免现代网络用语和游戏系统口吻。
 10. 承接此前正文，避免每回合重复介绍人物、场地或使用相同句式；结算事实已经清楚时宁可更短。`;
