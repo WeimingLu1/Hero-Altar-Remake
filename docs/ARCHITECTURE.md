@@ -1,6 +1,6 @@
 # 技术架构与LLM接入
 
-> 更新基准：2026-08-16
+> 更新基准：2026-08-23（Sites v86）
 
 ## 1. 总体分层
 
@@ -21,7 +21,9 @@
 - `app/game-core/ambient-dialogue.ts`、`ambient-player.ts`：模型文本解析/清洗和主角环境会话的可复位状态。
 - `app/game-core/npc-lore.ts`：人物身份、性格、说话方式、武境计算和统一角色事实档案。
 - `app/game-core/lm-studio.ts`：流式聊天请求传输层。
-- `app/game-core/save-system.ts`：版本化存档、旧档迁移、地图和坐标校验。
+- `app/game-core/generated-task-system.ts`：三类生成奇遇的确定性候选、阶段、奖励、记录与冲突处理。
+- `app/game-core/life-system.ts`、`inventory-system.ts`：铸造实体、行囊入口与装备边界；自制武器实体不会因投掷丢失。
+- `app/game-core/save-system.ts`：v4版本化存档、旧档迁移、地图和坐标校验，以及旧版误删自制武器入口的恢复。
 - `app/api/lm-studio/route.ts`：浏览器同源代理与本机LM Studio连接。
 
 LLM只能产生展示文本，不能直接修改任务、物品、战斗、属性或存档。正式状态变化必须经过游戏核心系统验证和结算。
@@ -104,7 +106,7 @@ POST http://127.0.0.1:1234/api/v1/chat
 
 ## 8. 测试与质量门槛
 
-`npm run check`依次执行类型检查、ESLint、核心可执行源码覆盖率、生产构建、体积/资源预算、服务端HTML渲染测试和Chromium E2E。覆盖率不计测试文件、静态数据库与由浏览器/视觉回归单独守门的Canvas绘制层，避免用测试代码本身虚高总数。CI 将高危依赖审计、静态检查、覆盖率与构建拆成并行任务；PR 跑Chromium，`main`推送后并行跑Chromium、Firefox和WebKit。E2E覆盖标题按需加载、零模型请求、说明页、显式模型检测、安全存档导入与基础axe无障碍扫描。
+`npm run check`依次执行类型检查、ESLint、核心可执行源码覆盖率、生产构建、体积/资源预算、服务端HTML渲染测试和Chromium E2E。当前基线为343项逻辑/视觉单元测试、3项SSR测试和三浏览器30项E2E。覆盖率不计测试文件、静态数据库与由浏览器/视觉回归单独守门的Canvas绘制层，避免用测试代码本身虚高总数。CI 将高危依赖审计、静态检查、覆盖率与构建拆成并行任务；PR 跑Chromium，`main`推送后并行跑Chromium、Firefox和WebKit。E2E覆盖标题按需加载、零模型请求、说明页、显式模型检测、安全存档导入、战斗菜单、奇遇日志与基础axe无障碍扫描。
 
 ## 9. 首屏、绘制与资源预算
 

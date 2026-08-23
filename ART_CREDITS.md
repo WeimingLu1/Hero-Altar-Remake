@@ -19,7 +19,7 @@ OpenAI Image Generation and then prepared locally for use as sprite atlases:
 - `public/game-assets/generated/wuxia-characters-women-v1.webp`: swordswoman,
   merchant, Buddhist nun, and worker directions.
 - `public/game-assets/generated/wuxia-portrait-atlas-v1.webp`: 5 × 4 matching
-  character portraits used by dialogue, status, free-chat, and battle UI.
+  character portraits used by the unified active-talk layer, status, and battle UI.
 - `public/game-assets/generated/wuxia-characters-faction-signatures-v1.webp`:
   directional Flower School, Red Lotus, Wudang, and Snow Mountain sprites.
 - `public/game-assets/generated/wuxia-faction-portraits-v1.webp`: 4 × 4 named
@@ -47,9 +47,10 @@ The files under `docs/screenshots/` are direct full-game browser captures from
 the current production build. The detailed 2026-08-09 set was supplied by the
 project owner and includes full-resolution regional maps, NPC profiles,
 apprenticeship and teaching, tasks, status and kung-fu configuration,
-environmental conversations, free dialogue, and a multi-round battle. The
-screenshots document existing game output and do not add third-party runtime
-artwork.
+environmental conversations, the former free-dialogue layout, and a multi-round
+battle. The free-dialogue capture is retained as historical visual documentation;
+the current product uses the map-bottom dual-portrait active-talk layer. These
+screenshots document game output and do not add third-party runtime artwork.
 
 ## Future third-party assets
 

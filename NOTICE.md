@@ -10,3 +10,8 @@ The names, story, and other rights associated with 《英雄坛说》 remain wit
 respective owners. Original browser artwork and its provenance are documented in
 [ART_CREDITS.md](ART_CREDITS.md). No original RPG Maker bitmap is intentionally
 published as a production asset.
+
+The browser-only LLM dialogue, generated encounter framework, interface,
+accessibility work, save migrations, and recovery safeguards are additive remake
+features. Generated text cannot directly alter deterministic task, combat,
+inventory, reward, or save facts.

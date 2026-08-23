@@ -389,13 +389,13 @@ NPC数值在原始数据中按战斗等级公平重平衡（`scripts/rebalance-n
 - 首页：`https://rmxp-hero-web.weminl.chatgpt.site`
 - 完整游戏：`https://rmxp-hero-web.weminl.chatgpt.site/original`
 
-本文描述的是 2026-08-22 的工程版本。发布时应重新执行完整构建与测试，并同步发布说明。
+本文描述的是 2026-08-23 的 Sites v86 工程版本，源提交为`02ff84a046898ba023680a740cd91da0b458ea7e`。后续发布时应重新执行完整构建与测试，并同步发布说明。
 
 ## 15. 当前质量基线与后续重点
 
 当前本地基线：
 
-- 333 项逻辑/视觉单元测试、3 项 SSR 测试，以及 Chromium/Firefox/WebKit 共 30 项 E2E 全部通过。
+- 343 项逻辑/视觉单元测试、3 项 SSR 测试，以及 Chromium/Firefox/WebKit 共 30 项 E2E 全部通过。
 - ESLint 通过。
 - 正式构建通过。
 - `npm audit --audit-level=high` 无已知漏洞。
