@@ -8,6 +8,9 @@ import {
 export const LM_STUDIO_ENDPOINT = "http://127.0.0.1:1234";
 export const LM_STUDIO_MODEL = "qwen3.6-35b-a3b-uncensored-hauhaucs-aggressive";
 export const NPC_MAX_OUTPUT_TOKENS = 800;
+// Transport ceiling for exceptional long-form calls such as twenty-two-strike
+// battle continuations. Ordinary dialogue still requests its own short budget.
+export const LLM_MAX_OUTPUT_TOKENS = 4096;
 export const NPC_TRANSCRIPT_CHAR_BUDGET = 12_000;
 export const NPC_TRANSCRIPT_MESSAGE_BUDGET = 10;
 export const LLM_REQUEST_TIMEOUT_MS = 15_000;

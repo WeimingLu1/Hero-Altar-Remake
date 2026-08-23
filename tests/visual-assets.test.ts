@@ -421,7 +421,7 @@ test("生成奇遇提议和各任务节点按完整台词单句收束", () => {
   assert.doesNotMatch(worldSource, /当前奇遇尚未走到交手阶段/);
 });
 
-test("任务交谈预先锁定同一委托背景，战斗舞台按招式区分彩色演出", () => {
+test("任务交谈预先锁定同一委托背景，战斗舞台按招式演出并统一逐句战报", () => {
   assert.match(worldSource, /plannedQuest: GeneratedQuestDraft \| null/);
   assert.match(worldSource, /同一委托的铺垫/);
   assert.match(worldSource, /异状、你的顾虑/);
@@ -430,8 +430,12 @@ test("任务交谈预先锁定同一委托背景，战斗舞台按招式区分�
   assert.match(uiSource, /battleNarrativeDisplaySections/);
   for (const effect of ["fist", "sword", "blade", "staff", "whip", "spell", "special", "item"])
     assert.match(battleCss, new RegExp(`effect-${effect}`));
-  assert.match(battleCss, /narrative-player/);
-  assert.match(battleCss, /narrative-enemy/);
+  assert.doesNotMatch(uiSource, /你出招|你应招|对手出招|对手应招|交锋结果/);
+  assert.match(battleCss, /battle-log article small\{display:grid.*overflow:visible.*font-size:13px.*white-space:normal/);
+  assert.match(battleCss, /battle-narrative-copy p\{display:block.*font-size:17px/);
+  assert.match(battleCss, /narrative-impact\{color:#ff8f79/);
+  assert.match(uiSource, /battleFactIsImpact\(fact\)/);
+  assert.match(worldSource, /maxOutputTokens: Math\.min\(4096/);
   assert.match(battleCss, /prefers-reduced-motion/);
 });
 

@@ -1,5 +1,6 @@
 import {
   LM_STUDIO_MODEL,
+  LLM_MAX_OUTPUT_TOKENS,
   NPC_MAX_OUTPUT_TOKENS,
   NPC_TRANSCRIPT_CHAR_BUDGET,
 } from "../../game-core/lm-studio";
@@ -36,7 +37,7 @@ export async function POST(request: Request) {
     const transcript = payload.transcript?.trim() || "";
     const nextSpeaker = payload.nextSpeaker?.trim().slice(0, 12) || "NPC";
     const model = payload.model?.trim().slice(0, 160) || LM_STUDIO_MODEL;
-    const maxOutputTokens = Math.max(64, Math.min(NPC_MAX_OUTPUT_TOKENS, Number(payload.maxOutputTokens) || NPC_MAX_OUTPUT_TOKENS));
+    const maxOutputTokens = Math.max(64, Math.min(LLM_MAX_OUTPUT_TOKENS, Number(payload.maxOutputTokens) || NPC_MAX_OUTPUT_TOKENS));
     const requestedTemperature = Number(payload.temperature),
       requestedTopP = Number(payload.topP),
       temperature = Number.isFinite(requestedTemperature)
