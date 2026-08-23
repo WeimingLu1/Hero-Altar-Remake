@@ -108,6 +108,11 @@ test("battle display lists prose one paragraph at a time and colors only real im
   assert.equal(battleFactIsImpact("招式虽中，却未伤到对手。"), true);
   assert.equal(battleFactIsImpact("命中大幅下降。"), false);
   assert.equal(battleFactIsImpact("太极刚劲造成 6453 点伤害。"), true);
+  // 法术/灼烧等带修饰词的伤害行同样要标红。
+  assert.equal(battleFactIsImpact("墨邪受到 500 点法术伤害。"), true);
+  assert.equal(battleFactIsImpact("墨邪受到 120 点灼烧伤害。"), true);
+  // 非气血损耗(如内力被挤)不标红。
+  assert.equal(battleFactIsImpact("乙损失 350 点内力。"), false);
 });
 
 test("震字诀三条原始日志只按原顺序续写，不再判断攻守归属", () => {

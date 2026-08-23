@@ -24,7 +24,7 @@ import {
   type AmbientPlayerState,
 } from "../game-core/ambient-player";
 import { tokenGateState } from "../game-core/hidden-npc";
-import { loadLlmSettings, promptData, streamNpcReply } from "../game-core/lm-studio";
+import { loadLlmSettings, probeLlmHealth, promptData, streamNpcReply } from "../game-core/lm-studio";
 import { npcConversationFacts, npcLore, WORLD_LORE } from "../game-core/npc-lore";
 import { getOriginalMap, passable } from "../game-core/original-world";
 import type { SceneActorState } from "../game-core/scene-event";
@@ -99,6 +99,10 @@ export function useAmbientRuntime({
     lastPlayerMove = useRef(0),
     ambientPlayerCooldown = useRef(0),
     ambientLlmActive = useRef(0),
+    // 熔断退避：LM Studio 关闭时环境调度会以满并发持续空转打注定失败的
+    // 请求；连续失败达到阈值后暂停调度一段时间，成功即复位。
+    ambientFailureStreak = useRef(0),
+    ambientBackoffUntil = useRef(0),
     ambientConcurrency = useRef(3),
     ambientEpoch = useRef(0),
     ambientPaused = useRef(false),
@@ -135,7 +139,7 @@ export function useAmbientRuntime({
       npc.groupTurn = -1;
       npc.groupNextAt = 0;
       npc.bubble = "";
-      npc.queuedBubble = "";
+      
       npc.generationPending = false;
       npc.llmRequested = true;
       npc.speechTargetName = "";
@@ -231,13 +235,13 @@ export function useAmbientRuntime({
           const priorLinks = new Set(nearby.flatMap((npc) => [...npc.groupMembers, npc.partnerId].filter(Boolean)));
           for (const linked of world.npcs.filter((npc) => priorLinks.has(npc.eventId) && !ids.includes(npc.eventId))) {
             linked.partnerId = 0; linked.groupId = 0; linked.groupMembers = []; linked.groupTurn = -1; linked.groupNextAt = 0;
-            linked.bubble = ""; linked.queuedBubble = ""; linked.generationPending = false; linked.speechTargetName = ""; linked.speechTargetEventId = 0;
+            linked.bubble = ""; linked.generationPending = false; linked.speechTargetName = ""; linked.speechTargetEventId = 0;
             linked.conversationContext = []; linked.nextPair = undefined; linked.nextPairPending = false; linked.nextBehaviorAt = now + 700;
           }
           for (const npc of nearby) {
             npc.partnerId = 0; npc.conversationTurn = 0; npc.conversationRound = 0;
             npc.groupId = groupId; npc.groupMembers = groupId ? ids : []; npc.groupTurn = groupId ? -1 : 0; npc.groupNextAt = 0;
-            npc.bubble = ""; npc.queuedBubble = ""; npc.generationPending = false; npc.conversationContext = [];
+            npc.bubble = ""; npc.generationPending = false; npc.conversationContext = [];
             npc.nextPair = undefined; npc.nextPairPending = false; npc.nextBehaviorAt = now + 30000;
           }
           if (!playerStarts) {
@@ -260,6 +264,19 @@ export function useAmbientRuntime({
     }, 650);
     return () => window.clearInterval(id);
   }, [active, mapId, stateRef]);
+  // 请求失败后的熔断判定：只有健康探测也失败(服务真的下线)才打开退避窗口，
+  // 避免“走出听觉圈”“台词不完整”这类正常游戏内中断误触发熔断。
+  const noteAmbientFailure = useCallback(() => {
+    void probeLlmHealth().then((ok) => {
+      if (ok) {
+        ambientFailureStreak.current = 0;
+        return;
+      }
+      ambientFailureStreak.current += 1;
+      if (ambientFailureStreak.current >= 2)
+        ambientBackoffUntil.current = Date.now() + 30_000;
+    });
+  }, []);
   const enrichAmbientPlayer = useCallback(async () => {
     const player = ambientPlayer.current;
     if (
@@ -309,6 +326,7 @@ export function useAmbientRuntime({
         topP: 0.92,
       });
       if (ambientEpoch.current !== epoch || ambientPlayerEpoch.current !== playerEpoch || ambientPaused.current || !ambientPlayer.current.npcIds.length) return;
+      ambientFailureStreak.current = 0;
       const playerLine = cleanAmbientSpeech(answer, [
         current.actor.name || "少侠",
         ...participants.map((npc) => npc.name),
@@ -344,6 +362,7 @@ export function useAmbientRuntime({
               .sort((a, b) => a - b)
           : [];
     } catch {
+      if (!controller.signal.aborted) noteAmbientFailure();
       if (ambientEpoch.current === epoch && ambientPlayerEpoch.current === playerEpoch && !ambientPaused.current) {
         ambientPlayer.current = createAmbientPlayerState();
         ambientPlayerStarts.current = false;
@@ -361,15 +380,23 @@ export function useAmbientRuntime({
     const controller = new AbortController();
     ambientControllers.current.set(controller, { player: false, npcEventId: npc.eventId });
     npc.llmRequested = true;
-    const current = stateRef.current,
-      map = getOriginalMap(current.position.mapId),
-      lore = npcLore(npc.npcId),
-      partner = npc.partnerId && !npc.groupId ? ambientNpcByEventId(ambientWorld.current, npc.partnerId) : undefined,
-      partnerLore = partner ? npcLore(partner.npcId) : undefined,
-      groupNames = npc.groupId ? npc.groupMembers.map((id) => ambientNpcByEventId(ambientWorld.current, id)?.name).filter(Boolean).join("、") : "",
-      groupNpcs = npc.groupId ? npc.groupMembers.map((id) => ambientNpcByEventId(ambientWorld.current, id)).filter((item): item is AmbientNpc => Boolean(item)) : [],
-      groupLeader = npc.groupId ? ambientNpcByEventId(ambientWorld.current, npc.groupId) : undefined,
-      sessionContext = (groupLeader?.conversationContext || npc.conversationContext).slice(-8),
+    // controller 已登记、并发槽已占用：其后任何同步准备若抛出都必须落到
+    // 下方 catch/finally，否则这一请求的并发槽会永久泄漏。因此 try 从这里
+    // 就开始；catch 需要的 partner/isPrefetch 提升到外层声明。
+    let partner: AmbientNpc | undefined,
+      isPrefetch = false;
+    try {
+      const current = stateRef.current,
+        map = getOriginalMap(current.position.mapId),
+        lore = npcLore(npc.npcId);
+      partner = npc.partnerId && !npc.groupId
+        ? ambientNpcByEventId(ambientWorld.current, npc.partnerId)
+        : undefined;
+      const partnerLore = partner ? npcLore(partner.npcId) : undefined,
+        groupNames = npc.groupId ? npc.groupMembers.map((id) => ambientNpcByEventId(ambientWorld.current, id)?.name).filter(Boolean).join("、") : "",
+        groupNpcs = npc.groupId ? npc.groupMembers.map((id) => ambientNpcByEventId(ambientWorld.current, id)).filter((item): item is AmbientNpc => Boolean(item)) : [],
+        groupLeader = npc.groupId ? ambientNpcByEventId(ambientWorld.current, npc.groupId) : undefined,
+        sessionContext = (groupLeader?.conversationContext || npc.conversationContext).slice(-8),
       // 开场没有前文时，让 NPC 自己现场发散、自然地提起一件具体的事当话题；
       // 之后各轮则承接已聊到的事，把讨论往深里带。
       isOpening = sessionContext.length === 0,
@@ -386,10 +413,9 @@ export function useAmbientRuntime({
         : npc.bubbleKind === "action"
           ? `由你随机构思${lore.name}此刻做出的一个简短、具体且符合身份与地点的日常动作。必须由模型现场生成，只输出动作本身，不加姓名、引号、解释、台词或默认占位内容。`
           : `写${lore.name}此刻${isOpening ? "在心里琢磨的一件具体的事——一个疑虑、一个盘算、一个发现或一段牵挂，把它说出来" : "接着心里正琢磨的那件事往下想"}的一句简短自言自语，要有具体的内心活动、判断或感慨，不要泛泛。只输出嘴里实际说出的台词，严禁描写天气、风景、地点、环境、声音、衣物、身体、动作或神态，不加姓名、旁白或解释。`;
-    // 预取请求只缓冲、不写显示，因此不能续显示中气泡的超时窗口（否则当前轮会卡 30s）。
-    const isPrefetch = Boolean(npc.nextPairPending && partner);
-    if (!isPrefetch) npc.bubbleUntil = Date.now() + 30000;
-    try {
+        // 预取请求只缓冲、不写显示，因此不能续显示中气泡的超时窗口（否则当前轮会卡 30s）。
+        isPrefetch = Boolean(npc.nextPairPending && partner);
+      if (!isPrefetch) npc.bubbleUntil = Date.now() + 30000;
       const playerName = current.actor.name || "少侠",
         targetsPlayer = npc.speechTargetName === playerName,
         namedTarget = targetsPlayer
@@ -429,11 +455,13 @@ export function useAmbientRuntime({
         onToken: () => {},
       });
       if (ambientEpoch.current !== epoch || ambientPaused.current || ambientWorld.current.mapId !== map.id || !npc.generationPending) return;
+      ambientFailureStreak.current = 0;
       if (partner) {
-        const lines = answer
-          .split("\n")
-          .map((line) => cleanAmbientSpeech(line, [npc.name, partner.name]))
-          .filter((line): line is string => Boolean(line));
+        const pairPartner = partner,
+          lines = answer
+            .split("\n")
+            .map((line) => cleanAmbientSpeech(line, [npc.name, pairPartner.name]))
+            .filter((line): line is string => Boolean(line));
         if (lines.length < 2) throw new Error("LM Studio returned an incomplete paired exchange");
         if (isPrefetch) {
           // 预取：只缓冲下一对，不动当前显示轮；轮转提升时统一写回与更新上下文。
@@ -520,18 +548,19 @@ export function useAmbientRuntime({
         }
       }
     } catch {
+      if (!controller.signal.aborted) noteAmbientFailure();
       if (isPrefetch) {
         // 预取失败：只清 pending，让轮转落到 on-demand；不杀正在显示的会话。
         npc.nextPairPending = false;
         npc.generationPending = false;
         if (partner) partner.nextPairPending = false;
       } else {
-        npc.bubble = ""; npc.queuedBubble = ""; npc.generationPending = false;
+        npc.bubble = ""; npc.generationPending = false;
         npc.nextPair = undefined; npc.nextPairPending = false;
         npc.bubbleUntil = Date.now(); npc.nextBehaviorAt = Date.now() + 1800;
         if (npc.groupId) {
           for (const member of ambientWorld.current.npcs.filter((item) => npc.groupMembers.includes(item.eventId))) {
-            member.bubble = ""; member.queuedBubble = ""; member.generationPending = false;
+            member.bubble = ""; member.generationPending = false;
             member.nextPair = undefined; member.nextPairPending = false;
             member.groupId = 0; member.groupMembers = []; member.groupTurn = -1; member.groupNextAt = 0;
             member.conversationContext = []; member.speechTargetName = ""; member.speechTargetEventId = 0; member.nextBehaviorAt = Date.now() + 1800;
@@ -540,7 +569,7 @@ export function useAmbientRuntime({
         if (partner) {
           npc.partnerId = 0; npc.speechTargetName = ""; npc.speechTargetEventId = 0; npc.conversationTurn = 0; npc.conversationRound = 0; npc.conversationContext = [];
           npc.nextPair = undefined; npc.nextPairPending = false;
-          partner.bubble = ""; partner.queuedBubble = ""; partner.generationPending = false;
+          partner.bubble = ""; partner.generationPending = false;
           partner.nextPair = undefined; partner.nextPairPending = false;
           partner.partnerId = 0; partner.speechTargetName = ""; partner.speechTargetEventId = 0; partner.conversationTurn = 0; partner.conversationRound = 0; partner.conversationContext = [];
           partner.bubbleUntil = Date.now(); partner.nextBehaviorAt = Date.now() + 1800;
@@ -555,6 +584,8 @@ export function useAmbientRuntime({
     if (!active) return;
     const id = window.setInterval(() => {
       if (ambientPaused.current) return;
+      // 连续失败熔断：退避窗口内不再派发任何环境请求，避免模型下线时空转。
+      if (Date.now() < ambientBackoffUntil.current) return;
       // This is the sole dispatcher for ambient LLM work. Player work claims capacity
       // first; NPC-only dialogue, monologue and action jobs follow in that order.
       void enrichAmbientPlayer();

@@ -1,6 +1,12 @@
 import { originalTables, type OriginalRecord } from "./original-data";
 import type { SceneActorState } from "./scene-event";
-import { effectiveLevel, skillType, weaponBasicId } from "./skill-system";
+import { derivedStats } from "./inventory-system";
+import {
+  effectiveLevel,
+  naturalSlot,
+  skillType,
+  weaponBasicId,
+} from "./skill-system";
 
 export type BattleSpecial = {
   id: number;
@@ -121,10 +127,20 @@ export function specialCheck(
           ok: false,
           reason: `${originalTables.kungfus[type]?.name}有效等级不足`,
         };
+      // 原作"绝招需配合武功使用"(021 - Game_Battler 2.rb check_skill_require)：
+      // 该功夫必须正装备在所属槽位(招架类看 skill_use[4])，只学会不够。
+      const slot = type === 10 ? 4 : naturalSlot(type);
+      if (slot !== null && actor.skillUse[slot] !== type)
+        return {
+          ok: false,
+          reason: `施展需先装备${originalTables.kungfus[type]?.name || "对应武学"}`,
+        };
     } else if (type >= -3) {
       // 同时取消流星飞掷的先天敏捷门槛。
       if (id === 8 && type === -1) continue;
-      const attrs = [actor.str, actor.agi, actor.int, actor.bon];
+      // 原作按 str/agi/int/bon 方法比较(含基本功夫与装备加成)，非裸基础值。
+      const d = derivedStats(actor),
+        attrs = [d.str, d.agi, d.int, d.bon];
       if (attrs[Math.abs(type)] < num)
         return { ok: false, reason: "先天属性不足" };
     } else if (type === -4 && actor.fp < Math.max(fp, num))
@@ -143,6 +159,10 @@ export function specialCheck(
   const weaponReason = specialWeaponRequirement(actor, id);
   if (weaponReason) return { ok: false, reason: weaponReason };
   if (actor.fp < fp) return { ok: false, reason: "内力不足" };
+  // 法术绝招需满足原作储备线：法力 ≥ max(法点*2+100, 消耗)
+  // (021 - Game_Battler 2.rb check_magic_require)，残蓝不放法。
+  if (id >= 29 && actor.mp < Math.max(actor.mpPlus * 2 + 100, mp))
+    return { ok: false, reason: "法力不足以催动法术" };
   if (actor.mp < mp) return { ok: false, reason: "法力不足" };
   if (actor.hp < hp) return { ok: false, reason: "气血不足" };
   return { ok: true, reason: "可施展" };

@@ -249,7 +249,7 @@ test("ambient conversations strip narration and request spoken lines only", () =
   assert.match(ambientDialogueSource, /spokenClauses/);
   assert.match(source, /禁止输出状态、动作、神态/);
   assert.match(source, /严禁描写天气、风景、地点、环境、声音、衣物、身体、动作或神态/);
-  assert.match(source, /cleanAmbientSpeech\(line, \[npc\.name, partner\.name\]\)/);
+  assert.match(source, /cleanAmbientSpeech\(line, \[npc\.name, (pairPartner|partner)\.name\]\)/);
   assert.match(source, /不得再次出现任何参与者姓名/);
   assert.match(source, /绝对不得输出或讨论 to、谁对谁/);
   assert.match(ambientDialogueSource, /\\s\+to\\s\+/);

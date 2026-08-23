@@ -76,8 +76,9 @@ export function loadWorldArt() {
     load(`/game-assets/generated/${characterSheetNames[index]}`, (image) => {
       wuxiaArt.characters[index] = image;
       loadingCharacterSheets.delete(index);
+      // 人物图集只用于动态人物绘制，不参与静态地形离屏缓存；
+      // 这里不能清 staticMapCache，否则每张懒加载完成都会作废全部地图缓存。
       artRevision += 1;
-      staticMapCache.clear();
     });
   };
   ensureCharacterSheet = loadCharacterSheet;
@@ -197,7 +198,13 @@ export function drawWorld(ctx: CanvasRenderingContext2D, state: WorldSave, ambie
     viewport = ambientViewportBounds(map.width, map.height, pos.x, pos.y),
     sx = viewport.left,
     sy = viewport.top,
-    roamingByEvent = new Map(ambient.npcs.map((npc) => [npc.eventId, npc])),
+    // 换图后 population effect 尚未重建的一瞬，旧地图的漫游 NPC 不应
+    // 按 eventId 撞进新视口；只接受属于当前地图的环境对象。
+    roamingByEvent = new Map(
+      ambient.mapId === map.id
+        ? ambient.npcs.map((npc) => [npc.eventId, npc])
+        : [],
+    ),
     generatedQuestNpc = state.tasks.generatedQuest
       ? generatedQuestCurrentNpc(state.tasks.generatedQuest)
       : null,
@@ -394,7 +401,41 @@ function entranceLabel(
     return getOriginalMap(scene.id).name || cleanName || sceneLabels[13];
   return cleanName || (scene ? sceneLabels[scene.type] : "通往别处");
 }
+// 事件可视性只随存档少数字段变化，但主循环与结构层每帧都会对每个可见事件
+// 重算 eventVisual(内含 RMXP 命令解释器与多个正则)。这里按依赖字段做指纹：
+// 字段引用/值不变时直接命中 WeakMap 缓存；sync 提交新对象后指纹失配、整体失效。
+let eventVisualStateKey: unknown[] = [];
+let eventVisualCache = new WeakMap<MapEvent, EventVisual>();
+
 export function eventVisual(event: MapEvent, state: WorldSave): EventVisual {
+  const key: unknown[] = [
+    state.actor.inventory,
+    state.actor.tanId,
+    state.tasks.freeWork,
+    state.actor.killList,
+    state.actor.morals,
+    state.actor.age,
+    state.actor.gender,
+    state.actor.armorIds,
+  ];
+  if (
+    eventVisualStateKey.length !== key.length ||
+    eventVisualStateKey.some((value, index) => !Object.is(value, key[index]))
+  ) {
+    eventVisualStateKey = key;
+    eventVisualCache = new WeakMap();
+  }
+  const cached = eventVisualCache.get(event);
+  if (cached) return cached;
+  const visual = computeEventVisual(event, state);
+  eventVisualCache.set(event, visual);
+  return visual;
+}
+
+function computeEventVisual(
+  event: MapEvent,
+  state: WorldSave,
+): EventVisual {
   const page = activePage(event),
     result = executeMapCommands(page.commands),
     scene = selectSceneEvent(result.source, {
@@ -448,9 +489,17 @@ const furnitureCache = new Map<number, Map<string, number>>();
 const staticMapCache = new Map<number, { revision: number; canvas: HTMLCanvasElement }>();
 const shadeCache = new WeakMap<CanvasRenderingContext2D, CanvasGradient>();
 
+// 离屏地形缓存按 LRU 封顶：69 张图全缓存约 94MB，保留最近 12 张即可
+// (玩家在图间有强局部性)，避免长期游历后内存单调增长。
+const STATIC_MAP_CACHE_LIMIT = 12;
+
 function staticMapCanvas(map: OriginalMap) {
   const cached = staticMapCache.get(map.id);
-  if (cached?.revision === artRevision) return cached.canvas;
+  if (cached?.revision === artRevision) {
+    staticMapCache.delete(map.id);
+    staticMapCache.set(map.id, cached);
+    return cached.canvas;
+  }
   const canvas = document.createElement("canvas");
   canvas.width = map.width * T;
   canvas.height = map.height * T;
@@ -463,6 +512,11 @@ function staticMapCanvas(map: OriginalMap) {
   drawFactionLandmarks(context, map, 0, 0);
   drawPinganTownPlan(context, map, 0, 0);
   staticMapCache.set(map.id, { revision: artRevision, canvas });
+  while (staticMapCache.size > STATIC_MAP_CACHE_LIMIT) {
+    const oldest = staticMapCache.keys().next().value;
+    if (oldest === undefined) break;
+    staticMapCache.delete(oldest);
+  }
   return canvas;
 }
 
@@ -739,6 +793,9 @@ function drawMapStructures(
   const outdoorWords = /山|郊|峰|海|岛|谷|林|坛|渡口|桃花源|时空|世界/;
   const occupied: Array<{ x: number; y: number }> = [];
   for (const event of map.events) {
+    // 先按视口裁剪再解释事件，视口外的门/花饰无需求值。
+    if (event.x < sx - 3 || event.x >= sx + 23 || event.y < sy || event.y >= sy + 16)
+      continue;
     const visual = eventVisual(event, state);
     if (visual.kind !== "door") continue;
     if (outdoorWords.test(visual.label)) {
@@ -748,8 +805,6 @@ function drawMapStructures(
       drawOverlayCell(ctx, hashIndex(visual.label, 2) ? 10 : 9, (event.x - sx + 1) * T, (event.y - sy) * T);
       continue;
     }
-    if (event.x < sx - 3 || event.x >= sx + 23 || event.y < sy || event.y >= sy + 16)
-      continue;
     if (occupied.some((point) => Math.abs(point.x - event.x) < 4 && Math.abs(point.y - event.y) < 3))
       continue;
     occupied.push({ x: event.x, y: event.y });

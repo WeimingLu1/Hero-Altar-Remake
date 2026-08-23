@@ -179,17 +179,28 @@ export async function streamNpcReply(options: {
   const transcript = formatChatTranscript(options.messages) ||
     "现场情境：玩家来到对方面前准备交谈，请对方结合此地情境自然开口。";
   const transportUrl = options.transportUrl ||
-    (options.endpoint || settings.endpoint !== LM_STUDIO_ENDPOINT
+    ((options.endpoint || settings.endpoint) !== LM_STUDIO_ENDPOINT
       ? `${endpoint}/api/v1/chat`
       : lmStudioTransportUrl());
   const proxy = transportUrl.startsWith("/");
   const nextSpeaker = options.nextSpeaker?.trim() || "NPC";
   const controller = new AbortController();
   const stopForwardingAbort = forwardAbortSignal(options.signal, controller);
-  const timeout = globalThis.setTimeout(
+  // 超时语义：配置值先作为「首字节预算」，覆盖连接排队、prompt 处理与模型冷
+  // 加载；收到首个分块后切换为「空闲超时」——每收到一个分块就重置计时，
+  // 慢速的长生成不再被总时长一刀切地中途掐断。
+  const timeoutBudget = options.timeoutMs ?? settings.timeoutMs;
+  let timeout = globalThis.setTimeout(
     () => controller.abort(new Error("LM Studio 请求超时")),
-    options.timeoutMs ?? settings.timeoutMs,
+    timeoutBudget,
   );
+  const rearmedTimeout = () => {
+    globalThis.clearTimeout(timeout);
+    timeout = globalThis.setTimeout(
+      () => controller.abort(new Error("LM Studio 流式响应中断")),
+      timeoutBudget,
+    );
+  };
   try {
     const response = await fetch(transportUrl, {
       method: "POST",
@@ -228,9 +239,11 @@ export async function streamNpcReply(options: {
     let pending = "", answer = "";
     const acceptLine = (raw: string) => {
       const line = raw.trim();
-      if (!line.startsWith("data:") || line === "data: [DONE]") return;
+      if (!line.startsWith("data:")) return;
+      const payload = line.slice(5).trim();
+      if (!payload || payload === "[DONE]") return;
       try {
-        const json = JSON.parse(line.slice(5)) as {
+        const json = JSON.parse(payload) as {
           type?: string;
           content?: string;
           choices?: Array<{ delta?: { content?: string } }>;
@@ -244,15 +257,21 @@ export async function streamNpcReply(options: {
         }
       } catch { /* tolerate split/non-JSON keepalive lines */ }
     };
-    while (true) {
-      const { value, done } = await reader.read();
-      pending += decoder.decode(value, { stream: !done });
-      const lines = pending.split("\n");
-      pending = lines.pop() || "";
-      lines.forEach(acceptLine);
-      if (done) break;
+    try {
+      while (true) {
+        const { value, done } = await reader.read();
+        rearmedTimeout();
+        pending += decoder.decode(value, { stream: !done });
+        const lines = pending.split("\n");
+        pending = lines.pop() || "";
+        lines.forEach(acceptLine);
+        if (done) break;
+      }
+      if (pending) acceptLine(pending);
+    } finally {
+      // onToken 抛错等异常路径也要释放 body 锁，避免底层连接悬挂。
+      reader.cancel().catch(() => {});
     }
-    if (pending) acceptLine(pending);
     if (!answer.trim()) throw new Error("模型没有返回正文");
     return answer.trim();
   } finally {

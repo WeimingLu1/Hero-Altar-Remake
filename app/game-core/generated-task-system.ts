@@ -131,34 +131,48 @@ const isGeneratedQuestReservedNpc = (npcId: number) =>
   RESERVED_NPC_IDS.has(npcId) || (npcId >= 163 && npcId <= 198);
 const HIDDEN_QUEST_NPC_IDS = new Set([2, 5, 13, 20, 30, 37, 47, 64, 68, 90]);
 
-const participantIndex = new Map<number, GeneratedQuestParticipant[]>();
-for (const map of originalMaps) {
-  for (const event of map.events) {
-    for (const page of event.pages) {
-      const source = executeMapCommands(page.commands).source;
-      const scene = selectSceneEvent(source, {
-        inventory: {},
-        tanId: 0,
-        freeWork: 0,
-        canGetItem: true,
-        canGetCaihua: true,
-      });
-      if (scene?.type !== 0 || !scene.id) continue;
-      const rows = participantIndex.get(scene.id) || [];
-      if (!rows.some((row) => row.mapId === map.id && row.eventId === event.id)) {
-        rows.push({
-          npcId: scene.id,
-          name: String(originalTables.enemies[scene.id]?.name || "江湖人物"),
-          mapId: map.id,
-          mapName: map.name,
-          eventId: event.id,
-          x: event.x,
-          y: event.y,
+// 参与者索引需要遍历 69 张图全部事件页并跑一遍 RMXP 命令解释器(~30ms)。
+// save-system 为类型相邻的 normalize 函数静态引入本模块，若在模块顶层构建，
+// 打开标题页就要付出这笔开销——改为首次使用时的惰性单例。
+let participantIndex: Map<number, GeneratedQuestParticipant[]> | null = null;
+
+function getParticipantIndex() {
+  if (participantIndex) return participantIndex;
+  const index = new Map<number, GeneratedQuestParticipant[]>();
+  for (const map of originalMaps) {
+    for (const event of map.events) {
+      for (const page of event.pages) {
+        const source = executeMapCommands(page.commands).source;
+        const scene = selectSceneEvent(source, {
+          inventory: {},
+          tanId: 0,
+          freeWork: 0,
+          canGetItem: true,
+          canGetCaihua: true,
         });
-        participantIndex.set(scene.id, rows);
+        if (scene?.type !== 0 || !scene.id) continue;
+        const rows = index.get(scene.id) || [];
+        if (!rows.some((row) => row.mapId === map.id && row.eventId === event.id)) {
+          rows.push({
+            npcId: scene.id,
+            name: String(originalTables.enemies[scene.id]?.name || "江湖人物"),
+            mapId: map.id,
+            mapName: map.name,
+            eventId: event.id,
+            x: event.x,
+            y: event.y,
+          });
+          index.set(scene.id, rows);
+        }
       }
     }
   }
+  participantIndex = index;
+  return index;
+}
+
+function participantRows(npcId: number) {
+  return getParticipantIndex().get(npcId) || [];
 }
 
 export function generatedQuestParticipant(
@@ -166,7 +180,7 @@ export function generatedQuestParticipant(
   preferredMapId?: number,
   preferredEventId?: number,
 ) {
-  const rows = participantIndex.get(npcId) || [];
+  const rows = participantRows(npcId);
   if (preferredMapId !== undefined || preferredEventId !== undefined) {
     return rows.find(
       (row) =>
@@ -190,7 +204,7 @@ export function normalizeGeneratedQuest(value: unknown): GeneratedQuest | null {
       npcId = Number(row.npcId), mapId = Number(row.mapId), eventId = Number(row.eventId),
       map = originalMaps.find((item) => item.id === mapId),
       event = map?.events.find((item) => item.id === eventId),
-      canonical = (participantIndex.get(npcId) || []).find(
+      canonical = participantRows(npcId).find(
         (item) => item.mapId === mapId && item.eventId === eventId,
       );
     if (!npcId || !map || !event || !canonical) return null;
@@ -259,9 +273,11 @@ export function normalizeGeneratedQuest(value: unknown): GeneratedQuest | null {
     issuer,
     target,
     reward: {
-      exp: Math.max(0, Math.floor(Number(rawReward.exp) || 0)),
-      potential: Math.max(0, Math.floor(Number(rawReward.potential) || 0)),
-      gold: Math.max(0, Math.floor(Number(rawReward.gold) || 0)),
+      // 奖励事实只能由 generatedQuestReward 公式产生；导入路径按公式极值
+      // 夹取，防止手改档把进行中的奇遇改成天价报酬。
+      exp: Math.min(1_200, Math.max(0, Math.floor(Number(rawReward.exp) || 0))),
+      potential: Math.min(400, Math.max(0, Math.floor(Number(rawReward.potential) || 0))),
+      gold: Math.min(600, Math.max(0, Math.floor(Number(rawReward.gold) || 0))),
       ...(item ? { item } : {}),
     },
     transcript,
@@ -279,9 +295,9 @@ export function normalizeGeneratedQuestHistory(
     const rawReward = row.reward;
     if (!rawReward || typeof rawReward !== "object") return [];
     const reward: GeneratedQuestReward = {
-      exp: Math.max(0, Math.floor(Number(rawReward.exp) || 0)),
-      potential: Math.max(0, Math.floor(Number(rawReward.potential) || 0)),
-      gold: Math.max(0, Math.floor(Number(rawReward.gold) || 0)),
+      exp: Math.min(1_200, Math.max(0, Math.floor(Number(rawReward.exp) || 0))),
+      potential: Math.min(400, Math.max(0, Math.floor(Number(rawReward.potential) || 0))),
+      gold: Math.min(600, Math.max(0, Math.floor(Number(rawReward.gold) || 0))),
     };
     if (
       rawReward.item &&
@@ -357,7 +373,7 @@ function candidateParticipants(
 ) {
   const excluded = excludedNpcIds(actor, tasks),
     playerRealm = actorStatusProfile(actor).realmValue;
-  return [...participantIndex.entries()].flatMap(([npcId, rows]) => {
+  return [...getParticipantIndex().entries()].flatMap(([npcId, rows]) => {
     const record = originalTables.enemies[npcId] || {}, lore = npcLore(npcId);
     if (
       npcId === issuerId ||

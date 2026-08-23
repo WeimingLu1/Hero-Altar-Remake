@@ -6,6 +6,8 @@ import {
   normalizeGeneratedQuest,
   normalizeGeneratedQuestHistory,
 } from "./generated-task-system";
+import { originalTables } from "./original-data";
+import { effectiveLevel } from "./skill-system";
 import {
   getOriginalMap,
   hasOriginalMap,
@@ -14,6 +16,42 @@ import {
 } from "./original-world";
 
 export { LOCAL_SAVE_KEY, SAVE_FORMAT, SAVE_VERSION } from "./save-constants";
+
+// 导入信任边界：存档 JSON 明确允许玩家查看和手改后再导入(README 承诺)，
+// 因此每个数值字段都必须按游戏规则夹取——非有限数回落默认值，防止 NaN
+// 经公式传染后损毁存档；越界数值按作弊系统同一套上限收口。
+const finiteInt = (value: unknown, fallback = 0) => {
+  const num = Number(value);
+  return Number.isFinite(num) ? Math.floor(num) : fallback;
+};
+const clampField = (value: unknown, min: number, max: number, fallback = min) =>
+  Math.min(max, Math.max(min, finiteInt(value, fallback)));
+// 任务里的 NPC 引用只允许 0(无)、-1(已完成)或真实人物编号。
+const sanitizeNpcRef = (value: unknown) => {
+  const id = finiteInt(value);
+  return id === -1 || id === 0
+    ? id
+    : id > 0 && originalTables.enemies[id]
+      ? id
+      : 0;
+};
+
+function normalizeSkillTable(value: unknown): SceneActorState["skills"] {
+  const source =
+    value && typeof value === "object" ? (value as Record<string, unknown>) : {};
+  const skills: SceneActorState["skills"] = {};
+  for (const [raw, entry] of Object.entries(source)) {
+    const id = Number(raw);
+    if (!Number.isInteger(id) || id <= 0 || !originalTables.kungfus[id]) continue;
+    const record =
+      entry && typeof entry === "object" ? (entry as { level?: unknown; points?: unknown }) : {};
+    skills[String(id)] = {
+      level: clampField(record.level, 0, 255),
+      points: clampField(record.points, 0, 1_000_000_000),
+    };
+  }
+  return skills;
+}
 
 export type WorldSave = {
   format: typeof SAVE_FORMAT;
@@ -162,6 +200,54 @@ export function normalize(value: unknown): WorldSave {
     ? Number(source.position?.direction)
     : 2;
 
+  const skills = normalizeSkillTable((oldActor as Partial<SceneActorState>).skills);
+  const base = { ...newActor(), ...(oldActor as Partial<SceneActorState>), skills };
+  const baseStr = clampField(base.baseStr, 1, 30, 20);
+  const baseAgi = clampField(base.baseAgi, 1, 30, 20);
+  const baseInt = clampField(base.baseInt, 1, 30, 20);
+  const baseBon = clampField(base.baseBon, 1, 30, 20);
+  const age = clampField(base.age, 1, 255, 14);
+  const maxFp = clampField(base.maxFp, 0, 65535);
+  const maxMp = clampField(base.maxMp, 0, 65535);
+  // 气血上限的规则可达极值：内力 65535/4 + 年龄项 + 易筋经加成，留足余量。
+  const maxHp = clampField(base.maxHp, 1, 20_000, 100);
+  const skillUse = [...(base.skillUse || []), 0, 0, 0, 0, 0, 0, 0]
+    .slice(0, 7)
+    .map((id) =>
+      Number.isInteger(id) && id >= 0 && originalTables.kungfus[id] ? id : 0,
+    );
+  const armorIds = Array.from(
+    new Set(
+      (Array.isArray(base.armorIds) ? base.armorIds : [])
+        .map((id) => Number(id))
+        .filter(
+          (id) => Number.isInteger(id) && id > 0 && Boolean(originalTables.armors[id]),
+        ),
+    ),
+  );
+  const weaponId =
+    Number.isInteger(base.weaponId) &&
+    base.weaponId > 0 &&
+    originalTables.weapons[base.weaponId]
+      ? base.weaponId
+      : 0;
+  // 加力/法点沿用战斗边界的口径：不超过对应内功/法术有效等级的一半。
+  const fpPlusCap = Math.floor(effectiveLevel({ ...base, skillUse }, skillUse[3] || 1) / 2);
+  const mpPlusCap = Math.floor(effectiveLevel({ ...base, skillUse }, skillUse[5] || 8) / 2);
+
+  const flags: Record<string, boolean> = {};
+  for (const [key, value] of Object.entries(
+    (source.flags && typeof source.flags === "object" ? source.flags : {}) as Record<string, unknown>,
+  ))
+    flags[key.slice(0, 64)] = Boolean(value);
+  const variables: Record<string, number> = {};
+  for (const [key, value] of Object.entries(
+    (source.variables && typeof source.variables === "object" ? source.variables : {}) as Record<string, unknown>,
+  )) {
+    const num = Number(value);
+    if (Number.isFinite(num)) variables[key.slice(0, 64)] = Math.floor(num);
+  }
+
   return {
     ...source,
     format: SAVE_FORMAT,
@@ -169,19 +255,104 @@ export function normalize(value: unknown): WorldSave {
     savedAt: typeof source.savedAt === "string" ? source.savedAt : "",
     position: { mapId, x, y, direction },
     actor: {
-      ...newActor(),
-      ...oldActor,
-      skills: oldActor.skills || {},
+      ...base,
+      name: String(base.name || "江湖少侠").slice(0, 24),
+      gold: clampField(base.gold, 0, 4_294_967_295, 100),
+      hp: clampField(base.hp, 0, maxHp, maxHp),
+      maxHp,
+      fp: clampField(base.fp, 0, maxFp),
+      maxFp,
+      mp: clampField(base.mp, 0, maxMp),
+      maxMp,
+      food: clampField(base.food, 0, (baseStr + 5) * 15, 100),
+      water: clampField(base.water, 0, (baseStr + 4) * 15, 100),
+      exp: clampField(base.exp, 0, MAX_PLAYER_EXP),
+      potential: clampField(base.potential, 0, 4_294_967_295, 100),
+      morals: clampField(base.morals, 0, 255, 128),
+      face: clampField(base.face, 0, 255, 20),
+      luck: clampField(base.luck, 0, 255, 20),
+      age,
+      tanId: clampField(base.tanId, 0, 9),
+      classId: clampField(base.classId, 0, 9),
+      teacherId: Math.max(0, finiteInt(base.teacherId)),
+      gender: clampField(base.gender, 0, 1),
+      baseStr,
+      str: baseStr,
+      baseAgi,
+      agi: baseAgi,
+      baseInt,
+      int: baseInt,
+      baseBon,
+      bon: baseBon,
+      fpPlus: clampField(base.fpPlus, 0, fpPlusCap),
+      mpPlus: clampField(base.mpPlus, 0, mpPlusCap),
+      xue6: Boolean(base.xue6),
+      donateTimes: clampField(base.donateTimes, 0, 65_535),
+      killList: Array.from(
+        new Set(
+          (Array.isArray(base.killList) ? base.killList : [])
+            .map((id) => Number(id))
+            .filter((id) => Number.isInteger(id) && id > 0),
+        ),
+      ),
+      badmanKill: clampField(base.badmanKill, 0, 65_535),
+      taskKill: clampField(base.taskKill, 0, 65_535),
+      killNum: clampField(base.killNum, 0, 10),
+      dance: clampField(base.dance, 0, 65_535, 100),
+      ball: clampField(base.ball, 0, 65_535, 100),
+      swordBattle: Boolean(base.swordBattle),
+      swordName: String(base.swordName || "").slice(0, 60),
+      swordType: clampField(base.swordType, -1, 3, -1),
+      sword1: clampField(base.sword1, 0, 65_535),
+      sword2: clampField(base.sword2, 0, 65_535),
+      sword3: clampField(base.sword3, 0, 65_535),
+      swordTimes: clampField(base.swordTimes, 0, 65_535),
       inventory,
-      exp: Math.min(Number(oldActor.exp || 0), MAX_PLAYER_EXP),
-      skillUse: [...(oldActor.skillUse || []), 0, 0, 0, 0, 0, 0, 0].slice(0, 7),
+      weaponId,
+      armorIds,
+      skillUse,
       swords: swords.slice(0, 4),
+      forgeChallengeStep: clampField(base.forgeChallengeStep, 0, 4),
+      haveNewHome: Boolean(base.haveNewHome),
+      roomLevel: clampField(base.roomLevel, 0, 3),
+      jiajuList: [0, 1, 2, 3, 4].map((index) =>
+        clampField((base.jiajuList || [])[index], 0, 65_535),
+      ),
     },
-    flags: (source.flags || {}) as Record<string, boolean>,
-    variables: (source.variables || {}) as Record<string, number>,
+    flags,
+    variables,
     tasks: {
       ...freshTaskState(),
       ...oldTasks,
+      clock: Math.max(0, finiteInt(oldTasks.clock)),
+      freeWork: clampField(oldTasks.freeWork, 0, 3),
+      visitId: sanitizeNpcRef(oldTasks.visitId),
+      killId: sanitizeNpcRef(oldTasks.killId),
+      visitDeadline: Math.max(0, finiteInt(oldTasks.visitDeadline)),
+      visitReward: clampField(oldTasks.visitReward, 0, 1_000_000_000),
+      findId: sanitizeNpcRef(oldTasks.findId),
+      findType: Math.max(0, finiteInt(oldTasks.findType)),
+      findDeadline: Math.max(0, finiteInt(oldTasks.findDeadline)),
+      findReward: clampField(oldTasks.findReward, 0, 1_000_000_000),
+      killDeadline: Math.max(0, finiteInt(oldTasks.killDeadline)),
+      killReward: clampField(oldTasks.killReward, 0, 1_000_000_000),
+      finishFlag: Boolean(oldTasks.finishFlag),
+      guReward: clampField(oldTasks.guReward, 0, 1_000_000_000),
+      wantedPlace: Math.max(0, finiteInt(oldTasks.wantedPlace)),
+      wantedStarted: clampField(oldTasks.wantedStarted, -1e9, 1e9, -300),
+      wantedReward: clampField(oldTasks.wantedReward, 0, 1_000_000_000),
+      wantedCount: clampField(oldTasks.wantedCount, 0, 65_535),
+      wantedTurn: Math.max(1, finiteInt(oldTasks.wantedTurn, 1)),
+      wantedX: Math.max(0, finiteInt(oldTasks.wantedX)),
+      wantedY: Math.max(0, finiteInt(oldTasks.wantedY)),
+      wantedGender: clampField(oldTasks.wantedGender, 0, 1),
+      wantedClass: clampField(oldTasks.wantedClass, 0, 9, 1),
+      wantedLevel: clampField(oldTasks.wantedLevel, 1, 50, 1),
+      wantedPercent: clampField(oldTasks.wantedPercent, 1, 10_000, 80),
+      stoneStarted: Boolean(oldTasks.stoneStarted),
+      stoneStartedAt: clampField(oldTasks.stoneStartedAt, -1e9, 1e9, -180),
+      generatedQuestNextOfferAt: Math.max(0, finiteInt(oldTasks.generatedQuestNextOfferAt)),
+      generatedQuestSerial: Math.max(0, finiteInt(oldTasks.generatedQuestSerial)),
       generatedQuestOfferMisses: Math.max(
         0,
         Math.floor(Number(oldTasks.generatedQuestOfferMisses || 0)),
@@ -207,6 +378,14 @@ export function parseSave(value: unknown): SaveParseResult {
   const source = value as LegacySave;
   if (source.format !== SAVE_FORMAT)
     return { ok: false, error: "存档格式不匹配" };
+  const version = Number(source.version);
+  // 只拒绝"更新的版本"：更高版本可能包含本程序无法理解的新字段，
+  // 静默降级导入会丢数据；低于当前版本才走 normalize 迁移。
+  if (Number.isFinite(version) && version > SAVE_VERSION)
+    return {
+      ok: false,
+      error: `存档版本(${version})比当前程序(${SAVE_VERSION})更新，请先升级游戏再导入`,
+    };
   const mapId = Number(source.position?.mapId);
   if (!Number.isInteger(mapId) || !hasOriginalMap(mapId))
     return { ok: false, error: "存档地图编号无效" };

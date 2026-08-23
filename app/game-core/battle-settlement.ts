@@ -5,10 +5,14 @@ export function settleVictoryLoot(
   actor: SceneActorState,
   enemyId: number,
   killed: boolean,
+  // 战斗中被落英缤纷缴械时传入 0：原作掉落读战斗实例 @weapon_id(026 - Game_Enemy
+  // .rb item_list)，被卷走兵刃的敌人不再掉兵器。
+  currentWeaponId?: number,
 ) {
   const enemy = originalTables.enemies[enemyId] || {},
-    drops: number[][] = [];
-  if (Number(enemy.weapon_id || 0)) drops.push([2, Number(enemy.weapon_id)]);
+    drops: number[][] = [],
+    weaponId = Math.max(0, Math.floor(currentWeaponId ?? Number(enemy.weapon_id || 0)));
+  if (weaponId > 0) drops.push([2, weaponId]);
   for (const key of ["item1", "item2", "item3", "item4"]) {
     const item = enemy[key] as number[];
     if (Array.isArray(item) && Number(item[0]) > 0) drops.push(item);

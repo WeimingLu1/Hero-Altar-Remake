@@ -233,10 +233,24 @@ export function derivedStats(actor: SceneActorState) {
   };
 }
 export function activateEntry(actor: SceneActorState, entry: BagEntry) {
+  // 三角石板是 bagEntries 按 stoneList 合成的展示条目，不是真实物品：
+  // 不能落入普通消耗品结算(会返回莫名其妙的提示甚至误改状态)。
+  if (entry.key === "stone:19")
+    return {
+      ok: false,
+      text: `六芒星阵的收集物，已集齐 ${(actor.stoneList?.length || 0)}/6，无法使用。`,
+    };
   return activateItemEntry(actor, entry, false);
 }
 // 丢弃行囊条目：移除物品并卸下已装备的武器/防具。
 export function discardEntry(actor: SceneActorState, entry: BagEntry) {
+  // 石板进度存于 stoneList 而不在 inventory：此前对合成条目丢弃会
+  // 假成功(delete 不存在的键)。这里明确拒绝并如实提示。
+  if (entry.key === "stone:19")
+    return {
+      ok: false,
+      text: "三角石板是六芒星阵的关键收集物，无法丢弃。",
+    };
   if (entry.kind === 2 && actor.weaponId === entry.id) actor.weaponId = 0;
   if (entry.kind === 3)
     actor.armorIds = actor.armorIds.filter((id) => id !== entry.id);
@@ -257,6 +271,8 @@ export function discardEntry(actor: SceneActorState, entry: BagEntry) {
   return { ok: true, text: `丢掉了${entry.name}。` };
 }
 export function activateBattleEntry(actor: SceneActorState, entry: BagEntry) {
+  if (entry.key === "stone:19")
+    return { ok: false, text: "三角石板是六芒星阵的收集物，无法在战斗中使用。" };
   return activateItemEntry(actor, entry, true);
 }
 export function battleConsumableEntries(actor: SceneActorState) {

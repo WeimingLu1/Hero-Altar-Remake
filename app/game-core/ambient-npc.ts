@@ -11,7 +11,6 @@ export type AmbientNpc = {
   homeY: number;
   direction: 2 | 4 | 6 | 8;
   bubble: string;
-  queuedBubble: string;
   bubbleKind: AmbientBubbleKind;
   bubbleUntil: number;
   bubbleShownAt: number;
@@ -147,7 +146,7 @@ export function resetAmbientSessions(world: AmbientWorld, resumeAt: number) {
   for (const npc of world.npcs) {
     npc.partnerId = 0; npc.groupId = 0; npc.groupMembers = []; npc.groupTurn = -1; npc.groupNextAt = 0;
     npc.conversationTurn = 0; npc.conversationRound = 0; npc.lastPartnerId = 0;
-    npc.bubble = ""; npc.queuedBubble = ""; npc.generationPending = false; npc.llmRequested = true;
+    npc.bubble = ""; npc.generationPending = false; npc.llmRequested = true;
     npc.speechTargetName = ""; npc.speechTargetEventId = 0; npc.conversationContext = []; npc.nextPair = undefined; npc.nextPairPending = false; npc.departUntil = 0; npc.departFrom = undefined; npc.nextBehaviorAt = resumeAt;
   }
 }
@@ -211,7 +210,6 @@ export function createAmbientWorld(
       homeY: entry.y,
       direction: 2,
       bubble: "",
-      queuedBubble: "",
       bubbleKind: "speech",
       bubbleUntil: 0,
       bubbleShownAt: 0,
@@ -298,7 +296,7 @@ export function tickAmbientWorld(options: {
   const clearGroup = (member: AmbientNpc, resumeAt: number) => {
     const memberIds = new Set([...member.groupMembers, member.eventId]);
     for (const item of world.npcs.filter((candidate) => memberIds.has(candidate.eventId))) {
-      item.bubble = ""; item.queuedBubble = ""; item.generationPending = false; item.speechTargetName = ""; item.speechTargetEventId = 0; item.groupId = 0; item.groupMembers = [];
+      item.bubble = ""; item.generationPending = false; item.speechTargetName = ""; item.speechTargetEventId = 0; item.groupId = 0; item.groupMembers = [];
       item.groupTurn = -1; item.groupNextAt = 0; item.nextBehaviorAt = resumeAt; item.conversationContext = [];
       item.nextPair = undefined; item.nextPairPending = false; item.departUntil = 0; item.departFrom = undefined; item.partnerCooldownUntil = now + 30000;
     }
@@ -309,12 +307,12 @@ export function tickAmbientWorld(options: {
       const partner = ambientNpcByEventId(world, npc.partnerId);
       if (partner) {
         partner.partnerId = 0; partner.conversationTurn = 0; partner.conversationRound = 0;
-        partner.conversationContext = []; partner.bubble = ""; partner.queuedBubble = ""; partner.generationPending = false; partner.speechTargetName = ""; partner.speechTargetEventId = 0;
+        partner.conversationContext = []; partner.bubble = ""; partner.generationPending = false; partner.speechTargetName = ""; partner.speechTargetEventId = 0;
         partner.nextPair = undefined; partner.nextPairPending = false; partner.departUntil = 0; partner.departFrom = undefined; partner.nextBehaviorAt = now + 700;
       }
     }
     npc.x = npc.homeX; npc.y = npc.homeY; npc.partnerId = 0; npc.conversationTurn = 0; npc.conversationRound = 0; npc.conversationContext = [];
-    npc.bubble = ""; npc.queuedBubble = ""; npc.generationPending = false; npc.speechTargetName = ""; npc.speechTargetEventId = 0; npc.waitingForPlayer = false;
+    npc.bubble = ""; npc.generationPending = false; npc.speechTargetName = ""; npc.speechTargetEventId = 0; npc.waitingForPlayer = false;
     npc.nextPair = undefined; npc.nextPairPending = false; npc.departUntil = 0; npc.departFrom = undefined; npc.nextBehaviorAt = now + 700;
   }
   for (const npc of world.npcs) {
@@ -363,7 +361,9 @@ export function tickAmbientWorld(options: {
           leader.conversationContext = [...leader.conversationContext, visibleBubble].slice(-6);
         members.forEach((item) => { item.bubble = ""; });
         const nextTurn = leader.groupTurn + 1,
-          previousSpeakerName = leader.conversationContext.at(-1)?.match(/^(.+?) to /)?.[1] || members[Math.min(nextTurn - 1, members.length - 1)].name,
+          // 群聊成员的气泡带「群聊 · 」显示前缀(use-ambient-runtime 写入 context 的
+          // 是完整装饰文本)，反解上一位发言人时必须先剥掉，否则永远匹配不到成员名。
+          previousSpeakerName = leader.conversationContext.at(-1)?.match(/^(?:群聊 · )?(.+?) to /)?.[1] || members[Math.min(nextTurn - 1, members.length - 1)].name,
           previousSpeakerIsMember = members.some((item) => item.name === previousSpeakerName);
         // If the player spoke after the nominal last NPC turn, answer once before closing.
         if (nextTurn >= members.length && previousSpeakerIsMember) {
@@ -432,7 +432,7 @@ export function tickAmbientWorld(options: {
         npc.conversationContext = partner.conversationContext = [];
         partner.conversationTurn = 2;
         npc.bubble = ""; npc.speechTargetName = partner.name; npc.speechTargetEventId = partner.eventId; npc.generationPending = true; npc.queuedAt = now;
-        partner.queuedBubble = ""; partner.speechTargetName = npc.name; partner.speechTargetEventId = npc.eventId;
+        partner.speechTargetName = npc.name; partner.speechTargetEventId = npc.eventId;
         npc.bubbleKind = partner.bubbleKind = "speech";
         npc.bubbleUntil = now + 12000;
         partner.bubbleUntil = now + 20000;
@@ -452,10 +452,10 @@ export function tickAmbientWorld(options: {
         partner.nextPair = npc.nextPair = undefined;
         partner.nextPairPending = npc.nextPairPending = false;
         partner.generationPending = false;
-        npc.bubble = ""; npc.queuedBubble = ""; npc.partnerId = 0; npc.speechTargetName = ""; npc.speechTargetEventId = 0; npc.conversationTurn = 0; npc.conversationRound = 0; npc.conversationContext = [];
+        npc.bubble = ""; npc.partnerId = 0; npc.speechTargetName = ""; npc.speechTargetEventId = 0; npc.conversationTurn = 0; npc.conversationRound = 0; npc.conversationContext = [];
         npc.lastPartnerId = partner.eventId; npc.partnerCooldownUntil = now + 30000; npc.nextBehaviorAt = now + 300;
         npc.departUntil = now + AMBIENT_DEPART_MS; npc.departFrom = { x: partner.x, y: partner.y };
-        partner.bubble = ""; partner.queuedBubble = ""; partner.partnerId = 0; partner.speechTargetName = ""; partner.speechTargetEventId = 0; partner.conversationTurn = 0; partner.conversationRound = 0; partner.conversationContext = [];
+        partner.bubble = ""; partner.partnerId = 0; partner.speechTargetName = ""; partner.speechTargetEventId = 0; partner.conversationTurn = 0; partner.conversationRound = 0; partner.conversationContext = [];
         partner.lastPartnerId = npc.eventId; partner.partnerCooldownUntil = now + 30000; partner.nextBehaviorAt = now + 300;
         partner.departUntil = now + AMBIENT_DEPART_MS; partner.departFrom = { x: npc.x, y: npc.y };
         continue;
@@ -494,7 +494,7 @@ export function tickAmbientWorld(options: {
       // ON-DEMAND：首轮或预取失败/超时，现用现请求；完成时由 hook 同时写双方气泡。
       partner.conversationRound = npc.conversationRound = round + 1;
       partner.conversationTurn = 1; npc.conversationTurn = 2;
-      partner.bubble = ""; npc.bubble = ""; npc.queuedBubble = "";
+      partner.bubble = ""; npc.bubble = ""; 
       partner.speechTargetName = npc.name; partner.speechTargetEventId = npc.eventId;
       npc.speechTargetName = partner.name; npc.speechTargetEventId = partner.eventId;
       partner.generationPending = true; partner.queuedAt = now;

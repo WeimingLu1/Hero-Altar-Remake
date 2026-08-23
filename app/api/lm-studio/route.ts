@@ -49,30 +49,44 @@ export async function POST(request: Request) {
     if (!system || !transcript || system.length > 16_000 || transcript.length > NPC_TRANSCRIPT_CHAR_BUDGET)
       return Response.json({ error: "对话上下文无效" }, { status: 400 });
 
-    const upstream = await fetch(LM_STUDIO_URL, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        model,
-        system_prompt: system,
-        input: `${transcript}\n${nextSpeaker}：`,
-        stream: true,
-        reasoning: "off",
-        store: false,
-        temperature,
-        top_p: topP,
-        max_output_tokens: maxOutputTokens,
-      }),
-      signal: request.signal,
-    });
-    if (!upstream.ok || !upstream.body) {
-      const detail = await upstream.text();
+    // 连接阶段超时：上游 hang 住且浏览器不断开时，10s 内放弃建连；
+    // 响应头到达后取消计时，流式传输期间仅跟随客户端断开。
+    const upstream = new AbortController();
+    const forwardClientAbort = () => upstream.abort();
+    request.signal.addEventListener("abort", forwardClientAbort, { once: true });
+    const connectTimer = setTimeout(
+      () => upstream.abort(new Error("LM Studio 连接超时")),
+      10_000,
+    );
+    let response: Response;
+    try {
+      response = await fetch(LM_STUDIO_URL, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          model,
+          system_prompt: system,
+          input: `${transcript}\n${nextSpeaker}：`,
+          stream: true,
+          reasoning: "off",
+          store: false,
+          temperature,
+          top_p: topP,
+          max_output_tokens: maxOutputTokens,
+        }),
+        signal: upstream.signal,
+      });
+    } finally {
+      clearTimeout(connectTimer);
+    }
+    if (!response.ok || !response.body) {
+      const detail = await response.text();
       return Response.json(
-        { error: `LM Studio 返回 ${upstream.status}`, detail: detail.slice(0, 500) },
+        { error: `LM Studio 返回 ${response.status}`, detail: detail.slice(0, 500) },
         { status: 502 },
       );
     }
-    return new Response(upstream.body, {
+    return new Response(response.body, {
       headers: {
         "Content-Type": "text/event-stream; charset=utf-8",
         "Cache-Control": "no-cache, no-transform",

@@ -329,7 +329,8 @@ test("逃跑成功与失败都遵循敏捷和逐次补偿并在失败后还手",
     slow,
   );
   assert.equal(failed.escaped, false);
-  assert.equal(failed.battle.escapeFactor, 10);
+  // 原作初始系数 20(096 - Scene_Battle 1.rb)，失败一次 +10。
+  assert.equal(failed.battle.escapeFactor, 30);
   assert.ok(failed.battle.log.some((line) => line.includes("想跑")));
 });
 
@@ -364,7 +365,7 @@ test("回合结算统一推进冷却、增益、控制、苍鹰和灼烧状态",
     agi: 0,
     atk: 0,
     pdef: 0,
-    fenshen: 0,
+    fenshen: -1,
     turns: 0,
   });
   assert.equal(result.playerBusy, 1);

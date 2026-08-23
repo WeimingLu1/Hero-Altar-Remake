@@ -124,7 +124,7 @@ test("paired NPCs continue the same session for a second exchange", () => {
   assert.equal(first.bubble, "");
   assert.equal(first.speechTargetName, "乙");
   assert.equal(first.generationPending, true);
-  assert.equal(second.queuedBubble, "");
+  assert.equal(second.bubble, "");
 });
 
 test("leaving the active window clears both sides of a conversation session", () => {
@@ -136,11 +136,10 @@ test("leaving the active window clears both sides of a conversation session", ()
   first.partnerId = 2; second.partnerId = 1;
   first.conversationRound = second.conversationRound = 2;
   first.conversationContext = second.conversationContext = ["旧话题"];
-  second.queuedBubble = "旧回复";
   tickAmbientWorld({ world, now: 1000, playerX: 5, playerY: 5, indoor: false, canEnter: () => true });
   assert.deepEqual([first.partnerId, second.partnerId], [0, 0]);
   assert.deepEqual([first.conversationContext, second.conversationContext], [[], []]);
-  assert.equal(second.queuedBubble, "");
+  assert.equal(second.bubble, "");
 });
 
 test("NPCs approach and face each other before conversation", () => {
@@ -367,7 +366,7 @@ test("a pair that keeps going advances to the next round on demand", () => {
   assert.equal(first.generationPending, true);
   assert.equal(first.nextPairPending, false);
   assert.equal(first.speechTargetName, "乙");
-  assert.equal(second.queuedBubble, "");
+  assert.equal(second.bubble, "");
 });
 
 test("a buffered prefetched pair promotes seamlessly at round close", () => {
@@ -385,7 +384,6 @@ test("a buffered prefetched pair promotes seamlessly at round close", () => {
   assert.equal(first.conversationRound, 5);
   assert.equal(first.bubble, "甲 to 乙：“第二问。”");
   assert.equal(second.bubble, "乙 to 甲：“第二答。”");
-  assert.equal(second.queuedBubble, "");
   assert.equal(first.nextPair, undefined);
   assert.equal(first.generationPending, true);
   assert.equal(first.nextPairPending, true);
@@ -476,7 +474,7 @@ test("a third pair is deferred while two conversations already run", () => {
     lead.partnerId = follow.eventId; follow.partnerId = lead.eventId;
     lead.conversationTurn = 1; follow.conversationTurn = 2;
     lead.bubble = `${lead.name} to ${follow.name}：……`; lead.bubbleUntil = 8000;
-    follow.queuedBubble = "……"; follow.bubbleUntil = 8000;
+    follow.bubbleUntil = 8000;
   }
   e.nextBehaviorAt = 0; f.nextBehaviorAt = 1000000;
   tickAmbientWorld({ world, now: 1001, playerX: 30, playerY: 30, indoor: false, viewport, canEnter: () => true });
@@ -496,7 +494,7 @@ test("a pair still forms while a single conversation is running", () => {
   a.partnerId = 2; b.partnerId = 1;
   a.conversationTurn = 1; b.conversationTurn = 2;
   a.bubble = "甲 to 乙：……"; a.bubbleUntil = 8000;
-  b.queuedBubble = "……"; b.bubbleUntil = 8000;
+  b.bubbleUntil = 8000;
   e.nextBehaviorAt = 0; f.nextBehaviorAt = 1000000;
   tickAmbientWorld({ world, now: 1001, playerX: 30, playerY: 30, indoor: false, viewport, canEnter: () => true });
   assert.equal(e.partnerId, f.eventId);
@@ -515,7 +513,7 @@ test("a player-owned conversation does not consume the cap", () => {
   a.partnerId = 2; b.partnerId = 1;
   a.conversationTurn = 1; b.conversationTurn = 2;
   a.bubble = "甲 to 乙：……"; a.bubbleUntil = 8000;
-  b.queuedBubble = "……"; b.bubbleUntil = 8000;
+  b.bubbleUntil = 8000;
   e.nextBehaviorAt = 0; f.nextBehaviorAt = 1000000;
   tickAmbientWorld({ world, now: 1001, playerX: 30, playerY: 30, indoor: false, viewport, pausedConversationNpcIds: [1, 2], canEnter: () => true });
   assert.equal(e.partnerId, f.eventId);
@@ -533,7 +531,7 @@ test("the conversation cap drops to one while a player conversation is active", 
   a.partnerId = 2; b.partnerId = 1;
   a.conversationTurn = 1; b.conversationTurn = 2;
   a.bubble = "甲 to 乙：……"; a.bubbleUntil = 8000;
-  b.queuedBubble = "……"; b.bubbleUntil = 8000;
+  b.bubbleUntil = 8000;
   e.nextBehaviorAt = 0; f.nextBehaviorAt = 1000000;
   tickAmbientWorld({ world, now: 1001, playerX: 30, playerY: 30, indoor: false, viewport, pausedConversationNpcIds: [9], canEnter: () => true });
   assert.equal(e.partnerId, 0);

@@ -59,7 +59,9 @@ export function parseBattleNarrativeSections(text: string): BattleNarrativeSecti
 
 /** Red is reserved for a confirmed hit or positive HP loss in the engine line. */
 export function battleFactIsImpact(fact: string) {
-  return /(?:受到|造成|损失)\s*[1-9]\d*\s*点(?:伤害|气血)|(?:^|[，。；：\s])命中(?:[，。；！]|$)|招式虽中/.test(fact);
+  // 「点」与「伤害」之间允许法术/灼烧等修饰词(如“受到 N 点法术伤害”)，
+  // 但不含标点或数字，避免跨句误匹配；“损失 N 点内力”仍不算红色冲击。
+  return /(?:受到|造成|损失)\s*[1-9]\d*\s*点[^，。；：！？\d]*(?:伤害|气血)|(?:^|[，。；：\s])命中(?:[，。；！]|$)|招式虽中/.test(fact);
 }
 
 const proseUnits = (text: string) => text

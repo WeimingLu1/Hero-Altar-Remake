@@ -243,6 +243,10 @@ type NpcChatState = {
   started: boolean;
   shownAt: number;
 };
+// 自动交谈一次开启最多推进的步数(约 12 轮往返)；到达后自动关闭，
+// 避免挂机时无限消耗本地模型资源。
+const NPC_AUTO_TURN_LIMIT = 24;
+
 const npcChatRef = (chat: Pick<NpcChatState, "id" | "mapId" | "eventId">): GeneratedQuestNpcRef => ({
   npcId: chat.id,
   mapId: chat.mapId,
@@ -377,7 +381,9 @@ export default function OriginalWorld({
     runtimeMounted = useRef(true),
     stateRef = useRef<WorldSave>(state),
     keys = useRef(new Set<string>()),
-    held = useRef<Record<string, number>>({});
+    held = useRef<Record<string, number>>({}),
+    // 自动交谈已推进的步数；防止挂机时主角与 NPC 无限互相接话耗尽本地模型。
+    autoTurnsRef = useRef(0);
   const ambientShouldPause =
       screen !== "play" ||
       Boolean(
@@ -423,7 +429,10 @@ export default function OriginalWorld({
     };
   }, []);
   const sync = useCallback((next: WorldSave) => {
-    const normalized = structuredClone(next);
+    // 调用方传入的 next 一律是刚 structuredClone 出来的私有副本(或新解析的
+    // 导入对象)，此处原地归一化即可；只为 React 再克隆一份，避免每次操作
+    // 对整档做三次深拷贝。
+    const normalized = next;
     normalized.actor.exp = Math.min(normalized.actor.exp, MAX_PLAYER_EXP);
     const quest = normalized.tasks.generatedQuest;
     if (
@@ -851,6 +860,7 @@ export default function OriginalWorld({
     fallbackToFixed = true,
     ref?: GeneratedQuestNpcRef,
   ) => {
+    autoTurnsRef.current = 0;
     const identity = ref || {
       npcId: id,
       mapId: stateRef.current.position.mapId,
@@ -1200,6 +1210,9 @@ export default function OriginalWorld({
       terminal: null,
       offeredThisSession: chat.offeredThisSession || Boolean(offerDraft),
     } : chat);
+    // 流式 token 缓冲声明在 try 外，catch 里也需要取消挂起的 rAF。
+    let tokenBuffer = "",
+      tokenFlush: number | null = null;
     try {
       const current = stateRef.current;
       const activeQuest = current.tasks.generatedQuest,
@@ -1231,6 +1244,34 @@ export default function OriginalWorld({
                       : questReplyMode === "decline-close"
                         ? "\n\n【本轮唯一任务】玩家刚刚婉拒委托。只说一句符合人物性格的收尾对白，接受其决定，不得重新劝说，然后结束交谈。"
                         : "";
+      // 流式 token 先缓冲、按 rAF 批量提交，避免每个 token 都重渲整棵世界树。
+      const flushTokens = () => {
+        tokenFlush = null;
+        if (!tokenBuffer) return;
+        // 已中止/卸载后丢弃缓冲，避免旧请求的尾巴写进新会话。
+        if (!runtimeMounted.current || chatAbort.current !== controller) {
+          tokenBuffer = "";
+          return;
+        }
+        const chunk = tokenBuffer;
+        tokenBuffer = "";
+        setNpcChat((chat) => {
+          if (!chat || chat.id !== id) return chat;
+          const messages = [...chat.messages], last = messages.length - 1;
+          const currentReply = messages[last];
+          if (currentReply.role !== "assistant") return chat;
+          const raw = currentReply.raw + chunk;
+          messages[last] = {
+            role: "assistant",
+            npcId: id,
+            raw,
+            state: "",
+            action: "",
+            speech: cleanActiveDialogue(raw, npcLore(id).name),
+          };
+          return { ...chat, messages };
+        });
+      };
       const answer = await streamNpcReply({
         system: `${buildNpcSystemPrompt(id, current.actor, current.tasks, getOriginalMap(current.position.mapId).name)}${questContext}${offerContext}${forcedInstruction}`,
         messages: history,
@@ -1241,24 +1282,14 @@ export default function OriginalWorld({
         signal: controller.signal,
         onToken: (token) => {
           if (!runtimeMounted.current || chatAbort.current !== controller) return;
-          setNpcChat((chat) => {
-            if (!chat || chat.id !== id) return chat;
-            const messages = [...chat.messages], last = messages.length - 1;
-            const currentReply = messages[last];
-            if (currentReply.role !== "assistant") return chat;
-            const raw = currentReply.raw + token;
-            messages[last] = {
-              role: "assistant",
-              npcId: id,
-              raw,
-              state: "",
-              action: "",
-              speech: cleanActiveDialogue(raw, npcLore(id).name),
-            };
-            return { ...chat, messages };
-          });
+          tokenBuffer += token;
+          if (tokenFlush === null)
+            tokenFlush = window.requestAnimationFrame(flushTokens);
         },
       });
+      if (tokenFlush !== null) window.cancelAnimationFrame(tokenFlush);
+      tokenFlush = null;
+      tokenBuffer = "";
       if (!runtimeMounted.current || chatAbort.current !== controller) return;
       const parsed = {
         ...parseNpcDialogue(answer),
@@ -1320,6 +1351,9 @@ export default function OriginalWorld({
         };
       });
     } catch {
+      if (tokenFlush !== null) window.cancelAnimationFrame(tokenFlush);
+      tokenFlush = null;
+      tokenBuffer = "";
       if (controller.signal.aborted) {
         if (runtimeMounted.current && chatAbort.current === controller)
           setNpcChat((chat) =>
@@ -1530,6 +1564,11 @@ export default function OriginalWorld({
   }, [fixedNpcDialogue]);
   const advanceNpcConversation = useCallback(() => {
     if (!npcChat || npcChat.loading || npcChat.pendingQuest || npcChat.questReplyMode || npcChat.terminal) return;
+    // 自动模式达到轮数上限后自动收尾；手动推进不受影响。
+    if (npcChat.auto && ++autoTurnsRef.current > NPC_AUTO_TURN_LIMIT) {
+      setNpcChat({ ...npcChat, auto: false });
+      return;
+    }
     if (npcChat.phase === "original") {
       const nextIndex = npcChat.originalIndex + 1;
       if (nextIndex < npcChat.originalLines.length) {
@@ -1574,6 +1613,7 @@ export default function OriginalWorld({
   }, [generateAutoPlayerTurn, npcChat, openNpcConversation, prepareGeneratedQuestOffer, requestNpcReply]);
   const toggleNpcConversationAuto = useCallback(() => {
     if (!npcChat || npcChat.pendingQuest || npcChat.questReady || npcChat.questReplyMode || npcChat.terminal) return;
+    if (!npcChat.auto) autoTurnsRef.current = 0;
     setNpcChat({ ...npcChat, auto: !npcChat.auto });
   }, [npcChat]);
   useEffect(() => {
@@ -1662,6 +1702,17 @@ export default function OriginalWorld({
       battleNarrativesRef.current = next;
       setBattleNarratives(next);
     };
+    // 流式 token 逐个 setState 会让整棵世界树以每秒几十次的频率重渲染；
+    // 先缓冲、按 requestAnimationFrame 批量提交。
+    let tokenBuffer = "",
+      tokenFlush: number | null = null;
+    const flushTokens = () => {
+      tokenFlush = null;
+      if (!tokenBuffer) return;
+      const chunk = tokenBuffer;
+      tokenBuffer = "";
+      updateEntry((item) => ({ ...item, text: item.text + chunk }));
+    };
     try {
       const answer = await streamNpcReply({
         system: buildBattleNarrationPrompt(event),
@@ -1672,8 +1723,15 @@ export default function OriginalWorld({
         temperature: 0.62,
         topP: 0.85,
         signal: controller.signal,
-        onToken: (token) => updateEntry((item) => ({ ...item, text: item.text + token })),
+        onToken: (token) => {
+          tokenBuffer += token;
+          if (tokenFlush === null)
+            tokenFlush = window.requestAnimationFrame(flushTokens);
+        },
       });
+      if (tokenFlush !== null) window.cancelAnimationFrame(tokenFlush);
+      tokenFlush = null;
+      tokenBuffer = "";
       updateEntry((item) => ({
         ...item,
         text: answer,
@@ -1681,6 +1739,9 @@ export default function OriginalWorld({
         error: "",
       }));
     } catch (error) {
+      if (tokenFlush !== null) window.cancelAnimationFrame(tokenFlush);
+      tokenFlush = null;
+      flushTokens();
       if (controller.signal.aborted) {
         if (battleNarrationAbort.current)
           updateEntry((item) => ({
@@ -1756,7 +1817,12 @@ export default function OriginalWorld({
         postBattleTarget: GeneratedQuestNpcRef | null = null;
       if (battle.finished === "win") {
         if (battle.mode === "lethal") {
-          const loot = settleVictoryLoot(next.actor, battle.enemyId, kill);
+          const loot = settleVictoryLoot(
+            next.actor,
+            battle.enemyId,
+            kill,
+            battle.enemyWeaponId,
+          );
           altarText = loot.text;
         }
         if (battle.enemyId === 149) {
@@ -2135,89 +2201,110 @@ export default function OriginalWorld({
     },
     [study, studyAt],
   );
+  // 纯推进一步：原地修改传入存档的 actor，不克隆不提交不发提示。
+  const advanceCultivation = useCallback(
+    (
+      save: WorldSave,
+      index: number,
+    ): { text: string; keepGoing: boolean; changed: boolean } => {
+      const actor = save.actor;
+      if (index === 0) {
+        const available = cultivationAvailability(actor, "meditate");
+        if (!available.ok)
+          return { text: available.text, keepGoing: false, changed: false };
+        const result = meditateForce(actor);
+        return {
+          text: !result.ok
+            ? "尚未装备内功。"
+            : result.capped
+              ? "内力已达当前内功修为上限，已自动停止打坐。"
+              : result.increased
+                ? "打坐周天完成，内力上限提高一点。"
+                : "你凝神打坐，内息渐长。",
+          keepGoing: result.ok && !result.capped,
+          changed: true,
+        };
+      }
+      if (index === 1) {
+        const available = cultivationAvailability(actor, "magic");
+        if (!available.ok)
+          return { text: available.text, keepGoing: false, changed: false };
+        const result = meditateMagic(actor);
+        return {
+          text: !result.ok
+            ? "尚未装备法术。"
+            : result.capped
+              ? "法力已达当前法术修为上限，已自动停止冥思。"
+              : result.increased
+                ? "冥思完成，法力上限提高一点。"
+                : "你闭目冥思，法力渐长。",
+          keepGoing: result.ok && !result.capped,
+          changed: true,
+        };
+      }
+      if (index === 2) {
+        const available = cultivationAvailability(actor, "recover");
+        if (!available.ok)
+          return { text: available.text, keepGoing: false, changed: false };
+        return {
+          text: recoverHp(actor)
+            ? "吸气调息，气血已经恢复。"
+            : "当前无法吸气恢复。",
+          keepGoing: true,
+          changed: true,
+        };
+      }
+      if (index === 3) {
+        const available = cultivationAvailability(actor, "heal");
+        if (!available.ok)
+          return { text: available.text, keepGoing: false, changed: false };
+        return {
+          text: healWounds(actor)
+            ? "运功疗伤，伤势有所恢复。"
+            : "当前条件不足以疗伤。",
+          keepGoing: true,
+          changed: true,
+        };
+      }
+      if (index === 4) {
+        const available = cultivationAvailability(actor, "force");
+        if (!available.ok)
+          return { text: available.text, keepGoing: false, changed: false };
+        return {
+          text: `当前加力设为 ${setForcePower(actor, actor.fpPlus + 10)}。`,
+          keepGoing: true,
+          changed: true,
+        };
+      }
+      if (index >= 6) {
+        const options = practiceOptions(actor),
+          result = practiceOnce(actor, options[index - 6]?.id || 0);
+        return { text: result.text, keepGoing: result.ok, changed: result.ok };
+      }
+      const available = cultivationAvailability(actor, "spell");
+      if (!available.ok)
+        return { text: available.text, keepGoing: false, changed: false };
+      return {
+        text: `当前法点设为 ${setMagicPower(actor, actor.mpPlus + 10)}。`,
+        keepGoing: true,
+        changed: true,
+      };
+    },
+    [],
+  );
   const cultivate = useCallback(
     (index: number) => {
-      const next = structuredClone(stateRef.current);
-      let text = "",
-        keepGoing = true;
-      if (index === 0) {
-        const available = cultivationAvailability(next.actor, "meditate");
-        if (!available.ok) {
-          setNotice(available.text);
-          return false;
-        }
-        const result = meditateForce(next.actor);
-        text = !result.ok
-          ? "尚未装备内功。"
-          : result.capped
-            ? "内力已达当前内功修为上限，已自动停止打坐。"
-            : result.increased
-              ? "打坐周天完成，内力上限提高一点。"
-              : "你凝神打坐，内息渐长。";
-        keepGoing = result.ok && !result.capped;
-      } else if (index === 1) {
-        const available = cultivationAvailability(next.actor, "magic");
-        if (!available.ok) {
-          setNotice(available.text);
-          return false;
-        }
-        const result = meditateMagic(next.actor);
-        text = !result.ok
-          ? "尚未装备法术。"
-          : result.capped
-            ? "法力已达当前法术修为上限，已自动停止冥思。"
-            : result.increased
-              ? "冥思完成，法力上限提高一点。"
-              : "你闭目冥思，法力渐长。";
-        keepGoing = result.ok && !result.capped;
-      } else if (index === 2) {
-        const available = cultivationAvailability(next.actor, "recover");
-        if (!available.ok) {
-          setNotice(available.text);
-          return false;
-        }
-        text = recoverHp(next.actor)
-          ? "吸气调息，气血已经恢复。"
-          : "当前无法吸气恢复。";
-      } else if (index === 3) {
-        const available = cultivationAvailability(next.actor, "heal");
-        if (!available.ok) {
-          setNotice(available.text);
-          return false;
-        }
-        text = healWounds(next.actor)
-          ? "运功疗伤，伤势有所恢复。"
-          : "当前条件不足以疗伤。";
-      } else if (index === 4) {
-        const available = cultivationAvailability(next.actor, "force");
-        if (!available.ok) {
-          setNotice(available.text);
-          return false;
-        }
-        text = `当前加力设为 ${setForcePower(next.actor, next.actor.fpPlus + 10)}。`;
-      } else {
-        const options = practiceOptions(next.actor);
-        if (index >= 6) {
-          const result = practiceOnce(next.actor, options[index - 6]?.id || 0);
-          text = result.text;
-          if (!result.ok) {
-            setNotice(text);
-            return false;
-          }
-        } else {
-          const available = cultivationAvailability(next.actor, "spell");
-          if (!available.ok) {
-            setNotice(available.text);
-            return false;
-          }
-          text = `当前法点设为 ${setMagicPower(next.actor, next.actor.mpPlus + 10)}。`;
-        }
+      const next = structuredClone(stateRef.current),
+        outcome = advanceCultivation(next, index);
+      if (!outcome.changed) {
+        setNotice(outcome.text);
+        return false;
       }
       sync(next);
-      setNotice(text);
-      return keepGoing;
+      setNotice(outcome.text);
+      return outcome.keepGoing;
     },
-    [sync],
+    [advanceCultivation, sync],
   );
   const beginCultivation = useCallback(
     (index: number) => {
@@ -2430,6 +2517,9 @@ export default function OriginalWorld({
   );
   useEffect(() => {
     const down = (e: KeyboardEvent) => {
+        // OS 按键自动重复只应作用于移动长按(trackHeld 集合在首次 keydown 已登记)；
+        // 确认/取消类离散命令若不拦 repeat，按住 E 会连买商品、连打战斗回合。
+        if (e.repeat) return;
         const target = e.target as HTMLElement | null,
           inputContext: InputContext = {
             screen,
@@ -3017,9 +3107,22 @@ export default function OriginalWorld({
       };
     addEventListener("keydown", down);
     addEventListener("keyup", up);
+    // 切窗口/弹系统对话框会吞掉 keyup，按键状态残留会让角色在失焦后
+    // 自己走个不停；blur 与页面隐藏时统一清空。
+    const releaseHeldKeys = () => {
+      keys.current.clear();
+      for (const key of Object.keys(held.current)) delete held.current[key];
+    };
+    addEventListener("blur", releaseHeldKeys);
+    const onVisibility = () => {
+      if (document.hidden) releaseHeldKeys();
+    };
+    document.addEventListener("visibilitychange", onVisibility);
     return () => {
       removeEventListener("keydown", down);
       removeEventListener("keyup", up);
+      removeEventListener("blur", releaseHeldKeys);
+      document.removeEventListener("visibilitychange", onVisibility);
     };
   }, [
     battle,
@@ -3152,19 +3255,69 @@ export default function OriginalWorld({
   }, [battle, screen, sync]);
   useEffect(() => {
     if (!cultivationActive || cultivation === null) return;
-    return startFixedStepLoop(() => {
-      const keepGoing = cultivate(cultivation);
-      if (!keepGoing) setCultivationActive(false);
-      return keepGoing;
+    // 打坐等长时操作按固定增量推进、速率与步进频率耦合；这里在私有副本上
+    // 连续推进，每 12 步(约 10Hz)才提交一次并刷新提示——进度节奏不变，
+    // 但整档深拷贝与全树重渲染从每秒数百次降到约 30 次。
+    let buffer: WorldSave | null = null,
+      steps = 0,
+      latest = "";
+    const flush = () => {
+      if (!buffer) return;
+      sync(buffer);
+      buffer = null;
+      steps = 0;
+      setNotice(latest);
+    };
+    const stopLoop = startFixedStepLoop(() => {
+      if (!buffer) buffer = structuredClone(stateRef.current);
+      const outcome = advanceCultivation(buffer, cultivation);
+      latest = outcome.text;
+      if (!outcome.keepGoing) {
+        flush();
+        setCultivationActive(false);
+        return false;
+      }
+      if (++steps >= 12) flush();
+      return true;
     });
-  }, [cultivate, cultivation, cultivationActive]);
+    return () => {
+      stopLoop();
+      flush();
+    };
+  }, [advanceCultivation, cultivation, cultivationActive, sync]);
   useEffect(() => {
     if (!studyActive || !study) return;
-    return startFixedStepLoop(() => {
-      const result = studySelected();
-      return Boolean(result?.ok && !result.leveled);
+    const item = (study.book ? bookStudyOptions(study.id) : studyOptions(study.id))[
+      study.index
+    ];
+    let buffer: WorldSave | null = null,
+      steps = 0,
+      latest = "";
+    const flush = () => {
+      if (!buffer) return;
+      sync(buffer);
+      buffer = null;
+      steps = 0;
+      setNotice(latest);
+    };
+    const stopLoop = startFixedStepLoop(() => {
+      if (!item) return false;
+      if (!buffer) buffer = structuredClone(stateRef.current);
+      const result = studyOnce(buffer.actor, item.id, item.maxLevel);
+      latest = result.text;
+      if (!result.ok || result.leveled) {
+        flush();
+        setStudyActive(false);
+        return false;
+      }
+      if (++steps >= 12) flush();
+      return true;
     });
-  }, [study, studyActive, studySelected]);
+    return () => {
+      stopLoop();
+      flush();
+    };
+  }, [study, studyActive, sync]);
   useEffect(() => {
     const target = canvas.current;
     if (!target) return;
@@ -3240,6 +3393,34 @@ export default function OriginalWorld({
       setNotice(`JSON 存档格式无效：${parsed.error}`);
       return;
     }
+    // 导入会整体替换存档：战斗、对话、菜单等瞬态界面仍引用旧档数据，
+    // 全部关闭后再进入游戏画面。
+    chatAbort.current?.abort();
+    chatAbort.current = null;
+    setBattle(null);
+    setBattleNarratives([]);
+    setBattleOutcome(null);
+    setBattleItem(null);
+    setBattleSkill(null);
+    setSpecialMenu(null);
+    setNpcChat(null);
+    setNpcMenu(null);
+    setShop(null);
+    setStudy(null);
+    setStudyActive(false);
+    setCultivation(null);
+    setCultivationActive(false);
+    setMenu(null);
+    setCheatConfirm(null);
+    setItemConfirm(null);
+    setHiddenConfirm(null);
+    setTaskBook(null);
+    setFlyMenu(null);
+    setArcade(null);
+    setLife(null);
+    setCaihua(null);
+    setEventText("");
+    setEventNpcId(null);
     sync(parsed.value);
     const written = writeJsonStorage(LOCAL_SAVE_KEY, parsed.value);
     setHasSave(written.ok);

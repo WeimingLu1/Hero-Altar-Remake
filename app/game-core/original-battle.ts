@@ -73,6 +73,12 @@ const lcg =
   };
 const battleEnemyRecord = (battle: OriginalBattle) =>
   battle.enemyOverride || originalTables.enemies[battle.enemyId] || {};
+// 原作剧情战(墨邪铸剑)的胜利线按固定 full_hp/2 判定(096 - Scene_Battle 1.rb judge)，
+// 不随战斗中被 hurt 逐回合削低的当前上限漂移。
+const storyVictoryAt = (battle: OriginalBattle) =>
+  battle.mode === "story" && battle.enemyId === 149
+    ? Math.floor(n(battleEnemyRecord(battle), "maxhp", 1) / 2)
+    : 0;
 
 function moveFor(
   record: OriginalRecord,
@@ -131,7 +137,8 @@ function player(
     agi: 0,
     atk: 0,
     pdef: 0,
-    fenshen: 0,
+    // 原作缺省 -1(021 - Game_Battler 2.rb)：无影分身时永不触发残影格挡。
+    fenshen: -1,
     turns: 0,
   };
   return {
@@ -168,7 +175,10 @@ function enemy(
   const skills = (record.skill_list as number[][]) || [],
     level = (id: number) => skills.find((row) => row[0] === id)?.[1] || 0,
     uses = (record.skill_use as number[]) || [],
-    attackId = n(record, "weapon_id") > 0 ? uses[1] || 1 : uses[0] || 2;
+    // 兵刃武功按战斗中的实时武器选(被落英缤纷缴械后回落拳脚)，
+    // 原作 weapon_kf_id 在 weapon_id<=0 时走空手分支(020 - Game_Battler 1.rb)。
+    armed = battle ? battle.enemyWeaponId : n(record, "weapon_id"),
+    attackId = armed > 0 ? uses[1] || 1 : uses[0] || 2;
   const debuff = battle?.enemyDebuff || {
     hit: 0,
     busy: 0,
@@ -182,7 +192,8 @@ function enemy(
     eva: n(record, "base_eva"),
     attackKfLv: level(attackId),
     dodgeKfLv: level(uses[2] || 9),
-    parryKfLv: level(uses[3] || 10),
+    // 原作招架取招架槽 skill_use[4](026 - Game_Enemy.rb parry_kf_lv)，非内功槽。
+    parryKfLv: level(uses[4] || 10),
     agi: n(record, "agi"),
     int: n(record, "int"),
     str: n(record, "str"),
@@ -192,7 +203,8 @@ function enemy(
     fpPlus: n(record, "fp_plus"),
     weaponId: battle ? battle.enemyWeaponId : n(record, "weapon_id"),
     movable: debuff.busy <= 0,
-    fenshen: 0,
+    // 原作缺省 -1(021 - Game_Battler 2.rb)：无影分身时永不触发残影格挡。
+    fenshen: -1,
     kfAp: move.ap,
     kfDp: move.dp,
     kfPp: move.pp,
@@ -223,9 +235,10 @@ function applyVampiric(actor: SceneActorState, battle: OriginalBattle, damage: n
   if (actor.hp > before)
     battle.log.push(`吸血大法吸回 ${actor.hp - before} 点气血。`);
 }
-function enemyAttackId(record: OriginalRecord) {
-  const uses = (record.skill_use as number[]) || [];
-  return n(record, "weapon_id") > 0 ? uses[1] || 1 : uses[0] || 2;
+function enemyAttackId(record: OriginalRecord, battle?: OriginalBattle) {
+  const uses = (record.skill_use as number[]) || [],
+    armed = battle ? battle.enemyWeaponId : n(record, "weapon_id");
+  return armed > 0 ? uses[1] || 1 : uses[0] || 2;
 }
 const magicLevelFactors = [
   0, 1, 10, 13, 16, 20, 22, 24, 26, 28, 30, 31, 33, 35, 37, 38, 39, 41, 43, 46,
@@ -329,7 +342,8 @@ function castSpell(
     if (success) {
       battle.enemyDebuff.busy = Math.max(
         battle.enemyDebuff.busy,
-        random(15) + 6,
+        // 原作 turns=rand(15)+5(add_state 存+1、行动前递减，实际冻 N 回合)。
+        random(15) + 5,
       );
       battle.log.push(`${battle.enemyName}被暴风雪彻底冰封。`);
     } else {
@@ -354,7 +368,9 @@ function castSpell(
       (random(Math.max(1, diminishingBattleResource(actor.maxHp))) +
         diminishingBattleResource(Math.min(actor.mp, actor.maxMp * 2))) /
         20,
-    ) + Math.floor((damageRate * 2 * actor.mpPlus) / 100);
+    ) +
+    // 原作先整除后乘：m_damage*2/100 得整数档位再乘加力。
+    Math.floor((damageRate * 2) / 100) * actor.mpPlus;
   const enemyFpPlus = n(record, "fp_plus");
   const targetPower =
     Math.floor(
@@ -362,13 +378,15 @@ function castSpell(
         diminishingBattleResource(battle.enemyFp)) /
         20,
     ) +
-    Math.floor((damageRate * 2 * random(Math.max(1, enemyFpPlus))) / 100);
+    Math.floor((damageRate * 2) / 100) * random(Math.max(1, enemyFpPlus));
   const reflected = userPower < targetPower;
   const first = reflected
     ? Math.floor(((targetPower - userPower + enemyFpPlus) * damageRate) / 100)
     : Math.floor(((userPower - targetPower) * damageRate) / 100);
+  // 原作(022 - Game_Battler 3.rb)：damage2 = first*mp_kf_lv/200；
+  // self.damage = (first+damage2)*2，等效倍率 ×(200+精通)/100。
   const mastery = Math.min(300, effectiveLevel(actor, magicKungfuId(actor))),
-    damage = Math.floor((first * (400 + mastery)) / 400);
+    damage = (first + Math.floor((first * mastery) / 200)) * 2;
   if (reflected) {
     actor.hp = Math.max(0, actor.hp - damage);
     battle.log.push(`法力遭到反弹，你受到 ${damage} 点伤害。`);
@@ -397,7 +415,8 @@ function tick(battle: OriginalBattle, actor: SceneActorState) {
       agi: 0,
       atk: 0,
       pdef: 0,
-      fenshen: 0,
+      // 原作缺省 -1(021 - Game_Battler 2.rb)：无影分身时永不触发残影格挡。
+      fenshen: -1,
       turns: 0,
     };
   if (battle.enemyDebuff.busy > 0) battle.enemyDebuff.busy--;
@@ -452,7 +471,7 @@ function enemyTurn(
     battle.log.push(`${battle.enemyName}受制于招式，无法还手。`);
     return;
   }
-  const enemyId = enemyAttackId(record),
+  const enemyId = enemyAttackId(record, battle),
     enemyLevel =
       ((record.skill_list as number[][]) || []).find(
         (row) => row[0] === enemyId,
@@ -532,10 +551,17 @@ function chooseEnemySpecial(
     const skill = originalTables.skills[id] || {},
       fpCost = Number(skill.fp_cost || 0),
       rawMpCost = Number(skill.mp_cost || 0),
+      // 与玩家同一口径(023 - Game_Battler 4.rb get_mp_cost)：显式 mp_cost 优先，
+      // 否则敌方法点+magic_data[0]；法术还需满足储备线(check_magic_require)。
       mpCost = id >= 29
-        ? Math.max(rawMpCost, Number((skill.magic_data as number[])?.[0] || 0))
-        : rawMpCost;
-    return battle.enemyFp >= fpCost && battle.enemyMp >= mpCost
+        ? rawMpCost > 0
+          ? rawMpCost
+          : n(record, "mp_plus") +
+            Number((skill.magic_data as number[])?.[0] || 0)
+        : rawMpCost,
+      mpGate =
+        id >= 29 ? Math.max(n(record, "mp_plus") * 2 + 100, mpCost) : mpCost;
+    return battle.enemyFp >= fpCost && battle.enemyMp >= mpGate
       ? [{ id, name: String(skill.name || `绝招${id}`), fpCost, mpCost }]
       : [];
   });
@@ -571,14 +597,16 @@ export function beginOriginalBattle(
       agi: 0,
       atk: 0,
       pdef: 0,
-      fenshen: 0,
+      // 原作缺省 -1(021 - Game_Battler 2.rb)：无影分身时永不触发残影格挡。
+      fenshen: -1,
       turns: 0,
     },
     enemyDebuff: { hit: 0, busy: 0, turns: 0, eagleTurns: 0, burnTurns: 0 },
     enemyOverride,
     questContext,
     mode,
-    escapeFactor: 0,
+    // 原作初始逃跑系数 20(096 - Scene_Battle 1.rb)，失败每次 +10。
+    escapeFactor: 20,
   };
 }
 
@@ -598,6 +626,8 @@ export function attemptEscape(source: OriginalBattle, actor: SceneActorState) {
   }
   battle.escapeFactor += 10;
   battle.log.push(`${battle.enemyName}一把拦住：想跑，没门！`);
+  // 原作逃跑失败等同空过一回合(096 escape → start_phase2)：状态、冷却、
+  // 苍鹰和灼烧照常推进，不能靠反复点逃跑让时间静止。
   const blank: Move = {
     text: "",
     hitType: 0,
@@ -607,6 +637,14 @@ export function attemptEscape(source: OriginalBattle, actor: SceneActorState) {
     damage: 0,
     force: 0,
   };
+  tick(battle, actor);
+  battle.turn++;
+  const victoryAt = storyVictoryAt(battle);
+  if (battle.enemyHp <= victoryAt) {
+    battle.finished = "win";
+    battle.log.push(`${battle.enemyName}倒在苍鹰利爪之下。`);
+    return { escaped: false, battle };
+  }
   enemyTurn(battle, actor, record, random, blank);
   return { escaped: false, battle };
 }
@@ -638,10 +676,7 @@ export function battleRound(source: OriginalBattle, actor: SceneActorState) {
   const battle = structuredClone(source);
   if (battle.finished) return battle;
   tick(battle, actor);
-  const victoryAt =
-    battle.mode === "story" && battle.enemyId === 149
-      ? Math.floor(battle.enemyMaxHp / 2)
-      : 0;
+  const victoryAt = storyVictoryAt(battle);
   if (battle.enemyHp <= victoryAt) {
     battle.finished = "win";
     battle.log.push(`${battle.enemyName}倒在苍鹰利爪之下。`);
@@ -653,9 +688,9 @@ export function battleRound(source: OriginalBattle, actor: SceneActorState) {
     pm = moveFor(
       record,
       playerId,
-      playerId >= 12
-        ? effectiveLevel(actor, playerId)
-        : skillLevel(actor, playerId),
+      // 原作招式解锁按原始等级过滤 atk_word(021 - Game_Battler 2.rb get_kf_action)，
+      // 不用含基本功夫加成的有效等级。
+      skillLevel(actor, playerId),
       random,
       "你",
       battle.enemyName,
@@ -715,10 +750,7 @@ export function specialRound(
     return battle;
   }
   tick(battle, actor);
-  const victoryAt =
-    battle.mode === "story" && battle.enemyId === 149
-      ? Math.floor(battle.enemyMaxHp / 2)
-      : 0;
+  const victoryAt = storyVictoryAt(battle);
   if (battle.enemyHp <= victoryAt) {
     battle.finished = "win";
     battle.log.push(`${battle.enemyName}倒在苍鹰利爪之下。`);
@@ -747,13 +779,16 @@ export function specialRound(
       hit: battle.buff.hit + Math.floor(level / 15),
       turns: Math.floor(level / 25) + 1,
     };
-  else if (specialId === 2)
+  else if (specialId === 2) {
     battle.buff = {
       ...battle.buff,
       hit: battle.buff.hit + Math.floor(level / 15),
       str: battle.buff.str + Math.floor((level * 2) / 15),
       turns: Math.floor(level / 20) + 1,
     };
+    // 化掌为刀施放后自缚(原作 add_state(0,2) 存 3)。
+    battle.playerBusy = Math.max(battle.playerBusy, 3);
+  }
   const record = battleEnemyRecord(battle),
     random = lcg(battle),
     blank: Move = {
@@ -814,7 +849,7 @@ export function specialRound(
       if (hit >= enemyCombatant.dodgeKfLv / 3) {
         battle.enemyHp = Math.max(0, battle.enemyHp - hit);
         battle.enemyMaxHp = Math.max(0, battle.enemyMaxHp - hit);
-        battle.enemyDebuff.busy = 3;
+        battle.enemyDebuff.busy = Math.max(battle.enemyDebuff.busy, 2);
         battle.log.push(`${battle.enemyName}被卷入鞭圈，受到 ${hit} 点伤害。`);
       } else battle.log.push(`${battle.enemyName}滚出鞭影，避开了这一招。`);
     }
@@ -839,9 +874,14 @@ export function specialRound(
         wound = pc.hit + chaos;
       battle.enemyHp = Math.max(0, battle.enemyHp - damage);
       battle.enemyMaxHp = Math.max(0, battle.enemyMaxHp - wound);
-      battle.enemyDebuff.busy = 4;
+      // 原作掷出兵刃后自身硬直(022 add_state(0,3) 存 4)，并非冻结敌人。
+      battle.playerBusy = Math.max(battle.playerBusy, 4);
       battle.log.push(`${battle.enemyName}被兵刃贯穿，受到 ${damage} 点伤害。`);
-    } else battle.log.push(`${battle.enemyName}凌空跃开，兵刃从身旁飞过。`);
+    } else {
+      // 掷空硬直更久(原作 add_state(0,4) 存 5)。
+      battle.playerBusy = Math.max(battle.playerBusy, 5);
+      battle.log.push(`${battle.enemyName}凌空跃开，兵刃从身旁飞过。`);
+    }
     const key = `2:${thrownWeaponId}`,
       customType = thrownWeaponId - 31,
       isForgedWeapon = customType >= 0 && customType < 4 &&
@@ -884,7 +924,11 @@ export function specialRound(
       battle.enemyDebuff.hit -= Math.min(Math.floor(ninja / 8), 20);
       battle.enemyDebuff.turns = Math.floor(ninja / 20) + 1;
       battle.log.push(`${battle.enemyName}陷入烟幕，命中大幅下降。`);
-    } else battle.log.push(`${battle.enemyName}以内力震散烟幕。`);
+    } else {
+      // 烟幕被震散则自缚一回合(原作 add_state(0,2) 存 3)。
+      battle.playerBusy = Math.max(battle.playerBusy, 3);
+      battle.log.push(`${battle.enemyName}以内力震散烟幕。`);
+    }
   } else if (specialId === 14) {
     const ninja = effectiveLevel(actor, 31),
       turns = Math.floor(ninja / 20) + 1;
@@ -936,7 +980,7 @@ export function specialRound(
   } else if (specialId === 17) {
     const hit = random(Math.max(1, effectiveLevel(actor, 32)));
     if (hit >= enemyCombatant.parryKfLv / 3) {
-      const turns = Math.floor(hit / 30) + 3;
+      const turns = Math.floor(hit / 30) + 2;
       battle.enemyDebuff.busy = Math.max(battle.enemyDebuff.busy, turns);
       battle.cooldowns["17"] = turns + 4;
       battle.log.push(`${battle.enemyName}身陷乱环阵。`);
@@ -959,7 +1003,7 @@ export function specialRound(
     } else {
       const hit = random(Math.max(1, taiChi));
       if (hit >= enemyCombatant.parryKfLv / 3) {
-        const turns = Math.floor(hit / 25) + 3;
+        const turns = Math.floor(hit / 25) + 2;
         battle.enemyDebuff.busy = Math.max(battle.enemyDebuff.busy, turns);
         battle.cooldowns["18"] = 6;
         battle.log.push(`${battle.enemyName}被太极柔劲困住。`);
@@ -974,7 +1018,7 @@ export function specialRound(
     if (hit >= n(record, "exp") / 3) {
       battle.enemyDebuff.busy = Math.max(
         battle.enemyDebuff.busy,
-        random(Math.max(1, Math.floor(taiChiSword / 20))) + 2,
+        random(Math.max(1, Math.floor(taiChiSword / 20))) + 1,
       );
       battle.log.push(`${battle.enemyName}被剑意丝棉紧紧裹住。`);
     } else {
@@ -1010,7 +1054,7 @@ export function specialRound(
       battle.enemyHp = Math.max(0, battle.enemyHp - damage);
       battle.enemyDebuff.busy = Math.max(
         battle.enemyDebuff.busy,
-        Math.floor(snow / 35) + 4,
+        Math.floor(snow / 35) + 3,
       );
       battle.log.push(`${battle.enemyName}被摔倒，受到 ${damage} 点伤害。`);
     } else {
@@ -1048,7 +1092,7 @@ export function specialRound(
       battle.enemyHp = Math.max(0, battle.enemyHp - power);
       battle.enemyDebuff.busy = Math.max(
         battle.enemyDebuff.busy,
-        Math.floor(dragon / 30) + 2,
+        Math.floor(dragon / 30) + 1,
       );
       battle.log.push(`虎啸震伤${battle.enemyName}，造成 ${power} 点伤害。`);
     } else battle.log.push(`${battle.enemyName}内力深厚，不为虎啸所动。`);
@@ -1083,6 +1127,16 @@ export function specialRound(
     };
     battle.cooldowns["28"] = turns;
   }
+  // 原作以下绝招施放后自带硬直后摇(022 各分支 add_state(0,N)，存 N+1)：
+  // 化掌为刀 3；八卦刀影掌/八阵刀影掌/柳浪闻莺 4；
+  // 红莲出世/旋风三连斩/迎风一刀斩 2。
+  if (specialId === 2 || specialId === 3 || specialId === 4 || specialId === 5)
+    battle.playerBusy = Math.max(
+      battle.playerBusy,
+      specialId === 2 ? 3 : 4,
+    );
+  if (specialId === 10 || specialId === 11 || specialId === 12)
+    battle.playerBusy = Math.max(battle.playerBusy, 2);
   const attacks =
       forcedAttacks > 0
         ? forcedAttacks
@@ -1114,6 +1168,8 @@ export function specialRound(
     actor.fp = pc.fp;
     battle.enemyHp = Math.max(0, battle.enemyHp - numericDamage(result));
     battle.enemyMaxHp = Math.max(battle.enemyHp, battle.enemyMaxHp - result.hurt);
+    // 原作连招每击都走 common_attack，吸血大法逐击结算(099 - Scene_Battle 4.rb)。
+    applyVampiric(actor, battle, numericDamage(result));
     battle.log.push(`第 ${i + 1} 击：${resultText(result, battle.enemyName)}`);
   }
   const fixedCooldown: Record<number, number> = {

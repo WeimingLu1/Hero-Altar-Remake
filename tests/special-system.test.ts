@@ -85,12 +85,17 @@ const dummyEnemy = {
   agi: 20,
   bon: 20,
 };
-test("learned kungfu exposes its original special without being equipped", () => {
+test("绝招需配合已装备武功：只学会但未装备则禁用", () => {
   const a = actor();
   a.skills["13"] = { level: 120, points: 0 };
   assert.notEqual(a.skillUse[0], 13);
-  const learned = battleSpecials(a).find((special) => special.id === 2);
-  assert.equal(learned?.enabled, true);
+  const unequipped = battleSpecials(a).find((special) => special.id === 2);
+  assert.equal(unequipped?.enabled, false);
+  assert.match(unequipped?.reason || "", /装备八阵八卦掌/);
+  // 装备到拳脚槽后即可施展。
+  a.skillUse[0] = 13;
+  const equipped = battleSpecials(a).find((special) => special.id === 2);
+  assert.equal(equipped?.enabled, true);
   const list = battleSpecials(actor());
   assert.equal(list[0].id, 1);
   assert.equal(list[0].enabled, true);
@@ -114,6 +119,9 @@ test("拳脚和兵刃绝招仍校验当前武器", () => {
   sword.skills["3"] = { level: 120, points: 0 };
   sword.skills["33"] = { level: 180, points: 0 };
   sword.skills["36"] = { level: 180, points: 0 };
+  // 缠字诀要求太极神功/太极剑正装备在对应槽位，先满足再单测武器校验。
+  sword.skillUse[3] = 36;
+  sword.skillUse[1] = 33;
   assert.match(
     battleSpecials(sword).find((special) => special.id === 19)?.reason || "",
     /需要装备剑类兵器/,

@@ -97,7 +97,8 @@ test("transfer and Scene_Event hooks retain exact arguments", () => {
     direction: 0,
     fade: 0,
   });
-  assert.deepEqual(result.sceneEvent, { type: 13, id: 64, extra: 0 });
+  // sceneEvent 字段已移除(无消费者)；钩子存在性改为直接断言脚本源文本。
+  assert.match(result.source, /Scene_Event\.new\(\s*13\s*,\s*64\s*,\s*0/);
 });
 
 test("铸剑谷(67)有传回茅山(52)的出口，玩家不会被困住", () => {
