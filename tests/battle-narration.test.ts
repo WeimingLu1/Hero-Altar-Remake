@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import {
   battleEffectKind,
-  battleNarrationMatchesFacts,
+  battleNarrationOutline,
   buildBattleNarrationFallback,
   buildBattleNarrationFacts,
   buildBattleNarrationPrompt,
@@ -49,8 +49,8 @@ test("battle narration prompt grounds wuxia prose in both fighters and exact res
   assert.match(prompt, /【对手应招】/);
   assert.match(prompt, /【对手出招】/);
   assert.match(prompt, /【你应招】/);
-  assert.match(prompt, /120至240个汉字/);
-  assert.match(prompt, /绝不超过320个汉字/);
+  assert.match(prompt, /一条原文只改写成一段/);
+  assert.match(prompt, /每段通常35至80个汉字/);
   assert.match(prompt, /命中、闪避、招架、伤害、当前气血、胜负/);
   assert.match(prompt, /起手、发力、行进路线或变招/);
   assert.match(prompt, /非必要不加入对话/);
@@ -75,17 +75,25 @@ test("battle narration follows the original attack-response order with distinct 
   ]);
 });
 
-test("battle narration rejects missing or reordered engine-derived sections", () => {
+test("battle prompt gives the model the exact engine-derived section outline", () => {
   const input = event();
-  assert.equal(battleNarrationMatchesFacts(
-    "【你出招】踏步递掌。\n【对手应招】横肘封架。",
-    input,
-  ), true);
-  assert.equal(battleNarrationMatchesFacts(
-    "【对手应招】横肘封架。\n【你出招】踏步递掌。",
-    input,
-  ), false);
-  assert.equal(battleNarrationMatchesFacts("双方打得难解难分。", input), false);
+  assert.deepEqual(battleNarrationOutline(input), ["【你出招】", "【对手应招】"]);
+  assert.match(buildBattleNarrationPrompt(input), /本回合逐条续写骨架】.*你出招.*对手应招/);
+  assert.match(buildBattleNarrationFacts(input), /本回合逐条续写骨架：.*你出招.*对手应招/);
+
+  input.facts = ["使用了金创药：气血+15。", "潘小莲一掌拍来。", "你侧身避开。"];
+  assert.deepEqual(battleNarrationOutline(input), ["【交锋】", "【对手出招】", "【你应招】"]);
+
+  input.facts = ["你受制于招式，本回合无法出手。", "潘小莲受制于招式，无法还手。"];
+  assert.deepEqual(battleNarrationOutline(input), ["【交锋】", "【对手应招】"]);
+});
+
+test("battle continuation preserves one output paragraph for every original log line", () => {
+  const input = event();
+  input.facts = ["你一掌拍出。", "潘小莲受到伤害。", "潘小莲退开。"];
+  assert.equal(parseBattleNarrativeSections(buildBattleNarrationFallback(input)).length, input.facts.length);
+  assert.deepEqual(battleNarrationOutline(input), ["【你出招】", "【对手应招】", "【对手应招】"]);
+  assert.match(buildBattleNarrationPrompt(input), /原始战报共有3条.*依次续写为3段/);
 });
 
 test("battle effect classification follows actual weapon, spell, special and item facts", () => {

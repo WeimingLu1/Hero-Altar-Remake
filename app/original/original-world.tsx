@@ -133,7 +133,6 @@ import { actorStatusProfile } from "../game-core/status-system";
 import { buildNpcSystemPrompt, npcLore } from "../game-core/npc-lore";
 import {
   battleEffectKind,
-  battleNarrationMatchesFacts,
   buildBattleNarrationFallback,
   buildBattleNarrationFacts,
   buildBattleNarrationPrompt,
@@ -1668,18 +1667,17 @@ export default function OriginalWorld({
         system: buildBattleNarrationPrompt(event),
         messages: history,
         nextSpeaker: "战斗叙事",
-        maxOutputTokens: 420,
+        maxOutputTokens: Math.min(800, Math.max(360, event.facts.length * 120)),
         temperature: 0.62,
         topP: 0.85,
         signal: controller.signal,
         onToken: (token) => updateEntry((item) => ({ ...item, text: item.text + token })),
       });
-      const grounded = battleNarrationMatchesFacts(answer, event);
       updateEntry((item) => ({
         ...item,
-        text: grounded ? answer : buildBattleNarrationFallback(event),
+        text: answer,
         loading: false,
-        error: grounded ? "" : "模型战报段落与引擎攻防顺序不一致，已使用确定性战报。",
+        error: "",
       }));
     } catch (error) {
       if (controller.signal.aborted) {

@@ -35,7 +35,7 @@ function memoryStorage(): StorageBackend {
 test("LM Studio defaults target the requested local model", () => {
   assert.equal(LM_STUDIO_ENDPOINT, "http://127.0.0.1:1234");
   assert.equal(LM_STUDIO_MODEL, "qwen3.6-35b-a3b-uncensored-hauhaucs-aggressive");
-  assert.equal(NPC_MAX_OUTPUT_TOKENS, 512);
+  assert.equal(NPC_MAX_OUTPUT_TOKENS, 800);
   assert.equal(NPC_TRANSCRIPT_CHAR_BUDGET, 12_000);
   assert.equal(NPC_TRANSCRIPT_MESSAGE_BUDGET, 10);
   assert.equal(LLM_REQUEST_TIMEOUT_MS, 15_000);
