@@ -617,13 +617,14 @@ export function SpecialPicker({
               <span>
                 {special.name}
                 <small>{special.description}</small>
-                <small className="special-effect">{special.effect}</small>
               </span>
               <em>
                 {special.enabled
                   ? `内力 ${special.fpCost}${special.mpCost ? ` · 法力 ${special.mpCost}` : ""}${special.hpCost ? ` · 气血 ${special.hpCost}` : ""}${special.needsAutoEquip ? " · 施展时自动换装" : ""}`
                   : special.reason}
               </em>
+              {/* 效果说明独占整行：未选中时单行截断，选中后完整展开。 */}
+              <small className="special-effect">{special.effect}</small>
             </button>
           ))}
         </div>
