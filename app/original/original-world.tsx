@@ -133,6 +133,7 @@ import { actorStatusProfile } from "../game-core/status-system";
 import { buildNpcSystemPrompt, npcLore } from "../game-core/npc-lore";
 import {
   battleEffectKind,
+  battleNarrationOutline,
   buildBattleNarrationFallback,
   buildBattleNarrationFacts,
   buildBattleNarrationPrompt,
@@ -1638,6 +1639,7 @@ export default function OriginalWorld({
     const entry: BattleNarrative = {
       turn: event.battle.turn,
       facts: event.facts,
+      outline: battleNarrationOutline(event),
       text: "",
       effect: battleEffectKind(event),
       loading: true,
@@ -1667,7 +1669,7 @@ export default function OriginalWorld({
         system: buildBattleNarrationPrompt(event),
         messages: history,
         nextSpeaker: "战斗叙事",
-        maxOutputTokens: Math.min(800, Math.max(360, event.facts.length * 120)),
+        maxOutputTokens: Math.min(800, Math.max(420, event.facts.length * 170)),
         temperature: 0.62,
         topP: 0.85,
         signal: controller.signal,

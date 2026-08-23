@@ -427,7 +427,7 @@ test("任务交谈预先锁定同一委托背景，战斗舞台按招式区分�
   assert.match(worldSource, /异状、你的顾虑/);
   assert.match(worldSource, /相关人物关系、旧因/);
   assert.match(worldSource, /迫切风险与为何需要玩家相助/);
-  assert.match(uiSource, /parseBattleNarrativeSections/);
+  assert.match(uiSource, /battleNarrativeDisplaySections/);
   for (const effect of ["fist", "sword", "blade", "staff", "whip", "spell", "special", "item"])
     assert.match(battleCss, new RegExp(`effect-${effect}`));
   assert.match(battleCss, /narrative-player/);

@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import {
   battleEffectKind,
+  battleNarrativeDisplaySections,
   battleNarrationOutline,
   buildBattleNarrationFallback,
   buildBattleNarrationFacts,
@@ -50,7 +51,8 @@ test("battle narration prompt grounds wuxia prose in both fighters and exact res
   assert.match(prompt, /【对手出招】/);
   assert.match(prompt, /【你应招】/);
   assert.match(prompt, /一条原文只改写成一段/);
-  assert.match(prompt, /每段通常35至80个汉字/);
+  assert.match(prompt, /每段通常70至130个汉字/);
+  assert.match(prompt, /经典金庸式武侠叙事/);
   assert.match(prompt, /命中、闪避、招架、伤害、当前气血、胜负/);
   assert.match(prompt, /起手、发力、行进路线或变招/);
   assert.match(prompt, /非必要不加入对话/);
@@ -94,6 +96,26 @@ test("battle continuation preserves one output paragraph for every original log 
   assert.equal(parseBattleNarrativeSections(buildBattleNarrationFallback(input)).length, input.facts.length);
   assert.deepEqual(battleNarrationOutline(input), ["【你出招】", "【对手应招】", "【对手应招】"]);
   assert.match(buildBattleNarrationPrompt(input), /原始战报共有3条.*依次续写为3段/);
+});
+
+test("battle display colors prose from engine ownership even when the model omits labels", () => {
+  const input = event(), outline = battleNarrationOutline(input);
+  assert.deepEqual(battleNarrativeDisplaySections(
+    "少侠沉肩递掌，掌势由虚转实，直取中宫。潘小莲横肘一封，脚下连退两步才卸去掌力。",
+    outline,
+    input.facts,
+  ), [
+    { label: "你出招", speaker: "player", text: "少侠沉肩递掌，掌势由虚转实，直取中宫。" },
+    { label: "对手应招", speaker: "enemy", text: "潘小莲横肘一封，脚下连退两步才卸去掌力。" },
+  ]);
+  assert.deepEqual(battleNarrativeDisplaySections(
+    "【交锋】模型写错了颜色标签。\n【交锋】但正文仍可显示。",
+    outline,
+    input.facts,
+  ).map(({ label, speaker }) => ({ label, speaker })), [
+    { label: "你出招", speaker: "player" },
+    { label: "对手应招", speaker: "enemy" },
+  ]);
 });
 
 test("battle effect classification follows actual weapon, spell, special and item facts", () => {
