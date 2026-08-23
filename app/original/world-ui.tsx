@@ -6,6 +6,7 @@ import type { OriginalBattle } from "../game-core/original-battle";
 import { originalTables } from "../game-core/original-data";
 import {
   bagEntries,
+  battleBagEntries,
   derivedStats,
   equipmentCategory,
   fullHp,
@@ -13,11 +14,7 @@ import {
   maxWater,
   type BagEntry,
 } from "../game-core/inventory-system";
-import {
-  battleCombatSkills,
-  battleSkillWeaponText,
-  learnedSkills,
-} from "../game-core/skill-system";
+import { learnedSkills } from "../game-core/skill-system";
 import { battleSpecials } from "../game-core/special-system";
 import {
   customSwordBonus,
@@ -619,7 +616,7 @@ export function SpecialPicker({
               </span>
               <em>
                 {special.enabled
-                  ? `内力 ${special.fpCost}${special.mpCost ? ` · 法力 ${special.mpCost}` : ""}`
+                  ? `内力 ${special.fpCost}${special.mpCost ? ` · 法力 ${special.mpCost}` : ""}${special.needsAutoEquip ? " · 施展时自动换装" : ""}`
                   : special.reason}
               </em>
             </button>
@@ -632,53 +629,152 @@ export function SpecialPicker({
     </div>
   );
 }
-export function BattleSkillPicker({
+export function BattleBagPicker({
   actor,
   index,
-  choose,
-  chooseParry,
+  onHover,
+  activate,
 }: {
   actor: SceneActorState;
   index: number;
-  choose: (id?: number) => void;
-  chooseParry: (id?: number) => void;
+  onHover: (index: number) => void;
+  activate: (entry?: BagEntry) => void;
 }) {
   const dialogRef = useDialogFocus<HTMLDivElement>(),
     listRef = useRef<HTMLDivElement>(null);
-  const list = battleCombatSkills(actor);
+  const entries = battleBagEntries(actor);
   useEffect(() => {
     listRef.current
       ?.querySelector<HTMLElement>('[data-active="true"]')
       ?.scrollIntoView({ block: "nearest" });
   }, [index]);
   return (
-    <div ref={dialogRef} tabIndex={-1} className="special-picker battle-skill-picker" role="dialog" aria-modal="true" aria-label="选择战斗武学">
+    <div ref={dialogRef} tabIndex={-1} className="special-picker battle-bag-picker" role="dialog" aria-modal="true" aria-label="战斗行囊">
       <header className="special-picker-title">
-        <b>临阵调整武学</b>
-        <small>{list.length} 门可用武学</small>
+        <b>战斗行囊</b>
+        <small>临阵使用或换装不消耗回合 · 战斗中不可丢弃物品</small>
       </header>
-      {list.length ? (
-        <div className="special-picker-list battle-skill-list" ref={listRef} role="listbox" aria-label="可用战斗武学">
-          {list.map((skill, i) => (
-            <div
-              className={index === i ? "battle-skill-row active" : "battle-skill-row"}
-              data-active={index === i}
-              role="option"
-              aria-selected={index === i}
-              key={skill.id}
-            >
-              <button onClick={() => choose(skill.id)}>
-                <span>{skill.name}<small>{skill.category} · {skill.level} 级 · {battleSkillWeaponText(actor, skill.id)}</small></span>
-                <em>{skill.equipped ? "当前攻击" : "设为攻击"}</em>
-              </button>
-              <button className={skill.parrying ? "parry active" : "parry"} onClick={() => chooseParry(skill.id)}>
-                {skill.parrying ? "当前招架" : "设为招架"}
-              </button>
+      {entries.length ? (
+        <section className="bag-list battle-bag-list" ref={listRef} aria-label="战斗可用物品与装备">
+          {entries.map((entry, i) => (
+            <div className="inventory-fragment" key={entry.key}>
+              {(i === 0 || entries[i - 1].category !== entry.category) && (
+                <header className="equipment-category">
+                  <span>{entry.category}</span>
+                  <small>
+                    {entry.kind === 3 ? "同槽择一 · " : ""}
+                    {entries.filter((item) => item.category === entry.category).length} 件
+                  </small>
+                </header>
+              )}
+              <div
+                className={`bag-row${index === i ? " active" : ""}${entry.equipped ? " equipped" : ""}`}
+                data-active={index === i}
+                onMouseEnter={() => onHover(i)}
+              >
+                <button className="bag-main" onClick={() => activate(entry)}>
+                  <i className={`item-pixel kind-${entry.kind}`} />
+                  <span>
+                    <small className="item-slot">{entry.slot}</small>
+                    <b>
+                      {entry.name}
+                      {entry.equipped ? "〔装备中〕" : ""}
+                    </b>
+                    <small className="item-desc">{entry.description}</small>
+                    <em className="item-bonuses">{entry.bonuses}</em>
+                  </span>
+                  <em>×{entry.amount}</em>
+                </button>
+              </div>
             </div>
           ))}
-        </div>
-      ) : <p className="special-picker-empty">尚未学会可用于攻防的拳脚或兵刃武学。</p>}
-      <footer>W/S 选择 · E/Enter 设为攻击 · R 设为招架 · M/X 返回</footer>
+        </section>
+      ) : (
+        <p className="special-picker-empty">行囊中没有可在战斗中使用的物品或装备。</p>
+      )}
+      <footer>W/S 选择 · E/Enter 使用或装备 · X/Esc/I 返回</footer>
+    </div>
+  );
+}
+export function BattleSkillPicker({
+  actor,
+  index,
+  onHover,
+  activate,
+}: {
+  actor: SceneActorState;
+  index: number;
+  onHover: (index: number) => void;
+  activate: (id?: number, parry?: boolean) => void;
+}) {
+  const dialogRef = useDialogFocus<HTMLDivElement>(),
+    listRef = useRef<HTMLDivElement>(null);
+  // 与主菜单「功夫」页同一份完整清单：全部已学功夫按门类排列，
+  // 运用规则也与主菜单一致(点击在所属槽位上运用/卸下)。
+  const skills = learnedSkills(actor).sort(
+    (a, b) => a.type - b.type || a.id - b.id,
+  );
+  useEffect(() => {
+    listRef.current
+      ?.querySelector<HTMLElement>('[data-active="true"]')
+      ?.scrollIntoView({ block: "nearest" });
+  }, [index]);
+  return (
+    <div ref={dialogRef} tabIndex={-1} className="special-picker battle-kungfu-picker" role="dialog" aria-modal="true" aria-label="临阵调整武学">
+      <header className="special-picker-title">
+        <b>临阵调整武学</b>
+        <small>{skills.length} 门已学功夫 · 临阵调整不消耗回合</small>
+      </header>
+      {skills.length ? (
+        <section className="kungfu-list battle-kungfu-list" ref={listRef} aria-label="已学功夫">
+          {skills.map((skill, i) => (
+            <div className="kungfu-fragment" key={skill.id}>
+              {(i === 0 || skills[i - 1].category !== skill.category) && (
+                <header className="kungfu-category">
+                  <span>{skill.category}</span>
+                  <small>
+                    {skills.filter((item) => item.category === skill.category).length} 门
+                  </small>
+                </header>
+              )}
+              <div
+                className={`battle-kungfu-row${index === i ? " active" : ""}`}
+                data-active={index === i}
+                onMouseEnter={() => onHover(i)}
+              >
+                <button
+                  className={`${skill.equipped ? "equipped" : ""}${skill.parrying ? " parrying" : ""}`}
+                  onClick={() => activate(skill.id)}
+                >
+                  <b>
+                    <small>{skill.category}</small>
+                    <span>{skill.name}</span>
+                  </b>
+                  <span>{skill.level} 级</span>
+                  <em>
+                    {levelTitle(skill.level)} · 第 {levelTier(skill.level)}/50 阶 ·{" "}
+                    {skill.points} 点 · {skill.school}
+                  </em>
+                  <i className="skill-tags">
+                    {skill.equipped && <span className="tag-equipped">当前运用</span>}
+                    {skill.parrying && <span className="tag-parrying">用于招架</span>}
+                    {!skill.equipped && !skill.parrying && <span>已习得</span>}
+                  </i>
+                </button>
+                <button
+                  className="battle-parry-toggle"
+                  onClick={() => activate(skill.id, true)}
+                >
+                  {skill.parrying ? "取消招架" : "设为招架"}
+                </button>
+              </div>
+            </div>
+          ))}
+        </section>
+      ) : (
+        <p className="special-picker-empty">尚未学会任何功夫，可向江湖人物拜师请教。</p>
+      )}
+      <footer>W/S 选择 · E/Enter 运用或卸下 · R 招架 · M/X 返回</footer>
     </div>
   );
 }

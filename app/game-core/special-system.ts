@@ -17,6 +17,8 @@ export type BattleSpecial = {
   hpCost: number;
   enabled: boolean;
   reason: string;
+  /** 直接可施展=false 且换装后可施展=true：菜单据此标注“施展时自动换装”。 */
+  needsAutoEquip: boolean;
   type: number;
   useText: string;
 };
@@ -167,6 +169,42 @@ export function specialCheck(
   if (actor.hp < hp) return { ok: false, reason: "气血不足" };
   return { ok: true, reason: "可施展" };
 }
+// 临阵自动换装：绝招要求的功夫只要玩家已经学会，就直接切换到对应槽位，
+// 省去"退出战斗→装备→再施展"的来回操作；未学会或兵器类别不匹配等仍由
+// specialCheck 给出原因。返回是否有槽位被改变。
+export function autoEquipSpecialRequirements(actor: SceneActorState, id: number) {
+  // 流星飞掷在 specialCheck 中跳过武学行，这里同样不动装备。
+  if (id === 8) return false;
+  let switched = false;
+  for (const [type] of (skillRecord(id).require as number[][]) || []) {
+    if (type <= 0) continue;
+    if ((actor.skills[String(type)]?.level || 0) <= 0) continue;
+    const slot = type === 10 ? 4 : naturalSlot(type);
+    if (slot === null || actor.skillUse[slot] === type) continue;
+    const previous = actor.skillUse[slot];
+    actor.skillUse[slot] = type;
+    // 与 equipSkill 同一约定：原占用者正用于招架时一并解除。
+    if (previous && actor.skillUse[4] === previous)
+      actor.skillUse[4] = 0;
+    switched = true;
+  }
+  return switched;
+}
+
+// 菜单可用性口径：先按"会就自动换装"评估——只有换装后仍不满足的条件
+// (内力不足、冷却、兵器不符、根本没学过)才判为不可施展。
+export function specialEnabledWithAutoEquip(
+  actor: SceneActorState,
+  id: number,
+  cooldowns: Record<string, number> = {},
+) {
+  const direct = specialCheck(actor, id, cooldowns);
+  if (direct.ok) return direct;
+  const draft = structuredClone(actor);
+  autoEquipSpecialRequirements(draft, id);
+  return specialCheck(draft, id, cooldowns);
+}
+
 export function battleSpecials(
   actor: SceneActorState,
   cooldowns: Record<string, number> = {},
@@ -178,7 +216,8 @@ export function battleSpecials(
   );
   return ids.map((id) => {
     const s = skillRecord(id),
-      check = specialCheck(actor, id, cooldowns),
+      direct = specialCheck(actor, id, cooldowns),
+      check = specialEnabledWithAutoEquip(actor, id, cooldowns),
       completedSnowflake = id === 23 && actor.xue6;
     return {
       id,
@@ -191,6 +230,7 @@ export function battleSpecials(
       hpCost: Number(s.hp_cost || 0),
       enabled: check.ok,
       reason: check.reason,
+      needsAutoEquip: !direct.ok && check.ok,
       type: Number(s.type || 0),
       useText: completedSnowflake
         ? "你长啸一声，使出雪山神技雪花六出，剑势依照雪花六角之形层叠展开，一气连出二十二剑！"

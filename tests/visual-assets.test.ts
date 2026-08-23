@@ -442,19 +442,28 @@ test("任务交谈预先锁定同一委托背景，战斗舞台按招式演出�
 test("战斗界面提供完整行囊与临阵武学切换入口", () => {
   assert.match(uiSource, /行囊 <kbd>I<\/kbd>/);
   assert.match(uiSource, /武学 <kbd>M<\/kbd>/);
+  assert.match(uiSource, /export function BattleBagPicker/);
   assert.match(uiSource, /export function BattleSkillPicker/);
-  assert.match(uiSource, /E\/Enter 设为攻击 · R 设为招架/);
+  // 战斗行囊复用主菜单 bag-list 的完整条目设计(分类、像素图标、描述、加成)。
+  assert.match(uiSource, /className="bag-list battle-bag-list"/);
+  assert.match(uiSource, /item-pixel kind-\$\{entry\.kind\}/);
+  // 战斗武学与主菜单「功夫」页同一份完整清单，运用规则一致。
+  assert.match(uiSource, /className="kungfu-list battle-kungfu-list"/);
+  assert.match(uiSource, /E\/Enter 运用或卸下 · R 招架 · M\/X 返回/);
   assert.match(worldSource, /battleBagEntries/);
-  assert.match(worldSource, /selectBattleCombatSkill/);
   assert.match(worldSource, /临阵换装不消耗回合/);
 });
 
 test("绝招与战斗武学面板锁定视口并只滚动内部列表", () => {
   assert.match(uiSource, /className="special-picker-list"/);
-  assert.match(uiSource, /className="special-picker-list battle-skill-list"/);
   assert.match(uiSource, /scrollIntoView\(\{ block: "nearest" \}\)/);
   assert.match(specialCss, /grid-template-rows:\s*auto minmax\(0, 1fr\) auto/);
   assert.match(specialCss, /\.special-picker-list\s*\{[\s\S]*overflow-y:\s*auto/);
+  // 新的行囊/功夫面板同样只滚动内部列表。
+  assert.match(
+    specialCss,
+    /\.battle-bag-list,\s*\n\.battle-kungfu-list\s*\{[\s\S]*overflow-y:\s*auto/,
+  );
   assert.match(specialCss, /\.special-picker\s*\{[\s\S]*overflow:\s*hidden/);
 });
 

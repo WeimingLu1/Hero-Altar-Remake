@@ -1,7 +1,9 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import {
+  autoEquipSpecialRequirements,
   battleSpecials,
+  specialCheck,
   specialFpCost,
   specialMpCost,
 } from "../app/game-core/special-system";
@@ -85,21 +87,37 @@ const dummyEnemy = {
   agi: 20,
   bon: 20,
 };
-test("绝招需配合已装备武功：只学会但未装备则禁用", () => {
+test("绝招需配合已装备武功：specialCheck 严格门槛要求先装备", () => {
   const a = actor();
   a.skills["13"] = { level: 120, points: 0 };
   assert.notEqual(a.skillUse[0], 13);
-  const unequipped = battleSpecials(a).find((special) => special.id === 2);
-  assert.equal(unequipped?.enabled, false);
-  assert.match(unequipped?.reason || "", /装备八阵八卦掌/);
+  const unequipped = specialCheck(a, 2);
+  assert.equal(unequipped.ok, false);
+  assert.match(unequipped.reason, /装备八阵八卦掌/);
   // 装备到拳脚槽后即可施展。
   a.skillUse[0] = 13;
-  const equipped = battleSpecials(a).find((special) => special.id === 2);
-  assert.equal(equipped?.enabled, true);
+  assert.equal(specialCheck(a, 2).ok, true);
   const list = battleSpecials(actor());
   assert.equal(list[0].id, 1);
   assert.equal(list[0].enabled, true);
   assert.equal(list[0].fpCost, 200);
+});
+
+test("绝招要求的功夫已学会时自动换装后即可施展", () => {
+  const a = actor();
+  a.skills["13"] = { level: 120, points: 0 };
+  a.skillUse[4] = 12; // 当前拳脚功夫正用于招架
+  const listed = battleSpecials(a).find((special) => special.id === 2);
+  assert.equal(listed?.enabled, true);
+  assert.equal(listed?.needsAutoEquip, true);
+
+  // 施展路径：自动切到八阵八卦掌，并按 equipSkill 约定解除原招架占用。
+  assert.equal(autoEquipSpecialRequirements(a, 2), true);
+  assert.equal(a.skillUse[0], 13);
+  assert.equal(a.skillUse[4], 0);
+  const after = battleSpecials(a).find((special) => special.id === 2);
+  assert.equal(after?.enabled, true);
+  assert.equal(after?.needsAutoEquip, false);
 });
 test("全部已学武学的四十项绝招都列出，条件不足只禁用不隐藏", () => {
   const a = actor();

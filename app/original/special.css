@@ -121,47 +121,49 @@
   text-align: center;
 }
 
-.battle-skill-list {
-  grid-template-columns: minmax(0, 1fr);
-  grid-auto-rows: auto;
-}
-
-.battle-skill-row {
-  display: grid;
-  grid-template-columns: minmax(0, 1fr) auto;
-  min-width: 0;
+/* 战斗行囊/武学面板复用主菜单的 bag-list 与 kungfu-list 完整设计，
+   这里只补充选择器壳内的滚动与光标行样式。 */
+.battle-bag-list,
+.battle-kungfu-list {
+  min-height: 0;
+  overflow-y: auto;
+  align-content: start;
+  padding: 6px 8px;
   border: 1px solid #ffffff12;
-  background: #ffffff06;
+  background: linear-gradient(180deg, #030604aa, #0007);
+  scrollbar-color: #7c6c43 #080d09;
 }
+.battle-bag-list::-webkit-scrollbar,
+.battle-kungfu-list::-webkit-scrollbar { width: 8px; }
+.battle-bag-list::-webkit-scrollbar-track,
+.battle-kungfu-list::-webkit-scrollbar-track { background: #101713; }
+.battle-bag-list::-webkit-scrollbar-thumb,
+.battle-kungfu-list::-webkit-scrollbar-thumb { background: #7c6c43; }
 
-.battle-skill-row.active {
-  border-color: #d1b35f;
-  background: linear-gradient(90deg, #76513299, #5a412a55);
-  box-shadow: inset 3px 0 #f2d477;
-}
-
-.battle-skill-row > button {
+.battle-kungfu-row {
   display: grid;
   grid-template-columns: minmax(0, 1fr) auto;
-  gap: 12px;
+  align-items: stretch;
+  gap: 4px;
+  width: 100%;
   min-width: 0;
-  padding: 10px 12px;
-  text-align: left;
-  border: 0;
+  border: 1px solid transparent;
   background: transparent;
-  color: #e8dcae;
+  color: inherit;
 }
-
-.battle-skill-row > button.parry {
-  display: block;
-  margin: 6px;
-  padding: 5px 10px;
-  border-left: 1px solid #ffffff1d;
+.battle-kungfu-row.active {
+  border-color: #b39b58;
+  background: #82663338;
+}
+.battle-parry-toggle {
+  padding: 0 10px;
+  border: 0;
+  border-left: 1px solid #ffffff14;
+  background: transparent;
   color: #bdad7b;
   white-space: nowrap;
 }
-
-.battle-skill-row > button.parry.active {
+.battle-parry-toggle:hover {
   color: #f7d978;
   background: #8b632c55;
 }

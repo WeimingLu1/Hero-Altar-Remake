@@ -191,11 +191,19 @@ test("战斗中可打开完整行囊并临阵切换攻防武学", async ({ page 
   await page.keyboard.press("x");
 
   await page.keyboard.press("m");
-  const skills = page.getByRole("dialog", { name: "选择战斗武学" });
+  // 战斗武学面板与主菜单「功夫」页同构：全部已学功夫按门类完整列出。
+  const skills = page.getByRole("dialog", { name: "临阵调整武学" });
   await expect(skills.getByRole("button", { name: /八卦游身掌/ })).toBeVisible();
   await expect(skills.getByRole("button", { name: /太极剑/ })).toBeVisible();
-  await page.keyboard.press("r");
-  await expect(page.getByText(/已设为招架武学/)).toBeVisible();
+  await expect(skills.getByRole("button", { name: /混元一气功/ })).toBeVisible();
+  // 行内主按钮 = 运用与主菜单同一套规则；右侧按钮 = 设为招架。
+  await skills.getByRole("button", { name: /八卦游身掌/ }).click();
+  await expect(page.getByText(/八卦游身掌已装备/)).toBeVisible();
+  await skills
+    .locator(".battle-kungfu-row", { hasText: "八卦游身掌" })
+    .getByRole("button", { name: /招架/ })
+    .click();
+  await expect(page.getByText(/八卦游身掌(已)?设为招架/)).toBeVisible();
   await page.keyboard.press("m");
 
   await page.keyboard.press("i");

@@ -54,12 +54,14 @@ import {
 } from "../game-core/inventory-system";
 import {
   effectiveLevel,
-  battleCombatSkills,
   equipSkill,
-  selectBattleCombatSkill,
+  learnedSkills,
   toggleParry,
 } from "../game-core/skill-system";
-import { battleSpecials } from "../game-core/special-system";
+import {
+  autoEquipSpecialRequirements,
+  battleSpecials,
+} from "../game-core/special-system";
 import { digestActor } from "../game-core/survival-system";
 import {
   acceptFreeWork,
@@ -182,6 +184,7 @@ import {
   allCheatSkills,
   Arcade,
   BattleView,
+  BattleBagPicker,
   BattleSkillPicker,
   Choice,
   GameMenu,
@@ -1784,13 +1787,25 @@ export default function OriginalWorld({
   const fightSpecial = useCallback(
     (id?: number) => {
       if (!battle || !id) return;
+      const next = structuredClone(stateRef.current);
+      // 绝招要求的功夫只要已学会，就临阵自动换装后直接施展；
+      // 换装后仍不满足(内力/冷却/兵器不符/没学过)则提示且不改存档。
+      autoEquipSpecialRequirements(next.actor, id);
+      const special = battleSpecials(next.actor, battle.cooldowns).find(
+        (item) => item.id === id,
+      );
+      if (!special?.enabled) {
+        setNotice(
+          special
+            ? `${special.name}暂无法施展：${special.reason}`
+            : "无法施展这项绝招。",
+        );
+        return;
+      }
       const playerHpBefore = stateRef.current.actor.hp,
         enemyHpBefore = battle.enemyHp,
         logLength = battle.log.length,
-        next = structuredClone(stateRef.current),
-        playerTechnique = battleSpecials(next.actor, battle.cooldowns).find(
-          (special) => special.id === id,
-        )?.name,
+        playerTechnique = special.name,
         round = specialRound(battle, next.actor, id);
       sync(next);
       setBattle(round);
@@ -2099,16 +2114,6 @@ export default function OriginalWorld({
           ? current
           : Math.min(current, Math.max(0, entries.length - 1)),
       );
-    },
-    [sync],
-  );
-  const selectBattleSkill = useCallback(
-    (id?: number, parry = false) => {
-      if (!id) return;
-      const next = structuredClone(stateRef.current),
-        result = selectBattleCombatSkill(next.actor, id, parry);
-      if (result.ok) sync(next);
-      setNotice(`${result.text}${result.ok ? " 临阵调整不消耗回合。" : ""}`);
     },
     [sync],
   );
@@ -2816,7 +2821,10 @@ export default function OriginalWorld({
             battle.cooldowns,
           );
           const combatItems = battleBagEntries(stateRef.current.actor);
-          const combatSkills = battleCombatSkills(stateRef.current.actor);
+          // 战斗武学面板与主菜单「功夫」页同一份完整清单。
+          const combatSkills = learnedSkills(stateRef.current.actor).sort(
+            (a, b) => a.type - b.type || a.id - b.id,
+          );
           if (battleOutcome !== null) {
             if (["arrowup", "arrowdown", "w", "s"].includes(k))
               setBattleOutcome((battleOutcome + 1) % 2);
@@ -2858,10 +2866,9 @@ export default function OriginalWorld({
               setBattleSkill(
                 (battleSkill + 1) % Math.max(1, combatSkills.length),
               );
-            else if (confirm)
-              selectBattleSkill(combatSkills[battleSkill]?.id, false);
+            else if (confirm) activateSkill(combatSkills[battleSkill]?.id);
             else if (k === "r")
-              selectBattleSkill(combatSkills[battleSkill]?.id, true);
+              activateSkill(combatSkills[battleSkill]?.id, true);
             else if (cancel || k === "m") setBattleSkill(null);
             return;
           }
@@ -3179,7 +3186,6 @@ export default function OriginalWorld({
     life,
     taskBook,
     specialMenu,
-    selectBattleSkill,
     fightSpecial,
     fleeBattle,
     rememberArcadeScore,
@@ -3433,7 +3439,6 @@ export default function OriginalWorld({
   };
   const map = getOriginalMap(state.position.mapId),
     profile = actorStatusProfile(state.actor);
-  const battleEntries = battleBagEntries(state.actor);
   const cultivationInfo = [
     cultivationAvailability(state.actor, "meditate"),
     cultivationAvailability(state.actor, "magic"),
@@ -3938,17 +3943,11 @@ export default function OriginalWorld({
           />
         )}{" "}
         {battle && battleItem !== null && (
-          <Choice
-            title="战斗行囊"
-            items={
-              battleEntries.length
-                ? battleEntries.map(
-                    (entry) => `${entry.name} ×${entry.amount}${entry.equipped ? " · 已装备" : ""}`,
-                  )
-                : ["行囊中没有可在战斗中使用的物品或装备"]
-            }
+          <BattleBagPicker
+            actor={state.actor}
             index={battleItem}
-            choose={(index) => openBattleBagEntry(battleEntries[index])}
+            onHover={setBattleItem}
+            activate={openBattleBagEntry}
           />
         )}{" "}
         {battle && specialMenu !== null && (
@@ -3963,8 +3962,8 @@ export default function OriginalWorld({
           <BattleSkillPicker
             actor={state.actor}
             index={battleSkill}
-            choose={(id) => selectBattleSkill(id, false)}
-            chooseParry={(id) => selectBattleSkill(id, true)}
+            onHover={setBattleSkill}
+            activate={activateSkill}
           />
         )}{" "}
         {menu && (
