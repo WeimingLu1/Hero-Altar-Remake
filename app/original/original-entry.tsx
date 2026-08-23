@@ -264,11 +264,11 @@ export default function OriginalEntry() {
               />
             </label>
             <label>
-              环境对话并发数（1–3）
+              环境对话并发数（1–6）
               <input
                 type="number"
                 min="1"
-                max="3"
+                max="6"
                 step="1"
                 value={llmSettings.concurrency}
                 onChange={(event) => setLlmSettings({ ...llmSettings, concurrency: Number(event.target.value) })}

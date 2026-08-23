@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useRef } from "react";
 import {
   AMBIENT_BUBBLE_MS,
+  ambientBubbleDwellMs,
   ambientCanHear,
   ambientNpcByEventId,
   ambientNpcByName,
@@ -146,6 +147,7 @@ export function useAmbientRuntime({
       npc.speechTargetEventId = 0;
       npc.conversationContext = [];
       npc.nextPair = undefined;
+      npc.queuedLine = undefined;
       npc.nextPairPending = false;
       npc.nextBehaviorAt = Date.now() + 700;
     }
@@ -236,13 +238,13 @@ export function useAmbientRuntime({
           for (const linked of world.npcs.filter((npc) => priorLinks.has(npc.eventId) && !ids.includes(npc.eventId))) {
             linked.partnerId = 0; linked.groupId = 0; linked.groupMembers = []; linked.groupTurn = -1; linked.groupNextAt = 0;
             linked.bubble = ""; linked.generationPending = false; linked.speechTargetName = ""; linked.speechTargetEventId = 0;
-            linked.conversationContext = []; linked.nextPair = undefined; linked.nextPairPending = false; linked.nextBehaviorAt = now + 700;
+            linked.conversationContext = []; linked.nextPair = undefined; linked.nextPairPending = false; linked.queuedLine = undefined; linked.nextBehaviorAt = now + 700;
           }
           for (const npc of nearby) {
             npc.partnerId = 0; npc.conversationTurn = 0; npc.conversationRound = 0;
             npc.groupId = groupId; npc.groupMembers = groupId ? ids : []; npc.groupTurn = groupId ? -1 : 0; npc.groupNextAt = 0;
             npc.bubble = ""; npc.generationPending = false; npc.conversationContext = [];
-            npc.nextPair = undefined; npc.nextPairPending = false; npc.nextBehaviorAt = now + 30000;
+            npc.nextPair = undefined; npc.nextPairPending = false; npc.queuedLine = undefined; npc.queuedLine = undefined; npc.nextBehaviorAt = now + 30000;
           }
           if (!playerStarts) {
             candidate.speechTargetName = current.actor.name || "少侠";
@@ -372,7 +374,7 @@ export function useAmbientRuntime({
       ambientControllers.current.delete(controller);
       ambientLlmActive.current = Math.max(0, ambientLlmActive.current - 1);
     }
-  }, [stateRef]);
+  }, [noteAmbientFailure, stateRef]);
   const enrichAmbientNpc = useCallback(async (npc: AmbientNpc) => {
     if (ambientLlmActive.current >= ambientConcurrency.current) return;
     ambientLlmActive.current += 1;
@@ -472,14 +474,20 @@ export function useAmbientRuntime({
           npc.nextPairPending = partner.nextPairPending = false;
           npc.generationPending = false;
         } else {
-          // 并行显示：一轮两句同时写入甲、乙各自头顶气泡，各停留固定时长。
-          npc.bubble = `${npc.name} to ${partner.name}：“${lines[0]}”`;
-          partner.bubble = `${partner.name} to ${npc.name}：“${lines[1]}”`;
-          const shownAt = Date.now();
-          npc.bubbleShownAt = partner.bubbleShownAt = shownAt;
+          // 逐句显示：甲句先上屏并按长度滞留，乙句排队等甲句展示完，
+          // 由 tick 提升上屏——符合自然交谈的先后节奏，而不是两句话同时弹出。
+          const lineA = `${npc.name} to ${partner.name}：“${lines[0]}”`,
+            lineB = `${partner.name} to ${npc.name}：“${lines[1]}”`,
+            shownAt = Date.now(),
+            dwellA = ambientBubbleDwellMs(lineA),
+            dwellB = ambientBubbleDwellMs(lineB);
+          npc.bubble = lineA;
+          partner.bubble = "";
+          partner.queuedLine = { text: lineB, at: shownAt + dwellA };
+          npc.bubbleShownAt = shownAt;
           npc.generationPending = false;
-          npc.bubbleUntil = partner.bubbleUntil = shownAt + AMBIENT_BUBBLE_MS;
-          const nextContext = [...npc.conversationContext, npc.bubble, partner.bubble].filter(Boolean).slice(-8);
+          npc.bubbleUntil = partner.bubbleUntil = shownAt + dwellA + dwellB;
+          const nextContext = [...npc.conversationContext, lineA, lineB].filter(Boolean).slice(-8);
           npc.conversationContext = partner.conversationContext = nextContext;
           // 下一轮仍会被允许时立即预取，消除组间死寂。
           if (!pairConversationShouldEnd(map.id, npc.eventId, partner.eventId, npc.conversationRound)) {
@@ -556,21 +564,21 @@ export function useAmbientRuntime({
         if (partner) partner.nextPairPending = false;
       } else {
         npc.bubble = ""; npc.generationPending = false;
-        npc.nextPair = undefined; npc.nextPairPending = false;
+        npc.nextPair = undefined; npc.nextPairPending = false; npc.queuedLine = undefined;
         npc.bubbleUntil = Date.now(); npc.nextBehaviorAt = Date.now() + 1800;
         if (npc.groupId) {
           for (const member of ambientWorld.current.npcs.filter((item) => npc.groupMembers.includes(item.eventId))) {
             member.bubble = ""; member.generationPending = false;
-            member.nextPair = undefined; member.nextPairPending = false;
+            member.nextPair = undefined; member.nextPairPending = false; member.queuedLine = undefined;
             member.groupId = 0; member.groupMembers = []; member.groupTurn = -1; member.groupNextAt = 0;
             member.conversationContext = []; member.speechTargetName = ""; member.speechTargetEventId = 0; member.nextBehaviorAt = Date.now() + 1800;
           }
         }
         if (partner) {
           npc.partnerId = 0; npc.speechTargetName = ""; npc.speechTargetEventId = 0; npc.conversationTurn = 0; npc.conversationRound = 0; npc.conversationContext = [];
-          npc.nextPair = undefined; npc.nextPairPending = false;
+          npc.nextPair = undefined; npc.nextPairPending = false; npc.queuedLine = undefined; npc.queuedLine = undefined;
           partner.bubble = ""; partner.generationPending = false;
-          partner.nextPair = undefined; partner.nextPairPending = false;
+          partner.nextPair = undefined; partner.nextPairPending = false; partner.queuedLine = undefined;
           partner.partnerId = 0; partner.speechTargetName = ""; partner.speechTargetEventId = 0; partner.conversationTurn = 0; partner.conversationRound = 0; partner.conversationContext = [];
           partner.bubbleUntil = Date.now(); partner.nextBehaviorAt = Date.now() + 1800;
         }
@@ -579,7 +587,7 @@ export function useAmbientRuntime({
       ambientControllers.current.delete(controller);
       ambientLlmActive.current = Math.max(0, ambientLlmActive.current - 1);
     }
-  }, [stateRef]);
+  }, [noteAmbientFailure, stateRef]);
   useEffect(() => {
     if (!active) return;
     const id = window.setInterval(() => {

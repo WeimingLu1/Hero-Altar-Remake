@@ -1,11 +1,20 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { AMBIENT_BUBBLE_MS, AMBIENT_DEPART_MS, ambientCanHear, ambientNpcAt, ambientNpcByEventId, ambientNpcByName, ambientNpcsByName, ambientNpcInPlayerRange, ambientNpcInViewport, ambientViewportBounds, countActiveNpcConversations, createAmbientWorld, pairConversationShouldEnd, resetAmbientSessions, tickAmbientWorld } from "../app/game-core/ambient-npc";
+import { AMBIENT_DEPART_MS, ambientBubbleDwellMs, ambientCanHear, ambientNpcAt, ambientNpcByEventId, ambientNpcByName, ambientNpcsByName, ambientNpcInPlayerRange, ambientNpcInViewport, ambientViewportBounds, countActiveNpcConversations, createAmbientWorld, pairConversationShouldEnd, resetAmbientSessions, tickAmbientWorld } from "../app/game-core/ambient-npc";
 
 test("ambient NPCs exist only in the initialized current map", () => {
   const world = createAmbientWorld(2, 0, [{ eventId: 1, npcId: 3, name: "捕快", identity: "官差", x: 4, y: 4 }]);
   assert.equal(world.mapId, 2);
   assert.equal(ambientNpcAt(world, 4, 4)?.npcId, 3);
+});
+
+test("台词滞留时长按长度伸缩并封顶，保证逐句可读", () => {
+  assert.ok(ambientBubbleDwellMs("好。") >= 2800);
+  assert.ok(
+    ambientBubbleDwellMs("好。") <
+      ambientBubbleDwellMs("一句话有二十来个字的时候滞留就会更久一些方便读完。"),
+  );
+  assert.equal(ambientBubbleDwellMs("一".repeat(200)), 6000);
 });
 
 test("ambient runtime keeps stable event and name indexes", () => {
@@ -383,14 +392,22 @@ test("a buffered prefetched pair promotes seamlessly at round close", () => {
   tickAmbientWorld({ world, now: 200, playerX: 10, playerY: 10, indoor: false, canEnter: () => true });
   assert.equal(first.conversationRound, 5);
   assert.equal(first.bubble, "甲 to 乙：“第二问。”");
-  assert.equal(second.bubble, "乙 to 甲：“第二答。”");
+  // 逐句显示：甲句先上屏，乙句排队等甲句展示完再由 tick 提升。
+  assert.equal(second.bubble, "");
+  const dwellA = ambientBubbleDwellMs("甲 to 乙：“第二问。”"),
+    dwellB = ambientBubbleDwellMs("乙 to 甲：“第二答。”");
+  assert.deepEqual(second.queuedLine, { text: "乙 to 甲：“第二答。”", at: 200 + dwellA });
   assert.equal(first.nextPair, undefined);
   assert.equal(first.generationPending, true);
   assert.equal(first.nextPairPending, true);
   assert.equal(first.bubbleUntil, second.bubbleUntil);
-  assert.equal(first.bubbleUntil, 200 + AMBIENT_BUBBLE_MS);
+  assert.equal(second.bubbleUntil, 200 + dwellA + dwellB);
   assert.deepEqual(first.conversationContext, ["甲 to 乙：“第二问。”", "乙 to 甲：“第二答。”"]);
   assert.equal(second.speechTargetName, "甲");
+  // 甲句展示完毕：乙句提升上屏。
+  tickAmbientWorld({ world, now: 201 + dwellA, playerX: 10, playerY: 10, indoor: false, canEnter: () => true });
+  assert.equal(second.bubble, "乙 to 甲：“第二答。”");
+  assert.equal(second.queuedLine, undefined);
 });
 
 test("a pending prefetch makes the pair wait instead of double-requesting", () => {
@@ -413,7 +430,9 @@ test("a pending prefetch makes the pair wait instead of double-requesting", () =
   tickAmbientWorld({ world, now: 201, playerX: 10, playerY: 10, indoor: false, canEnter: () => true });
   assert.equal(first.conversationRound, 5);
   assert.equal(first.bubble, "甲 to 乙：“续。”");
-  assert.equal(second.bubble, "乙 to 甲：“续。”");
+  // 逐句显示：乙句排队，甲句滞留结束后提升。
+  assert.equal(second.bubble, "");
+  assert.equal(second.queuedLine?.text, "乙 to 甲：“续。”");
 });
 
 test("a stalled prefetch times out and falls back to on-demand", () => {

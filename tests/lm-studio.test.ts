@@ -97,7 +97,7 @@ test("LLM settings validate endpoint and clamp runtime limits", () => {
     endpoint: "https://models.example.test/custom",
     model: "qwen-custom",
     timeoutMs: 60_000,
-    concurrency: 3,
+    concurrency: 6,
   });
   assert.equal(normalizeLlmSettings({ endpoint: "javascript:alert(1)" }).endpoint, LM_STUDIO_ENDPOINT);
   assert.equal(normalizeLlmSettings({ concurrency: 0 }).concurrency, 1);

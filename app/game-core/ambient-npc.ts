@@ -36,6 +36,8 @@ export type AmbientNpc = {
   nextPair?: { a: string; b: string };
   /** 预取请求是否在途（区别于 generationPending 的"当前轮"）。 */
   nextPairPending?: boolean;
+  /** 排队中的接续台词：上一句展示到 at 后由 tick 提升上屏，形成一问一答的先后节奏。 */
+  queuedLine?: { text: string; at: number };
   /** 对话自然结束后先走开的时间点；期间只朝远离最后搭档的方向走，不组对/不独白/不动作。 */
   departUntil: number;
   /** 走开时远离的参照点（最后搭档的位置）。 */
@@ -147,7 +149,7 @@ export function resetAmbientSessions(world: AmbientWorld, resumeAt: number) {
     npc.partnerId = 0; npc.groupId = 0; npc.groupMembers = []; npc.groupTurn = -1; npc.groupNextAt = 0;
     npc.conversationTurn = 0; npc.conversationRound = 0; npc.lastPartnerId = 0;
     npc.bubble = ""; npc.generationPending = false; npc.llmRequested = true;
-    npc.speechTargetName = ""; npc.speechTargetEventId = 0; npc.conversationContext = []; npc.nextPair = undefined; npc.nextPairPending = false; npc.departUntil = 0; npc.departFrom = undefined; npc.nextBehaviorAt = resumeAt;
+    npc.speechTargetName = ""; npc.speechTargetEventId = 0; npc.conversationContext = []; npc.nextPair = undefined; npc.nextPairPending = false; npc.queuedLine = undefined; npc.departUntil = 0; npc.departFrom = undefined; npc.nextBehaviorAt = resumeAt;
   }
 }
 
@@ -159,6 +161,14 @@ export const MAX_NPC_CONVERSATIONS = 2;
 export const MAX_NPC_CONVERSATIONS_WITH_PLAYER = 1;
 /** 头顶气泡固定停留时长（毫秒）；新台词到达即替换。 */
 export const AMBIENT_BUBBLE_MS = 8000;
+/**
+ * 单句台词的滞留时长：按长度伸缩保证可读——短句至少 2.8 秒，
+ * 长句封顶 6 秒；双人对话两句先后显示，各自按此停留。
+ */
+export function ambientBubbleDwellMs(text: string) {
+  const length = text.replace(/\s/g, "").length;
+  return Math.min(6000, Math.max(2800, 2200 + length * 42));
+}
 /** NPC 离开出生点的最大活动半径（格）。 */
 export const AMBIENT_HOME_RADIUS = 15;
 /** 对话自然结束后先走开的时间窗（毫秒），期间不组对。 */
@@ -232,6 +242,7 @@ export function createAmbientWorld(
       groupNextAt: 0,
       nextPair: undefined,
       nextPairPending: false,
+      queuedLine: undefined,
       departUntil: 0,
       departFrom: undefined,
     })),
@@ -298,7 +309,7 @@ export function tickAmbientWorld(options: {
     for (const item of world.npcs.filter((candidate) => memberIds.has(candidate.eventId))) {
       item.bubble = ""; item.generationPending = false; item.speechTargetName = ""; item.speechTargetEventId = 0; item.groupId = 0; item.groupMembers = [];
       item.groupTurn = -1; item.groupNextAt = 0; item.nextBehaviorAt = resumeAt; item.conversationContext = [];
-      item.nextPair = undefined; item.nextPairPending = false; item.departUntil = 0; item.departFrom = undefined; item.partnerCooldownUntil = now + 30000;
+      item.nextPair = undefined; item.nextPairPending = false; item.queuedLine = undefined; item.departUntil = 0; item.departFrom = undefined; item.partnerCooldownUntil = now + 30000;
     }
   };
   for (const npc of world.npcs.filter((item) => !isActive(item))) {
@@ -308,15 +319,23 @@ export function tickAmbientWorld(options: {
       if (partner) {
         partner.partnerId = 0; partner.conversationTurn = 0; partner.conversationRound = 0;
         partner.conversationContext = []; partner.bubble = ""; partner.generationPending = false; partner.speechTargetName = ""; partner.speechTargetEventId = 0;
-        partner.nextPair = undefined; partner.nextPairPending = false; partner.departUntil = 0; partner.departFrom = undefined; partner.nextBehaviorAt = now + 700;
+        partner.nextPair = undefined; partner.nextPairPending = false; partner.queuedLine = undefined; partner.departUntil = 0; partner.departFrom = undefined; partner.nextBehaviorAt = now + 700;
       }
     }
     npc.x = npc.homeX; npc.y = npc.homeY; npc.partnerId = 0; npc.conversationTurn = 0; npc.conversationRound = 0; npc.conversationContext = [];
     npc.bubble = ""; npc.generationPending = false; npc.speechTargetName = ""; npc.speechTargetEventId = 0; npc.waitingForPlayer = false;
-    npc.nextPair = undefined; npc.nextPairPending = false; npc.departUntil = 0; npc.departFrom = undefined; npc.nextBehaviorAt = now + 700;
+    npc.nextPair = undefined; npc.nextPairPending = false; npc.queuedLine = undefined; npc.departUntil = 0; npc.departFrom = undefined; npc.nextBehaviorAt = now + 700;
   }
   for (const npc of world.npcs) {
     if (!isActive(npc)) continue;
+    // 逐句显示：上一句展示完毕，把排队的接续台词提升上屏。
+    // bubbleUntil 覆盖整个回合窗口，轮转推进与预取调度不受影响。
+    if (npc.queuedLine && now >= npc.queuedLine.at) {
+      npc.bubble = npc.queuedLine.text;
+      npc.bubbleKind = "speech";
+      npc.bubbleShownAt = now;
+      npc.queuedLine = undefined;
+    }
     const playerDistance = Math.abs(npc.x - playerX) + Math.abs(npc.y - playerY);
     if (playerDistance <= 2) {
       npc.waitingForPlayer = true;
@@ -398,7 +417,7 @@ export function tickAmbientWorld(options: {
     // 统一守卫：partnerId 指向已不存在的人物时立即清理，避免任何 turn 卡死。
     if (npc.partnerId && !ambientNpcByEventId(world, npc.partnerId)) {
       npc.partnerId = 0; npc.speechTargetName = ""; npc.speechTargetEventId = 0; npc.conversationTurn = 0; npc.conversationRound = 0;
-      npc.conversationContext = []; npc.generationPending = false; npc.nextPair = undefined; npc.nextPairPending = false; npc.departUntil = 0; npc.departFrom = undefined; npc.nextBehaviorAt = now + 700;
+      npc.conversationContext = []; npc.generationPending = false; npc.nextPair = undefined; npc.nextPairPending = false; npc.queuedLine = undefined; npc.departUntil = 0; npc.departFrom = undefined; npc.nextBehaviorAt = now + 700;
       continue;
     }
     if (npc.partnerId && npc.conversationTurn === 0) {
@@ -423,7 +442,7 @@ export function tickAmbientWorld(options: {
           for (const member of members) {
             member.groupId = groupId; member.groupMembers = ids; member.groupTurn = -1; member.groupNextAt = 0;
             member.partnerId = 0; member.conversationTurn = 0; member.bubble = ""; member.speechTargetName = ""; member.speechTargetEventId = 0;
-            member.nextPair = undefined; member.nextPairPending = false; member.departUntil = 0; member.departFrom = undefined; member.nextBehaviorAt = now + 300;
+            member.nextPair = undefined; member.nextPairPending = false; member.queuedLine = undefined; member.departUntil = 0; member.departFrom = undefined; member.nextBehaviorAt = now + 300;
           }
           continue;
         }
@@ -452,27 +471,29 @@ export function tickAmbientWorld(options: {
         partner.nextPair = npc.nextPair = undefined;
         partner.nextPairPending = npc.nextPairPending = false;
         partner.generationPending = false;
-        npc.bubble = ""; npc.partnerId = 0; npc.speechTargetName = ""; npc.speechTargetEventId = 0; npc.conversationTurn = 0; npc.conversationRound = 0; npc.conversationContext = [];
+        npc.bubble = ""; npc.queuedLine = undefined; npc.partnerId = 0; npc.speechTargetName = ""; npc.speechTargetEventId = 0; npc.conversationTurn = 0; npc.conversationRound = 0; npc.conversationContext = [];
         npc.lastPartnerId = partner.eventId; npc.partnerCooldownUntil = now + 30000; npc.nextBehaviorAt = now + 300;
         npc.departUntil = now + AMBIENT_DEPART_MS; npc.departFrom = { x: partner.x, y: partner.y };
-        partner.bubble = ""; partner.partnerId = 0; partner.speechTargetName = ""; partner.speechTargetEventId = 0; partner.conversationTurn = 0; partner.conversationRound = 0; partner.conversationContext = [];
+        partner.bubble = ""; partner.queuedLine = undefined; partner.partnerId = 0; partner.speechTargetName = ""; partner.speechTargetEventId = 0; partner.conversationTurn = 0; partner.conversationRound = 0; partner.conversationContext = [];
         partner.lastPartnerId = npc.eventId; partner.partnerCooldownUntil = now + 30000; partner.nextBehaviorAt = now + 300;
         partner.departUntil = now + AMBIENT_DEPART_MS; partner.departFrom = { x: npc.x, y: npc.y };
         continue;
       }
       if (partner.nextPair) {
-        // PROMOTE：预取就绪，双方气泡同时写入、无缝进入下一轮。
+        // PROMOTE：预取就绪，进入下一轮。台词逐句显示：a 先上屏并按长度
+        // 滞留，b 排队等 a 展示完再由 tick 提升——符合自然交谈的先后节奏。
         const { a, b } = partner.nextPair;
+        const dwellA = ambientBubbleDwellMs(a),
+          dwellB = ambientBubbleDwellMs(b);
         partner.nextPair = npc.nextPair = undefined;
         partner.nextPairPending = npc.nextPairPending = false;
         partner.conversationRound = npc.conversationRound = round + 1;
         partner.conversationTurn = 1; npc.conversationTurn = 2;
-        partner.bubble = ""; npc.bubble = "";
         partner.speechTargetName = npc.name; partner.speechTargetEventId = npc.eventId;
         npc.speechTargetName = partner.name; npc.speechTargetEventId = partner.eventId;
         partner.bubble = a; partner.bubbleShownAt = now; partner.bubbleKind = "speech";
-        npc.bubble = b; npc.bubbleShownAt = now; npc.bubbleKind = "speech";
-        partner.bubbleUntil = npc.bubbleUntil = now + AMBIENT_BUBBLE_MS;
+        npc.bubble = ""; npc.queuedLine = { text: b, at: now + dwellA };
+        partner.bubbleUntil = npc.bubbleUntil = now + dwellA + dwellB;
         const nextContext = [...npc.conversationContext, a, b].filter(Boolean).slice(-8);
         partner.conversationContext = npc.conversationContext = nextContext;
         // 调度下一轮预取（下一轮仍会被允许时才发起）。
