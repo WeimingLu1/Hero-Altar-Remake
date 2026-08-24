@@ -126,7 +126,19 @@ test("全部已学武学的四十项绝招都列出，条件不足只禁用不�
     if (originalTables.kungfus[id]) a.skills[String(id)] = { level: 1, points: 0 };
   const list = battleSpecials(a);
   assert.equal(list.length, 40);
-  assert.deepEqual(list.map((special) => special.id), Array.from({ length: 40 }, (_, index) => index + 1));
+  // 四十项绝招一个不少，只是改按所属武学类目分组排序。
+  assert.deepEqual(
+    list.map((special) => special.id).sort((x, y) => x - y),
+    Array.from({ length: 40 }, (_, index) => index + 1),
+  );
+  // 类目按原作武学 type 升序连续分组，且每项都带出处武学与类目名。
+  for (let i = 1; i < list.length; i++)
+    assert.ok(list[i - 1].categoryType <= list[i].categoryType);
+  assert.ok(list.every((special) => special.category && special.owner));
+  assert.equal(list.find((special) => special.id === 23)?.category, "剑术");
+  assert.equal(list.find((special) => special.id === 23)?.owner, "雪山剑法");
+  assert.equal(list.find((special) => special.id === 35)?.category, "术法");
+  assert.equal(list.find((special) => special.id === 1)?.category, "拳脚武学");
   assert.ok(list.some((special) => !special.enabled && special.reason !== ""));
 });
 test("拳脚和兵刃绝招仍校验当前武器", () => {

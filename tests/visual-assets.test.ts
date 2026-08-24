@@ -474,6 +474,11 @@ test("绝招与战斗武学面板锁定视口并只滚动内部列表", () => {
     /\.battle-bag-list,\s*\n\.battle-kungfu-list\s*\{[\s\S]*overflow-y:\s*auto/,
   );
   assert.match(specialCss, /\.special-picker\s*\{[\s\S]*overflow:\s*hidden/);
+  // 绝招按所属武学类目分组，卡片内展示出处、效果与消耗。
+  assert.match(uiSource, /className="kungfu-category"/);
+  assert.match(uiSource, /所属 · \$\{special\.owner\}/);
+  assert.match(uiSource, /className="special-card-effect"/);
+  assert.match(specialCss, /\.special-picker-list\s*\{[\s\S]*grid-template-columns:\s*repeat\(2, minmax\(0, 1fr\)\)/);
 });
 
 test("奇遇选择保留完整委托对白并在任务簿展示完成日志", () => {

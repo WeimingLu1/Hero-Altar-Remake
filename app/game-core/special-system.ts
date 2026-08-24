@@ -4,6 +4,7 @@ import { derivedStats } from "./inventory-system";
 import {
   effectiveLevel,
   naturalSlot,
+  skillCategoryName,
   skillLevel,
   skillType,
   weaponBasicId,
@@ -24,6 +25,12 @@ export type BattleSpecial = {
   useText: string;
   /** 按当前人物换算的效果说明：威力、增益幅度、控制回合与冷却。 */
   effect: string;
+  /** 所属武学的类目（拳脚/剑术/刀法/杖法/鞭法/棍法/术法/内功…）。 */
+  category: string;
+  /** 所属武学名，如“雪山剑法”。 */
+  owner: string;
+  /** 类目排序键（原作武学 type），仅内部用于分组排序。 */
+  categoryType: number;
 };
 const skillRecord = (id: number) =>
   (originalTables.skills[id] || {}) as OriginalRecord;
@@ -217,11 +224,16 @@ export function battleSpecials(
   const ids = originalTables.skills.flatMap((skill, id) =>
     skill && id > 0 && learnedSpecialOwners(actor, id).length ? [id] : [],
   );
-  return ids.map((id) => {
+  const rows = ids.map((id) => {
     const s = skillRecord(id),
       direct = specialCheck(actor, id, cooldowns),
       check = specialEnabledWithAutoEquip(actor, id, cooldowns),
-      completedSnowflake = id === 23 && actor.xue6;
+      completedSnowflake = id === 23 && actor.xue6,
+      // 每个绝招只由一门武学传授(原作 kungfu.skill)，用它推导类目与出处。
+      ownerId = learnedSpecialOwners(actor, id).find(
+        (kungfuId) => skillType(kungfuId) >= 1 && skillType(kungfuId) <= 11,
+      ),
+      categoryType = ownerId ? skillType(ownerId) : 0;
     return {
       id,
       name: String(s.name || id),
@@ -239,8 +251,14 @@ export function battleSpecials(
         ? "你长啸一声，使出雪山神技雪花六出，剑势依照雪花六角之形层叠展开，一气连出二十二剑！"
         : String((s.use_text as string[])?.[0] || `${s.name}！`),
       effect: specialEffectSummary(actor, id),
+      category: skillCategoryName(categoryType),
+      owner: ownerId ? String(originalTables.kungfus[ownerId]?.name || ownerId) : "",
+      categoryType,
     };
   });
+  return rows.sort(
+    (a, b) => a.categoryType - b.categoryType || a.id - b.id,
+  );
 }
 // 绝招冷却回合数：从 original-battle 的结算公式中抽出供菜单说明共用，
 // 数值必须与 specialRound 保持一致。

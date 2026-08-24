@@ -35,23 +35,16 @@
   white-space: nowrap;
 }
 
-/* 主从布局：左侧单列绝招名列表，右侧详情面板完整展示选中项。 */
-.special-picker-body {
-  display: grid;
-  grid-template-columns: minmax(190px, 2fr) 3fr;
-  gap: 10px;
-  min-width: 0;
-  min-height: 0;
-}
-
+/* 与武学/行囊面板同构的方块卡片：按所属武学类目分组，两列网格。
+   出处、效果与消耗直接写在卡片内，点击卡片即施展该绝招。 */
 .special-picker-list {
-  display: flex;
-  flex-direction: column;
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
   align-content: start;
+  gap: 6px;
   min-width: 0;
   min-height: 0;
-  gap: 4px;
-  padding: 0 7px 8px 2px;
+  padding: 6px 8px;
   overflow-x: hidden;
   overflow-y: auto;
   overscroll-behavior: contain;
@@ -69,120 +62,70 @@
 }
 
 .special-picker-list > button {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 8px;
-  flex-shrink: 0;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 5px 12px;
+  width: 100%;
   min-width: 0;
-  padding: 8px 10px;
+  padding: 9px;
+  margin: 0;
   text-align: left;
-  border: 1px solid #ffffff14;
-  background: #ffffff06;
-  color: #e8dcae;
-  transition: border-color 120ms ease, background 120ms ease, transform 120ms ease;
+  border: 1px solid transparent;
+  border-bottom-color: #ffffff14;
+  background: transparent;
+  color: #e9dfbd;
+  transition: border-color 120ms ease, background 120ms ease;
 }
 
 .special-picker-list > button.active {
-  border-color: #e0bf65;
-  background: linear-gradient(90deg, #76513299, #5a412a66);
-  box-shadow: inset 3px 0 #f2d477, 0 0 0 1px #d1b35f18;
-  transform: translateX(1px);
+  border-color: #b39b58;
+  background: #82663338;
+  box-shadow: inset 3px 0 #f2d477;
 }
 
-.special-picker-list > button:disabled { opacity: .48; }
-.special-picker-list > button:disabled.active { opacity: .68; }
+.special-picker-list > button:disabled { opacity: .5; }
+.special-picker-list > button:disabled.active { opacity: .7; }
 
-.special-picker-list b {
-  overflow: hidden;
+.special-picker-list button > b {
+  display: grid;
+  gap: 3px;
   min-width: 0;
-  font-size: 12px;
-  font-weight: 600;
+}
+.special-picker-list button > b small {
+  overflow: hidden;
+  color: #8e7950;
+  font: 8px monospace;
+  letter-spacing: .12em;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
-
-.special-picker-list em {
-  flex-shrink: 0;
+.special-picker-list button > b span {
+  color: #e7d9b6;
+  font-size: 13px;
+}
+.special-picker-list button > em {
+  max-width: 170px;
   color: #bdad7b;
   font-size: 9px;
-  font-style: normal;
-  white-space: nowrap;
+  line-height: 1.4;
+  text-align: right;
 }
 
-/* 右侧详情面板：出处描述、逐条效果与消耗，各自独立成行不再挤压。 */
-.special-detail {
-  display: flex;
-  flex-direction: column;
-  gap: 10px;
-  min-width: 0;
-  min-height: 0;
-  padding: 13px 15px;
-  overflow-y: auto;
-  overscroll-behavior: contain;
-  border: 1px solid #ffffff12;
-  background: linear-gradient(180deg, #030604aa, #0007);
-  scrollbar-color: #7c6c43 #080d09;
-  scrollbar-width: thin;
-}
-.special-detail::-webkit-scrollbar { width: 8px; }
-.special-detail::-webkit-scrollbar-track { background: #101713; }
-.special-detail::-webkit-scrollbar-thumb { background: #7c6c43; }
-
-.special-detail > b {
-  display: flex;
-  align-items: center;
-  gap: 9px;
-  font-size: 15px;
-  letter-spacing: .06em;
-}
-.special-detail > b i {
-  flex-shrink: 0;
-  padding: 2px 6px;
-  color: #f2d477;
-  border: 1px solid #b9924355;
-  background: #8d69252e;
-  font-size: 9px;
+.special-card-desc,
+.special-card-effect {
+  grid-column: 1/-1;
   font-style: normal;
-  font-weight: 400;
-}
-.special-detail p {
-  color: #b3a88c;
-  font-size: 11px;
-  line-height: 1.65;
-}
-.special-detail ul {
-  display: flex;
-  flex-direction: column;
-  gap: 6px;
-  margin: 0;
-  padding: 10px 0 0;
-  border-top: 1px dashed #ffffff14;
-  list-style: none;
-}
-.special-detail li {
-  position: relative;
-  padding-left: 14px;
-  color: #a9c69e;
-  font-size: 11px;
+  font-size: 10px;
   line-height: 1.55;
 }
-.special-detail li::before {
-  content: "◆";
-  position: absolute;
-  left: 0;
-  top: 3px;
-  color: #7d9a6f;
-  font-size: 8px;
+.special-card-desc { color: #99917b; }
+.special-card-effect {
+  margin-top: 1px;
+  padding-top: 6px;
+  border-top: 1px dashed #ffffff14;
+  color: #96ad8d;
 }
-.special-detail footer {
-  margin-top: auto;
-  padding-top: 9px;
-  border-top: 1px dashed #ffffff1a;
-  color: #bdad7b;
-  font-size: 10px;
-  line-height: 1.5;
-}
+.special-picker-list > button.active .special-card-effect { color: #a9c69e; }
 
 .special-picker-empty {
   align-self: center;
@@ -251,8 +194,7 @@
     padding: 12px;
   }
 
-  .special-picker-body { grid-template-columns: minmax(0, 1fr); }
-  .special-detail { max-height: 42vh; }
+  .special-picker-list { grid-template-columns: minmax(0, 1fr); }
 }
 
 @media (max-height: 620px) {
@@ -263,5 +205,5 @@
   }
 
   .special-picker-title { padding-block: 4px 8px; }
-  .special-picker-list > button { padding-block: 6px; }
+  .special-picker-list > button { padding-block: 7px; }
 }
