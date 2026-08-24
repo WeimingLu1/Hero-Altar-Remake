@@ -666,6 +666,95 @@ function castEnemySpell(
     );
 }
 
+function enemyInnerForce(record: OriginalRecord) {
+  const innerId = Number(
+      ((record.skill_use as number[] | undefined) || [])[3] || 0,
+    ),
+    level = Number(
+      ((record.skill_list as number[][] | undefined) || []).find(
+        ([id]) => Number(id) === innerId,
+      )?.[1] || 0,
+    );
+  return { innerId, level };
+}
+
+function recoverEnemyWounds(
+  battle: OriginalBattle,
+  record: OriginalRecord,
+  random: RandomInt,
+  innerId: number,
+  innerLevel: number,
+) {
+  const healthy = Math.max(
+      battle.enemyMaxHp,
+      n(record, "full_hp", n(record, "maxhp", battle.enemyMaxHp)),
+    ),
+    lost = healthy - battle.enemyMaxHp;
+  if (
+    innerId <= 12 ||
+    innerLevel < 45 ||
+    n(record, "maxfp") < 150 ||
+    battle.enemyFp < 100 ||
+    lost <= 0 ||
+    battle.enemyMaxHp < Math.floor(healthy / 3)
+  )
+    return false;
+  const woundPercent = Math.floor((lost * 100) / Math.max(1, healthy));
+  if (random(100) >= woundPercent) return false;
+  const before = battle.enemyMaxHp;
+  battle.enemyMaxHp = Math.min(
+    healthy,
+    battle.enemyMaxHp + 10 + Math.floor(innerLevel / 5),
+  );
+  battle.enemyFp -= 50;
+  battle.log.push(
+    `${battle.enemyName}运转内功疗伤，伤势上限恢复 ${battle.enemyMaxHp - before} 点，消耗 50 点内力。`,
+  );
+  return true;
+}
+
+function recoverEnemyHp(
+  battle: OriginalBattle,
+  random: RandomInt,
+  innerId: number,
+  innerLevel: number,
+) {
+  const missing = battle.enemyMaxHp - battle.enemyHp;
+  if (innerId <= 12 || battle.enemyFp < 20 || missing <= 0) return false;
+  const missingPercent = Math.floor(
+    (missing * 100) / Math.max(1, battle.enemyMaxHp),
+  );
+  // 原作加强 NPC 按缺失气血百分比决定是否吸气
+  // (097 - Scene_Battle 2.rb make_enemy_action)，恢复公式与玩家吸气一致。
+  if (random(100) >= missingPercent) return false;
+  const factor = 10 + Math.floor(innerLevel / 15),
+    beforeHp = battle.enemyHp,
+    beforeFp = battle.enemyFp;
+  let cost = Math.floor((missing * 20) / Math.max(1, factor)) + 1;
+  if (cost > battle.enemyFp) {
+    cost = battle.enemyFp;
+    battle.enemyHp = Math.min(
+      battle.enemyMaxHp,
+      battle.enemyHp + Math.floor((cost * factor) / 20),
+    );
+  } else battle.enemyHp = battle.enemyMaxHp;
+  battle.enemyFp -= cost;
+  battle.log.push(
+    `${battle.enemyName}提气归元，恢复 ${battle.enemyHp - beforeHp} 点气血，消耗 ${beforeFp - battle.enemyFp} 点内力。`,
+  );
+  return true;
+}
+
+function applyEnemyRecovery(
+  battle: OriginalBattle,
+  record: OriginalRecord,
+  random: RandomInt,
+) {
+  const { innerId, level } = enemyInnerForce(record);
+  recoverEnemyWounds(battle, record, random, innerId, level);
+  recoverEnemyHp(battle, random, innerId, level);
+}
+
 function enemyTurn(
   battle: OriginalBattle,
   actor: SceneActorState,
@@ -673,6 +762,9 @@ function enemyTurn(
   random: RandomInt,
   blank: Move,
 ) {
+  // 与玩家战斗调息及原作加强 NPC 一致，运功恢复不占用攻击回合；
+  // 即使本回合受制，仍可先以内力护住伤势，但随后不能出招。
+  applyEnemyRecovery(battle, record, random);
   if (battle.enemyDebuff.busy > 0) {
     battle.log.push(`${battle.enemyName}受制于招式，无法还手。`);
     return;

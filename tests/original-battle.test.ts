@@ -103,6 +103,90 @@ test("high-level NPCs regularly spend force to perform their own offensive speci
   }
   assert.ok(specialTurns >= 25 && specialTurns <= 55, String(specialTurns));
 });
+test("NPC 会按原作缺血概率以内力吸气并继续本回合行动", () => {
+  const a = actor(),
+    innerNpc = {
+      ...originalTables.enemies[1],
+      name: "运功高手",
+      hp: 1000,
+      maxhp: 1000,
+      full_hp: 1000,
+      fp: 5000,
+      maxfp: 5000,
+      fp_plus: 0,
+      skill_use: [2, 0, 9, 16, 10, 0],
+      skill_list: [
+        [2, 100],
+        [9, 100],
+        [10, 100],
+        [16, 150],
+      ],
+    },
+    battle = beginOriginalBattle(1, 1, innerNpc);
+  a.hp = a.maxHp = 100000;
+  battle.enemyHp = 400;
+  const result = battleItemRound(battle, a, "你按兵不动。 ");
+  assert.equal(result.enemyHp, result.enemyMaxHp);
+  assert.ok(result.enemyFp < 5000);
+  assert.ok(result.log.some((line) => /提气归元.*恢复 600 点气血/.test(line)));
+  assert.ok(result.log.some((line) => /受到|避开|架开|未伤到/.test(line)));
+});
+test("NPC 内功达标时会消耗内力恢复伤势上限", () => {
+  const a = actor(),
+    innerNpc = {
+      ...originalTables.enemies[1],
+      name: "疗伤高手",
+      hp: 1000,
+      maxhp: 1000,
+      full_hp: 1000,
+      fp: 5000,
+      maxfp: 5000,
+      fp_plus: 0,
+      skill_use: [2, 0, 9, 16, 10, 0],
+      skill_list: [
+        [2, 100],
+        [9, 100],
+        [10, 100],
+        [16, 150],
+      ],
+    },
+    battle = beginOriginalBattle(1, 1, innerNpc);
+  a.hp = a.maxHp = 100000;
+  battle.enemyHp = battle.enemyMaxHp = 700;
+  const result = battleItemRound(battle, a, "你按兵不动。 ");
+  assert.equal(result.enemyMaxHp, 740);
+  assert.ok(result.enemyFp <= 4950);
+  assert.ok(
+    result.log.some((line) =>
+      /运转内功疗伤.*伤势上限恢复 40 点.*消耗 50 点内力/.test(line),
+    ),
+  );
+});
+test("没有装备专门内功的 NPC 即使内力充足也不能运功恢复", () => {
+  const a = actor(),
+    noInnerNpc = {
+      ...originalTables.enemies[1],
+      name: "无内功者",
+      hp: 1000,
+      maxhp: 1000,
+      full_hp: 1000,
+      fp: 5000,
+      maxfp: 5000,
+      fp_plus: 0,
+      skill_use: [2, 0, 9, 0, 10, 0],
+      skill_list: [
+        [2, 100],
+        [9, 100],
+        [10, 100],
+      ],
+    },
+    battle = beginOriginalBattle(1, 1, noInnerNpc);
+  a.hp = a.maxHp = 100000;
+  battle.enemyHp = 400;
+  const result = battleItemRound(battle, a, "你按兵不动。 ");
+  assert.equal(result.enemyHp, 400);
+  assert.ok(!result.log.some((line) => /提气归元|运转内功疗伤/.test(line)));
+});
 test("NPC 会从完整已学武功而非仅运用槽选择本门绝招", () => {
   const a = actor();
   a.hp = a.maxHp = 100000;
@@ -250,7 +334,8 @@ function specialActor(specialId: number) {
 
 test("冰凌剑对宗师造成重创但不再稳定一招击杀", () => {
   let totalDamage = 0,
-    kills = 0;
+    kills = 0,
+    recoveryTurns = 0;
   for (let seed = 1; seed <= 200; seed++) {
     const a = specialActor(40);
     a.hp = a.maxHp = 12_000;
@@ -260,11 +345,17 @@ test("冰凌剑对宗师造成重创但不再稳定一招击杀", () => {
     const battle = beginOriginalBattle(111, seed),
       initialHp = battle.enemyHp,
       result = specialRound(battle, a, 40);
-    totalDamage += initialHp - result.enemyHp;
+    const recovered = result.log.reduce((sum, line) => {
+      const match = line.match(/提气归元，恢复 (\d+) 点气血/);
+      return sum + Number(match?.[1] || 0);
+    }, 0);
+    totalDamage += initialHp - result.enemyHp + recovered;
+    if (recovered > 0) recoveryTurns++;
     if (result.enemyHp === 0) kills++;
   }
   const averageDamage = totalDamage / 200;
   assert.equal(kills, 0);
+  assert.ok(recoveryTurns > 0);
   assert.ok(averageDamage >= 3_000 && averageDamage <= 6_000, String(averageDamage));
 });
 
