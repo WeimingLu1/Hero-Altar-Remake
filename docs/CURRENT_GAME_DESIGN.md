@@ -393,7 +393,7 @@ NPC数值与武学通过可重复运行的 `scripts/rebalance-npcs.mjs` 从固�
 - 首页：`https://rmxp-hero-web.weminl.chatgpt.site`
 - 完整游戏：`https://rmxp-hero-web.weminl.chatgpt.site/original`
 
-本文描述的是 2026-08-24 的 Sites v93 工程版本，生产源提交为 `1809ee312ca8b752f717dd98987f5557f3214c9b`。后续发布时应重新执行完整构建与测试，并同步发布说明。
+本文描述的是 2026-08-24 的 Sites v94 工程版本，生产源提交为 `c89dcd4ca48ddc8f70811b9bccda9a9c3531c563`。后续发布时应重新执行完整构建与测试，并同步发布说明。
 
 ## 15. 当前质量基线与后续重点
 
