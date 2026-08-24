@@ -25,7 +25,7 @@ export type InputLayer =
 
 export type ConfirmationKind = "cheat" | "hidden-quest" | "item";
 export type DialogueKind = "npc-talk" | "event-text";
-export type BattleView = "action" | "outcome" | "items" | "specials" | "skills";
+export type BattleView = "action" | "outcome" | "items" | "specials" | "skills" | "inner" | "info";
 export type ArcadeKind = "select" | "dance" | "ball";
 export type ModalKind =
   | "life"
@@ -80,6 +80,8 @@ export type GameCommand =
   | { type: "battle-specials-open" }
   | { type: "battle-items-open" }
   | { type: "battle-skills-open" }
+  | { type: "battle-inner-open" }
+  | { type: "battle-info-open" }
   | { type: "battle-flee" }
   | { type: "cultivation-open" }
   | { type: "fly-open" }
@@ -239,9 +241,19 @@ const resolveBattleCommand = (
   if (view === "specials" || view === "outcome") {
     return basicChoiceCommand(key);
   }
+  if (view === "inner") {
+    if (key === "o") return { type: "cancel" };
+    return basicChoiceCommand(key);
+  }
+  if (view === "info") {
+    if (key === "v" || isCancelKey(key)) return { type: "cancel" };
+    return basicChoiceCommand(key);
+  }
   if (key === "q" || key === "c") return { type: "battle-specials-open" };
   if (key === "i") return { type: "battle-items-open" };
   if (key === "m") return { type: "battle-skills-open" };
+  if (key === "o") return { type: "battle-inner-open" };
+  if (key === "v") return { type: "battle-info-open" };
   if (key === "g") return { type: "battle-flee" };
   return isConfirmKey(key)
     ? { type: "confirm" }

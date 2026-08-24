@@ -448,6 +448,14 @@ test("战斗界面提供完整行囊与临阵武学切换入口", () => {
   assert.match(uiSource, /武学 <kbd>M<\/kbd>/);
   assert.match(uiSource, /export function BattleBagPicker/);
   assert.match(uiSource, /export function BattleSkillPicker/);
+  // 战斗内新增：双方内力/法力条、调息子菜单与对手情报面板。
+  assert.match(uiSource, /className="side-bars"/);
+  assert.match(uiSource, /调息 <kbd>O<\/kbd>/);
+  assert.match(uiSource, /情报 <kbd>V<\/kbd>/);
+  assert.match(uiSource, /export function BattleInnerPicker/);
+  assert.match(uiSource, /export function BattleInfoPanel/);
+  assert.match(worldSource, /setBattleInner\(0\)/);
+  assert.match(worldSource, /setBattleInfo\(true\)/);
   // 生死战胜利处置：手下留情为默认第一项，杀死为第二项。
   assert.match(worldSource, /title="如何处置对手？"/);
   assert.match(worldSource, /items=\{\["手下留情", "杀死"\]\}/);
@@ -498,6 +506,18 @@ test("奇遇选择保留完整委托对白并在任务簿展示完成日志", ()
   assert.match(worldSource, /generatedQuestHistory/);
   assert.match(worldSource, /奇遇任务完成并已自动保存/);
   assert.match(worldCss, /\.task-history-list[^}]*overflow-y:\s*auto/);
+});
+
+test("修炼面板分区展示调息/加力法点/按类目分组的练习", () => {
+  assert.match(uiSource, /export function CultivationPanel/);
+  assert.match(uiSource, /className="cultivation-actions"/);
+  assert.match(uiSource, /cultivation-power-row/);
+  assert.match(uiSource, /className="cultivation-practice"/);
+  assert.match(uiSource, /className="kungfu-category"/);
+  assert.match(worldSource, /adjustForcePower\(-10\)/);
+  assert.match(worldSource, /adjustMagicPower\(10\)/);
+  assert.match(menuCss, /\.cultivation-panel\s*\{/);
+  assert.match(menuCss, /\.cultivation-actions\s*\{/);
 });
 
 test("任务簿当前奇遇卡片按阶段徽章/目标/奖励分区展示且对白单独滚动", () => {

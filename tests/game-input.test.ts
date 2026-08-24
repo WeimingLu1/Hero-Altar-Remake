@@ -162,6 +162,8 @@ test("战斗、小游戏和通用模态各自截获命令", () => {
   assert.equal(battle("c")?.type, "battle-specials-open");
   assert.equal(battle("i")?.type, "battle-items-open");
   assert.equal(battle("m")?.type, "battle-skills-open");
+  assert.equal(battle("o")?.type, "battle-inner-open");
+  assert.equal(battle("v")?.type, "battle-info-open");
   assert.equal(battle("g")?.type, "battle-flee");
   assert.equal(battle("x")?.type, "cancel");
   assert.equal(

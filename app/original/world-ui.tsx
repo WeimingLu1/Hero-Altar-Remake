@@ -16,9 +16,17 @@ import {
 } from "../game-core/inventory-system";
 import {
   canParryWith,
+  effectiveLevel,
   learnedSkills,
+  skillCategoryName,
   skillEffectSummary,
 } from "../game-core/skill-system";
+import {
+  cultivationAvailability,
+  fullFp,
+  fullMp,
+  practiceOptions,
+} from "../game-core/cultivation-system";
 import { battleSpecials } from "../game-core/special-system";
 import {
   customSwordBonus,
@@ -442,6 +450,8 @@ export function BattleView({
   openSpecial,
   openItem,
   openSkill,
+  openInner,
+  openInfo,
   flee,
 }: {
   battle: OriginalBattle;
@@ -454,12 +464,16 @@ export function BattleView({
   openSpecial: () => void;
   openItem: () => void;
   openSkill: () => void;
+  openInner: () => void;
+  openInfo: () => void;
   flee: () => void;
 }) {
   const dialogRef = useDialogFocus<HTMLDivElement>();
   const logRef = useRef<HTMLDivElement>(null);
   const latestNarrative = narratives.at(-1);
   const effect = latestNarrative?.effect || "fist";
+  const enemyRecord =
+    battle.enemyOverride || originalTables.enemies[battle.enemyId] || {};
   useEffect(() => {
     const log = logRef.current;
     if (!log) return;
@@ -509,19 +523,49 @@ export function BattleView({
         </div>
       </div>
       <div className="battle-bars">
-        <label>
-          你 <meter min="0" max={maxHp} value={hp} />
-          <em>
-            {hp}/{maxHp}
-          </em>
-        </label>
-        <label>
-          {battle.enemyName}{" "}
-          <meter min="0" max={battle.enemyMaxHp} value={battle.enemyHp} />
-          <em>
-            {battle.enemyHp}/{battle.enemyMaxHp}
-          </em>
-        </label>
+        <div className="side-bars">
+          <b>你</b>
+          <label>
+            气血 <meter min="0" max={Math.max(1, maxHp)} value={hp} />
+            <em>{hp}/{maxHp}</em>
+          </label>
+          <label>
+            内力 <meter min="0" max={Math.max(1, actor.maxFp)} value={actor.fp} />
+            <em>{actor.fp}/{actor.maxFp}</em>
+          </label>
+          <label>
+            法力 <meter min="0" max={Math.max(1, actor.maxMp)} value={actor.mp} />
+            <em>{actor.mp}/{actor.maxMp}</em>
+          </label>
+        </div>
+        <div className="side-bars enemy">
+          <b>
+            {battle.enemyName}
+            <button type="button" onClick={openInfo} title="查看对手全部参数">情报</button>
+          </b>
+          <label>
+            气血 <meter min="0" max={Math.max(1, battle.enemyMaxHp)} value={battle.enemyHp} />
+            <em>{battle.enemyHp}/{battle.enemyMaxHp}</em>
+          </label>
+          <label>
+            内力{" "}
+            <meter
+              min="0"
+              max={Math.max(1, Number(enemyRecord.maxfp || 0))}
+              value={battle.enemyFp}
+            />
+            <em>{battle.enemyFp}/{Number(enemyRecord.maxfp || 0)}</em>
+          </label>
+          <label>
+            法力{" "}
+            <meter
+              min="0"
+              max={Math.max(1, Number(enemyRecord.maxmp || 0))}
+              value={battle.enemyMp}
+            />
+            <em>{battle.enemyMp}/{Number(enemyRecord.maxmp || 0)}</em>
+          </label>
+        </div>
       </div>
       <div
         className="battle-log"
@@ -560,11 +604,17 @@ export function BattleView({
         <button onClick={openSpecial} disabled={Boolean(battle.finished)}>
           绝招 <kbd>Q</kbd>
         </button>
+        <button onClick={openInner} disabled={Boolean(battle.finished)}>
+          调息 <kbd>O</kbd>
+        </button>
         <button onClick={openItem} disabled={Boolean(battle.finished)}>
           行囊 <kbd>I</kbd>
         </button>
         <button onClick={openSkill} disabled={Boolean(battle.finished)}>
           武学 <kbd>M</kbd>
+        </button>
+        <button onClick={openInfo} disabled={Boolean(battle.finished)}>
+          情报 <kbd>V</kbd>
         </button>
         <button
           onClick={battle.mode === "spar" ? leave : flee}
@@ -807,6 +857,337 @@ export function BattleSkillPicker({
       )}
       <footer>W/S 选择 · E/Enter 运用或卸下 · R 仅当前攻防武学与基本招架可设招架 · M/X 返回</footer>
     </div>
+  );
+}
+export function BattleInnerPicker({
+  actor,
+  index,
+  onHover,
+  activate,
+  changeForce,
+}: {
+  actor: SceneActorState;
+  index: number;
+  onHover: (index: number) => void;
+  activate: (index: number) => void;
+  changeForce: (delta: number) => void;
+}) {
+  const dialogRef = useDialogFocus<HTMLDivElement>();
+  const forceMax = Math.floor(
+    effectiveLevel(actor, actor.skillUse[3] || 1) / 2,
+  );
+  const rows = [
+    { name: "吸气", note: "消耗内力恢复气血（不消耗回合）" },
+    { name: "疗伤", note: "运功恢复伤势上限，耗 50 内力（不消耗回合）" },
+    { name: "加力", note: `当前 ${actor.fpPlus} · 范围 0–${forceMax}` },
+  ];
+  return (
+    <div ref={dialogRef} tabIndex={-1} className="special-picker battle-inner-picker" role="dialog" aria-modal="true" aria-label="调息">
+      <header className="special-picker-title">
+        <b>调息</b>
+        <small>内息调养 · 不消耗回合</small>
+      </header>
+      <div className="battle-inner-list" role="listbox" aria-label="调息选项">
+        {rows.map((row, i) => (
+          <div
+            className={`battle-inner-row${index === i ? " active" : ""}`}
+            data-active={index === i}
+            onMouseEnter={() => onHover(i)}
+            key={row.name}
+          >
+            {i === 2 ? (
+              <div className="battle-force-row">
+                <button type="button" onClick={() => changeForce(-10)}>−</button>
+                <b>{actor.fpPlus}</b>
+                <button type="button" onClick={() => changeForce(10)}>＋</button>
+                <span>加力 · 范围 0–{forceMax}</span>
+              </div>
+            ) : (
+              <button type="button" onClick={() => activate(i)}>
+                <b>{row.name}</b>
+                <small>{row.note}</small>
+              </button>
+            )}
+          </div>
+        ))}
+      </div>
+      <footer>W/S 选择 · E/Enter 施展 · A/D 调加力 · X/Esc 返回</footer>
+    </div>
+  );
+}
+export function BattleInfoPanel({
+  battle,
+  close,
+}: {
+  battle: OriginalBattle;
+  close: () => void;
+}) {
+  const dialogRef = useDialogFocus<HTMLDivElement>();
+  const record = battle.enemyOverride || originalTables.enemies[battle.enemyId] || {},
+    skills = ((record.skill_list as number[][] | undefined) || [])
+      .map(([id, level]) => `${originalTables.kungfus[id]?.name || id} ${level}`)
+      .filter(Boolean),
+    weaponId = Number(battle.enemyWeaponId || record.weapon_id || 0),
+    weaponName = originalTables.weapons[weaponId]?.name
+      ? `${originalTables.weapons[weaponId].name}`
+      : "";
+  const stats = [
+    ["气血", `${battle.enemyHp}/${battle.enemyMaxHp}`],
+    ["内力", `${battle.enemyFp}/${Number(record.maxfp || 0)}`],
+    ["法力", `${battle.enemyMp}/${Number(record.maxmp || 0)}`],
+    ["膂力", String(Number(record.str || 0))],
+    ["敏捷", String(Number(record.agi || 0))],
+    ["悟性", String(Number(record.int || 0))],
+    ["根骨", String(Number(record.bon || record.base_bon || 0))],
+    ["攻击", String(Number(record.atk || record.base_atk || 0))],
+    ["防御", String(Number(record.pdef || record.base_def || 0))],
+    ["命中", String(Number(record.base_hit || 0))],
+    ["闪避", String(Number(record.eva || record.base_eva || 0))],
+    ["加力", String(Number(record.fp_plus || 0))],
+    ["法点", String(Number(record.mp_plus || 0))],
+    ["经验", Number(record.exp || 0).toLocaleString("zh-CN")],
+    ["兵刃", weaponName || "空手"],
+  ] as const;
+  return (
+    <div ref={dialogRef} tabIndex={-1} className="special-picker battle-info-panel" role="dialog" aria-modal="true" aria-label={`${battle.enemyName}情报`}>
+      <header className="special-picker-title">
+        <b>对手情报 · {battle.enemyName}</b>
+        <small>V 或 X/Esc 关闭</small>
+      </header>
+      <section className="battle-info-body">
+        <dl className="battle-info-stats">
+          {stats.map(([label, value]) => (
+            <span key={label}>
+              <i>{label}</i>
+              <b>{value}</b>
+            </span>
+          ))}
+        </dl>
+        {skills.length ? (
+          <div className="battle-info-skills">
+            <i>武功</i>
+            <p>{skills.join("、")}</p>
+          </div>
+        ) : (
+          <div className="battle-info-skills empty">对方没有显露武功。</div>
+        )}
+      </section>
+      <footer>
+        <button type="button" onClick={close}>关闭</button>
+      </footer>
+    </div>
+  );
+}
+export function CultivationPanel({
+  actor,
+  index,
+  active,
+  progress,
+  message,
+  onHover,
+  onActivate,
+  onAdjustForce,
+  onAdjustMagic,
+  onForceInput,
+  onMagicInput,
+}: {
+  actor: SceneActorState;
+  index: number;
+  active: boolean;
+  progress?: { label: string; value: number; max: number; detail: string };
+  message?: string;
+  onHover: (index: number) => void;
+  onActivate: (index: number) => void;
+  onAdjustForce: (delta: number) => void;
+  onAdjustMagic: (delta: number) => void;
+  onForceInput: (value: number) => void;
+  onMagicInput: (value: number) => void;
+}) {
+  const dialogRef = useDialogFocus<HTMLDivElement>(false);
+  const action = (a: "meditate" | "magic" | "recover" | "heal") =>
+    cultivationAvailability(actor, a);
+  const meditate = action("meditate"),
+    magic = action("magic"),
+    recover = action("recover"),
+    heal = action("heal");
+  const forceMax = Math.floor(
+    effectiveLevel(actor, actor.skillUse[3] || 1) / 2,
+  );
+  const magicMax = Math.floor(
+    effectiveLevel(actor, actor.skillUse[5] || 8) / 2,
+  );
+  // 0 打坐 · 1 冥思 · 2 吸气 · 3 疗伤 · 4 加力 · 5 法点 · 6+ 自行练习
+  const actions = [
+    {
+      name: "打坐",
+      mechanism: "恢复内力至 2×上限；溢出时内力上限 +1",
+      value: `内力 ${actor.fp}/${actor.maxFp} · 上限可至 ${fullFp(actor)}`,
+      availability: meditate,
+    },
+    {
+      name: "冥思",
+      mechanism: "恢复法力至 2×上限；溢出时法力上限 +1",
+      value: `法力 ${actor.mp}/${actor.maxMp} · 上限可至 ${fullMp(actor)}`,
+      availability: magic,
+    },
+    {
+      name: "吸气",
+      mechanism: "按缺失气血消耗内力，恢复气血至满",
+      value: `气血 ${actor.hp}/${actor.maxHp} · 内力 ${actor.fp}`,
+      availability: recover,
+    },
+    {
+      name: "疗伤",
+      mechanism: "恢复伤势上限（气血上限），固定耗 50 内力",
+      value: `伤势上限 ${actor.maxHp} · 健康上限 ${fullHp(actor)}`,
+      availability: heal,
+    },
+  ];
+  const powers = [
+    { name: "加力", current: actor.fpPlus, max: forceMax, adjust: onAdjustForce, input: onForceInput },
+    { name: "法点", current: actor.mpPlus, max: magicMax, adjust: onAdjustMagic, input: onMagicInput },
+  ];
+  const practice = practiceOptions(actor);
+  const practiceGroups = (() => {
+    const groups: Array<{ name: string; items: typeof practice }> = [];
+    for (const skill of practice) {
+      const category = skillCategoryName(skill.type);
+      const last = groups[groups.length - 1];
+      if (last && last.name === category) last.items.push(skill);
+      else groups.push({ name: category, items: [skill] });
+    }
+    return groups;
+  })();
+  return (
+    <section
+      ref={dialogRef}
+      tabIndex={-1}
+      className="cultivation-panel"
+      role="dialog"
+      aria-modal="true"
+      aria-label="修炼调息"
+    >
+      <header>
+        <div>
+          <small>养气练功</small>
+          <h2>修炼调息{active ? " · 进行中" : ""}</h2>
+        </div>
+        <span>{active ? "E/X 停止 · W/S 换项" : "W/S 选择 · E/Enter 开始 · A/D 调数值"}</span>
+      </header>
+      <div className="cultivation-body">
+        <section className="cultivation-section">
+          <h4>调息养身</h4>
+          <div className="cultivation-actions">
+            {actions.map((item, i) => (
+              <button
+                type="button"
+                className={`${index === i ? "active" : ""}${item.availability.ok ? "" : " disabled"}`}
+                key={item.name}
+                onMouseEnter={() => onHover(i)}
+                onClick={() => onActivate(i)}
+              >
+                <b>
+                  {item.name}
+                  <small>{item.availability.requirement}</small>
+                </b>
+                <span>{item.mechanism}</span>
+                <em>{item.value}</em>
+                <i>{item.availability.ok ? "可用" : item.availability.text}</i>
+              </button>
+            ))}
+          </div>
+        </section>
+        <section className="cultivation-section">
+          <h4>加力 · 法点</h4>
+          <div className="cultivation-power">
+            {powers.map((power, pi) => {
+              const i = 4 + pi;
+              return (
+                <div
+                  className={`cultivation-power-row${index === i ? " active" : ""}`}
+                  onMouseEnter={() => onHover(i)}
+                  key={power.name}
+                >
+                  <b>{power.name}</b>
+                  <button type="button" onClick={() => power.adjust(-10)}>−</button>
+                  <input
+                    className="cultivation-number"
+                    type="number"
+                    min={0}
+                    max={power.max}
+                    defaultValue={power.current}
+                    key={`${power.name}:${power.current}`}
+                    aria-label={`${power.name}数值`}
+                    onBlur={(event) => power.input(Number(event.target.value))}
+                    onKeyDown={(event) => {
+                      if (event.key === "Enter") event.currentTarget.blur();
+                    }}
+                  />
+                  <button type="button" onClick={() => power.adjust(10)}>＋</button>
+                  <em>范围 0–{power.max}</em>
+                </div>
+              );
+            })}
+          </div>
+        </section>
+        <section className="cultivation-section">
+          <h4>自行练习</h4>
+          {practice.length ? (
+            <div className="cultivation-practice">
+              {practiceGroups.map((group) => (
+                <div className="kungfu-fragment" key={group.name}>
+                  <header className="kungfu-category">
+                    <span>{group.name}</span>
+                    <small>{group.items.length} 门</small>
+                  </header>
+                  {group.items.map((skill) => {
+                    const i = 6 + practice.findIndex((p) => p.id === skill.id);
+                    return (
+                      <button
+                        type="button"
+                        className={index === i ? "active" : ""}
+                        key={skill.id}
+                        onMouseEnter={() => onHover(i)}
+                        onClick={() => onActivate(i)}
+                      >
+                        <b>
+                          <span>{skill.name}</span>
+                          <small>{skill.equipped ? "已运用" : "已习得"}</small>
+                        </b>
+                        <em>{skill.level} 级</em>
+                      </button>
+                    );
+                  })}
+                </div>
+              ))}
+            </div>
+          ) : (
+            <p className="cultivation-empty">尚未学会可练习的专门功夫，可向江湖人物拜师请教。</p>
+          )}
+        </section>
+      </div>
+      {progress && (
+        <div className="training-progress">
+          <span>
+            <b>{progress.label}</b>
+            <em>
+              {progress.value.toLocaleString("zh-CN")} /{" "}
+              {progress.max.toLocaleString("zh-CN")}
+            </em>
+          </span>
+          <i>
+            <b
+              style={{
+                width: `${Math.max(0, Math.min(100, (progress.value / Math.max(1, progress.max)) * 100))}%`,
+              }}
+            />
+          </i>
+          <small>{progress.detail}</small>
+        </div>
+      )}
+      {message && <p className="training-message">{message}</p>}
+      <footer>W/S 或方向键选择 · E/Enter 开始 · A/D 或 −/＋ 调数值 · R/X/Esc 关闭</footer>
+    </section>
   );
 }
 export function GameMenu({

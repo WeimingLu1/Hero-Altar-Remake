@@ -387,6 +387,174 @@
   line-height: 1.55;
 }
 .battle-kungfu-row .skill-effect { border-top-color: #ffffff14; }
+/* 修炼调息面板：调息四卡、加力/法点输入、按武学类目分组的练习区。 */
+.cultivation-panel {
+  position: absolute;
+  inset: clamp(18px, 4vh, 54px) clamp(18px, 5vw, 70px);
+  z-index: 12;
+  display: grid;
+  grid-template-rows: auto minmax(0, 1fr) auto auto;
+  gap: 10px;
+  min-width: 0;
+  min-height: 0;
+  padding: 16px;
+  overflow: hidden;
+  border: 2px solid #c2a65e;
+  background: linear-gradient(180deg, #101a16fa, #08100dfa), #0a110f;
+  box-shadow: 0 18px 60px #000d, inset 0 0 0 1px #f5d67b22;
+  color: #eadfb8;
+}
+.cultivation-panel > header {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 7px 10px 12px;
+  border-bottom: 1px solid #7d7049;
+}
+.cultivation-panel > header > div { display: grid; gap: 3px; }
+.cultivation-panel > header small { color: #a89c7b; font: 10px monospace; }
+.cultivation-panel > header h2 { margin: 0; font-size: 16px; letter-spacing: .08em; color: #ebd387; }
+.cultivation-panel > header > span { color: #a89c7b; font: 9px monospace; }
+.cultivation-panel .cultivation-body {
+  display: grid;
+  grid-template-columns: minmax(0, 1.15fr) minmax(0, .85fr);
+  grid-template-rows: minmax(0, 1fr) minmax(0, 1fr);
+  gap: 12px;
+  min-height: 0;
+  overflow: hidden;
+}
+.cultivation-panel .cultivation-section {
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 7px;
+  padding: 10px 12px;
+  border: 1px solid #61573c66;
+  background: #ffffff03;
+  overflow: auto;
+}
+.cultivation-panel .cultivation-section h4 {
+  margin: 0;
+  padding: 0 2px 5px;
+  border-bottom: 1px solid #7d704955;
+  color: #d9bd72;
+  font-size: 11px;
+  letter-spacing: .16em;
+}
+.cultivation-actions {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 7px;
+  align-content: start;
+}
+.cultivation-actions button {
+  display: grid;
+  gap: 4px;
+  min-width: 0;
+  padding: 9px;
+  text-align: left;
+  border: 1px solid #ffffff10;
+  background: #ffffff05;
+  color: #e9dfbd;
+}
+.cultivation-actions button.active {
+  border-color: #b39b58;
+  background: #82663338;
+  box-shadow: inset 3px 0 #f2d477;
+}
+.cultivation-actions button.disabled { opacity: .55; }
+.cultivation-actions button b { display: grid; gap: 2px; }
+.cultivation-actions button b span { font-size: 13px; }
+.cultivation-actions button b small { color: #8e7950; font: 8px monospace; letter-spacing: .12em; }
+.cultivation-actions button > span { color: #a89e86; font-size: 10px; line-height: 1.5; }
+.cultivation-actions button > em { color: #b3a88c; font-size: 9px; font-style: normal; }
+.cultivation-actions button > i { color: #79cfa9; font-size: 9px; font-style: normal; }
+.cultivation-actions button.disabled > i { color: #c96a4f; }
+.cultivation-power {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.cultivation-power-row {
+  display: grid;
+  grid-template-columns: 44px auto minmax(0, 1fr) auto minmax(0, 1fr);
+  align-items: center;
+  gap: 8px;
+  padding: 7px 9px;
+  border: 1px solid transparent;
+  background: transparent;
+}
+.cultivation-power-row.active { border-color: #b39b58; background: #82663338; }
+.cultivation-power-row > b { color: #e9dfbd; font-size: 12px; }
+.cultivation-power-row > button {
+  width: 26px;
+  height: 26px;
+  padding: 0;
+  border: 1px solid #9b8957;
+  background: #201f18;
+  color: #f0dfae;
+  font-size: 14px;
+}
+.cultivation-number {
+  width: 100%;
+  min-width: 0;
+  padding: 5px 8px;
+  border: 1px solid #9b8957;
+  background: #101812;
+  color: #e0bf65;
+  font: 700 13px monospace;
+}
+.cultivation-power-row > em { color: #a89e86; font-size: 9px; font-style: normal; }
+.cultivation-practice {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 6px;
+  align-content: start;
+}
+.cultivation-practice > button {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  min-width: 0;
+  padding: 8px 10px;
+  text-align: left;
+  border: 1px solid transparent;
+  border-bottom-color: #ffffff14;
+  background: transparent;
+  color: #e9dfbd;
+}
+.cultivation-practice > button.active {
+  border-color: #b39b58;
+  background: #82663338;
+  box-shadow: inset 3px 0 #f2d477;
+}
+.cultivation-practice > button b { display: grid; gap: 2px; }
+.cultivation-practice > button b span { font-size: 12px; }
+.cultivation-practice > button b small { color: #8e7950; font: 8px monospace; }
+.cultivation-practice > button em { color: #bdad7b; font-size: 10px; font-style: normal; }
+.cultivation-empty { color: #839087; font-size: 10px; }
+.cultivation-panel > .training-progress,
+.cultivation-panel > .training-message {
+  margin: 0 10px;
+  padding: 9px 12px;
+  border: 1px solid #7d704966;
+  background: #0c120daa;
+}
+.cultivation-panel > .training-message { color: #d8cfb5; font-size: 11px; }
+.cultivation-panel > footer {
+  padding: 9px 8px 1px;
+  border-top: 1px solid #7d704966;
+  color: #a79e89;
+  font: 10px monospace;
+  text-align: center;
+}
+@media (max-width: 820px) {
+  .cultivation-panel .cultivation-body { grid-template-columns: minmax(0, 1fr); }
+  .cultivation-actions,
+  .cultivation-practice { grid-template-columns: minmax(0, 1fr); }
+}
 .game-menu > footer {
   grid-area: help;
   padding-top: 10px;

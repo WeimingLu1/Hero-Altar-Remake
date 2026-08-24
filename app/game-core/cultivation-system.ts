@@ -203,13 +203,15 @@ export function practiceOptions(actor: SceneActorState) {
       const type = Number(originalTables.kungfus[id]?.type || 0);
       return id > 11 && ((type >= 2 && type <= 7) || type === 9);
     })
-    .sort((a, b) => a - b)
     .map((id) => ({
       id,
+      type: Number(originalTables.kungfus[id]?.type || 0),
       name: String(originalTables.kungfus[id]?.name || id),
       level: actor.skills[String(id)].level,
       equipped: equipped.has(id),
-    }));
+    }))
+    // 按武学类目排序并分组（与武学菜单一致），同类连续排列。
+    .sort((a, b) => a.type - b.type || a.id - b.id);
 }
 
 export function practiceOnce(actor: SceneActorState, id: number) {

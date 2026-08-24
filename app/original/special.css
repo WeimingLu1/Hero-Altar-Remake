@@ -138,6 +138,91 @@
   color: #aaa087;
 }
 
+/* 战斗内调息子菜单：吸气/疗伤/加力，复用特殊面板外壳。 */
+.battle-inner-list {
+  display: grid;
+  align-content: start;
+  gap: 6px;
+  min-height: 0;
+  overflow-y: auto;
+  padding: 4px 2px;
+}
+.battle-inner-row {
+  border: 1px solid transparent;
+  background: transparent;
+}
+.battle-inner-row.active {
+  border-color: #b39b58;
+  background: #82663338;
+}
+.battle-inner-row > button {
+  display: grid;
+  grid-template-columns: 56px minmax(0, 1fr);
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  padding: 10px 12px;
+  text-align: left;
+  border: 0;
+  background: transparent;
+  color: #e9dfbd;
+}
+.battle-inner-row > button b { font-size: 13px; }
+.battle-inner-row > button small { color: #a89e86; font-size: 10px; line-height: 1.5; }
+.battle-force-row {
+  display: grid;
+  grid-template-columns: auto auto auto minmax(0, 1fr);
+  align-items: center;
+  gap: 10px;
+  padding: 10px 12px;
+}
+.battle-force-row button {
+  width: 30px;
+  height: 30px;
+  padding: 0;
+  border: 1px solid #9b8957;
+  background: #201f18;
+  color: #f0dfae;
+  font-size: 15px;
+}
+.battle-force-row b {
+  min-width: 46px;
+  text-align: center;
+  color: #e0bf65;
+  font: 700 16px monospace;
+}
+.battle-force-row span { color: #a89e86; font-size: 10px; }
+
+/* 对手情报面板：全部参数网格 + 武功表。 */
+.battle-info-body {
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  overflow-y: auto;
+  padding: 4px 2px;
+}
+.battle-info-stats {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 6px 14px;
+  margin: 0;
+}
+.battle-info-stats span {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 5px 8px;
+  border-bottom: 1px dotted #4c4937;
+}
+.battle-info-stats i { color: #8f9587; font-size: 10px; font-style: normal; }
+.battle-info-stats b { color: #e9dfbd; font: 11px monospace; }
+.battle-info-skills { padding: 8px 10px; border: 1px solid #ffffff12; background: #ffffff05; }
+.battle-info-skills > i { color: #b99a51; font-size: 9px; font-style: normal; letter-spacing: .14em; }
+.battle-info-skills p { margin: 6px 0 0; color: #d9d0b5; font-size: 10px; line-height: 1.7; }
+.battle-info-skills.empty { color: #839087; font-size: 10px; }
+
 .special-picker footer {
   padding: 9px 8px 1px;
   border-top: 1px solid #7d704966;

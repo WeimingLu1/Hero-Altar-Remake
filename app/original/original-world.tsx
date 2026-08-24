@@ -185,8 +185,11 @@ import {
   Arcade,
   BattleView,
   BattleBagPicker,
+  BattleInfoPanel,
+  BattleInnerPicker,
   BattleSkillPicker,
   Choice,
+  CultivationPanel,
   GameMenu,
   LifeMenu,
   organizedBagEntries,
@@ -346,6 +349,9 @@ export default function OriginalWorld({
   const [battleItem, setBattleItem] = useState<number | null>(null);
   const [specialMenu, setSpecialMenu] = useState<number | null>(null);
   const [battleSkill, setBattleSkill] = useState<number | null>(null);
+  // 战斗内调息子菜单：0=吸气 1=疗伤 2=加力；情报面板为布尔开关。
+  const [battleInner, setBattleInner] = useState<number | null>(null);
+  const [battleInfo, setBattleInfo] = useState(false);
   // 主菜单：tab 0=行囊 1=状态 2=功夫 3=秘技；sub 为秘技子页签(0-5)。
   const [menu, setMenu] = useState<{
     tab: number;
@@ -1782,6 +1788,43 @@ export default function OriginalWorld({
       enemyHpBefore,
     });
   }, [battle, narrateBattleRound, sync]);
+  // 战斗内调息：吸气恢复气血、疗伤恢复伤势上限，均不消耗回合（与原版一致），
+  // 成功后保持子菜单打开以便连续调息；内力/气血不足等失败原因直接提示。
+  const fightInnerAction = useCallback(
+    (index: number) => {
+      if (!battle) return;
+      const next = structuredClone(stateRef.current);
+      if (index === 0) {
+        const ok = recoverHp(next.actor);
+        sync(next);
+        setNotice(
+          ok
+            ? "吸气调息，气血有所恢复（不消耗回合）。"
+            : "当前无法吸气恢复气血：需内力≥20 且气血未满。",
+        );
+        return;
+      }
+      const ok = healWounds(next.actor);
+      sync(next);
+      setNotice(
+        ok
+          ? "运功疗伤，伤势有所恢复（不消耗回合）。"
+          : "当前条件不足以疗伤：需内功有效等级≥45、内力≥100、内力上限≥150且确有伤势。",
+      );
+    },
+    [battle, sync],
+  );
+  // 战斗内加力步进：A/D 或鼠标在子菜单的加力行上调整。
+  const changeBattleForce = useCallback(
+    (delta: number) => {
+      if (!battle || battleInner !== 2) return;
+      const next = structuredClone(stateRef.current),
+        value = setForcePower(next.actor, next.actor.fpPlus + delta);
+      sync(next);
+      setNotice(`当前加力设为 ${value}（不消耗回合）。`);
+    },
+    [battle, battleInner, sync],
+  );
   const fightSpecial = useCallback(
     (id?: number) => {
       if (!battle || !id) return;
@@ -2323,11 +2366,70 @@ export default function OriginalWorld({
   const beginCultivation = useCallback(
     (index: number) => {
       setCultivation(index);
+      // 加力/法点由 A/D 步进与数字输入调整，按确认键不触发动作。
+      if (index === 4 || index === 5) return;
       if (index <= 1 || index >= 6) {
         setCultivationActive(cultivate(index));
       } else cultivate(index);
     },
     [cultivate],
+  );
+  // 加力/法点：A/D 步进与数字输入直接写入，实时提示当前值。
+  const adjustForcePower = useCallback(
+    (delta: number) => {
+      const next = structuredClone(stateRef.current),
+        available = cultivationAvailability(next.actor, "force");
+      if (!available.ok) {
+        setNotice(available.text);
+        return;
+      }
+      const value = setForcePower(next.actor, next.actor.fpPlus + delta);
+      sync(next);
+      setNotice(`当前加力设为 ${value}。`);
+    },
+    [sync],
+  );
+  const adjustMagicPower = useCallback(
+    (delta: number) => {
+      const next = structuredClone(stateRef.current),
+        available = cultivationAvailability(next.actor, "spell");
+      if (!available.ok) {
+        setNotice(available.text);
+        return;
+      }
+      const value = setMagicPower(next.actor, next.actor.mpPlus + delta);
+      sync(next);
+      setNotice(`当前法点设为 ${value}。`);
+    },
+    [sync],
+  );
+  const setForceExact = useCallback(
+    (value: number) => {
+      const next = structuredClone(stateRef.current),
+        available = cultivationAvailability(next.actor, "force");
+      if (!available.ok) {
+        setNotice(available.text);
+        return;
+      }
+      const final = setForcePower(next.actor, value);
+      sync(next);
+      setNotice(`当前加力设为 ${final}。`);
+    },
+    [sync],
+  );
+  const setMagicExact = useCallback(
+    (value: number) => {
+      const next = structuredClone(stateRef.current),
+        available = cultivationAvailability(next.actor, "spell");
+      if (!available.ok) {
+        setNotice(available.text);
+        return;
+      }
+      const final = setMagicPower(next.actor, value);
+      sync(next);
+      setNotice(`当前法点设为 ${final}。`);
+    },
+    [sync],
   );
   const confirmBagAction = useCallback(
     (index: number) => {
@@ -2532,13 +2634,17 @@ export default function OriginalWorld({
                   view:
                     battleOutcome !== null
                       ? "outcome"
-                      : battleItem !== null
-                        ? "items"
-                        : specialMenu !== null
-                          ? "specials"
-                          : battleSkill !== null
-                            ? "skills"
-                          : "action",
+                      : battleInfo
+                        ? "info"
+                        : battleInner !== null
+                          ? "inner"
+                          : battleItem !== null
+                            ? "items"
+                            : specialMenu !== null
+                              ? "specials"
+                              : battleSkill !== null
+                                ? "skills"
+                                : "action",
                 }
               : null,
             arcade: arcade?.kind || null,
@@ -2812,6 +2918,23 @@ export default function OriginalWorld({
             else if (cancel) setBattleOutcome(null);
             return;
           }
+          if (battleInfo) {
+            if (cancel || k === "v") setBattleInfo(false);
+            return;
+          }
+          if (battleInner !== null) {
+            if (k === "arrowup" || k === "w")
+              setBattleInner((battleInner + 2) % 3);
+            else if (k === "arrowdown" || k === "s")
+              setBattleInner((battleInner + 1) % 3);
+            else if (battleInner === 2 && (k === "arrowleft" || k === "a"))
+              changeBattleForce(-10);
+            else if (battleInner === 2 && (k === "arrowright" || k === "d"))
+              changeBattleForce(10);
+            else if (confirm && battleInner < 2) fightInnerAction(battleInner);
+            else if (cancel || k === "o") setBattleInner(null);
+            return;
+          }
           if (battleItem !== null) {
             if (k === "arrowup" || k === "w")
               setBattleItem(
@@ -2855,6 +2978,8 @@ export default function OriginalWorld({
           if (k === "q" || k === "c") setSpecialMenu(0);
           else if (k === "i") setBattleItem(0);
           else if (k === "m") setBattleSkill(0);
+          else if (k === "o") setBattleInner(0);
+          else if (k === "v") setBattleInfo(true);
           else if (k === "g") fleeBattle();
           else if (confirm) {
             if (battle.finished) leaveBattle();
@@ -2934,6 +3059,14 @@ export default function OriginalWorld({
             setCultivation((cultivation + length - 1) % length);
           else if (k === "arrowdown" || k === "s")
             setCultivation((cultivation + 1) % length);
+          else if ((k === "arrowleft" || k === "a") && cultivation === 4)
+            adjustForcePower(-10);
+          else if ((k === "arrowright" || k === "d") && cultivation === 4)
+            adjustForcePower(10);
+          else if ((k === "arrowleft" || k === "a") && cultivation === 5)
+            adjustMagicPower(-10);
+          else if ((k === "arrowright" || k === "d") && cultivation === 5)
+            adjustMagicPower(10);
           else if (confirm) beginCultivation(cultivation);
           else if (cancel || k === "r") setCultivation(null);
           return;
@@ -3176,8 +3309,22 @@ export default function OriginalWorld({
     finishCreation,
     screen,
     exitToTitle,
+    battleInner,
+    battleInfo,
+    fightInnerAction,
+    changeBattleForce,
+    adjustForcePower,
+    adjustMagicPower,
     applyCheatAction,
   ]);
+  // 战斗对象变化（开战或结算成新回合）时收起调息与情报子菜单；
+  // 用渲染期状态调整替代 effect，避免跨战斗残留旧子菜单。
+  const [lastBattle, setLastBattle] = useState(battle);
+  if (lastBattle !== battle) {
+    setLastBattle(battle);
+    if (battleInner !== null) setBattleInner(null);
+    if (battleInfo) setBattleInfo(false);
+  }
   const arcadeKind = arcade?.kind;
   useEffect(() => {
     if (!arcadeKind || arcadeKind === "select") return;
@@ -3417,14 +3564,6 @@ export default function OriginalWorld({
   };
   const map = getOriginalMap(state.position.mapId),
     profile = actorStatusProfile(state.actor);
-  const cultivationInfo = [
-    cultivationAvailability(state.actor, "meditate"),
-    cultivationAvailability(state.actor, "magic"),
-    cultivationAvailability(state.actor, "recover"),
-    cultivationAvailability(state.actor, "heal"),
-    cultivationAvailability(state.actor, "force"),
-    cultivationAvailability(state.actor, "spell"),
-  ];
   const studyList = study
       ? study.book
         ? bookStudyOptions(study.id)
@@ -3871,7 +4010,24 @@ export default function OriginalWorld({
             openSpecial={() => setSpecialMenu(0)}
             openItem={() => setBattleItem(0)}
             openSkill={() => setBattleSkill(0)}
+            openInner={() => setBattleInner(0)}
+            openInfo={() => setBattleInfo(true)}
             flee={fleeBattle}
+          />
+        )}{" "}
+        {battle && battleInner !== null && (
+          <BattleInnerPicker
+            actor={state.actor}
+            index={battleInner}
+            onHover={setBattleInner}
+            activate={fightInnerAction}
+            changeForce={changeBattleForce}
+          />
+        )}{" "}
+        {battle && battleInfo && (
+          <BattleInfoPanel
+            battle={battle}
+            close={() => setBattleInfo(false)}
           />
         )}{" "}
         {battle && battleOutcome !== null && (
@@ -3969,27 +4125,18 @@ export default function OriginalWorld({
           />
         )}
         {cultivation !== null && (
-          <Choice
-            title={
-              cultivationActive ? "修炼中 · E/X 停止 · W/S 换项" : "修炼调息"
-            }
-            items={[
-              `打坐 · ${cultivationInfo[0].requirement}${cultivationInfo[0].ok ? "" : "〔不可用〕"}`,
-              `冥思 · ${cultivationInfo[1].requirement}${cultivationInfo[1].ok ? "" : "〔不可用〕"}`,
-              `吸气 · ${cultivationInfo[2].requirement}${cultivationInfo[2].ok ? "" : "〔不可用〕"}`,
-              `疗伤 · ${cultivationInfo[3].requirement}${cultivationInfo[3].ok ? "" : "〔不可用〕"}`,
-              `加力 +10 · 当前 ${state.actor.fpPlus} · ${cultivationInfo[4].requirement}${cultivationInfo[4].ok ? "" : "〔不可用〕"}`,
-              `法点 +10 · 当前 ${state.actor.mpPlus} · ${cultivationInfo[5].requirement}${cultivationInfo[5].ok ? "" : "〔不可用〕"}`,
-              ...practiceOptions(state.actor).map(
-                (skill) =>
-                  `自行练习 ${skill.name} · ${skill.level} 级${skill.equipped ? " · 已运用" : ""}`,
-              ),
-            ]}
+          <CultivationPanel
+            actor={state.actor}
             index={cultivation}
-            choose={beginCultivation}
+            active={cultivationActive}
             progress={cultivationProgress}
             message={notice}
-            wide
+            onHover={setCultivation}
+            onActivate={beginCultivation}
+            onAdjustForce={adjustForcePower}
+            onAdjustMagic={adjustMagicPower}
+            onForceInput={setForceExact}
+            onMagicInput={setMagicExact}
           />
         )}
         {caihua && (
