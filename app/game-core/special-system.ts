@@ -632,8 +632,8 @@ export function specialDamageSummary(actor: SceneActorState, id: number) {
   }
 }
 // “普通敌人”参考基准：用于把 castSpell 的法术伤害公式换算成可读的估算值，
-// 只作菜单展示，不参与结算。
-const REFERENCE_ENEMY = { maxhp: 3000, fp: 2000, fp_plus: 40 };
+// 只作菜单展示，不参与结算。法术抵抗按敌方法力判定，参考敌人带少量法力。
+const REFERENCE_ENEMY = { maxhp: 3000, mp: 1000, mp_plus: 20 };
 const diminishingResource = (value: number) => {
   const safe = Math.max(0, Math.floor(value));
   return safe <= 5000
@@ -657,15 +657,15 @@ function expectedSpellDamage(actor: SceneActorState, spellId: number) {
   const targetPower =
     Math.floor(
       (avg(diminishingResource(REFERENCE_ENEMY.maxhp)) +
-        diminishingResource(REFERENCE_ENEMY.fp)) /
+        diminishingResource(REFERENCE_ENEMY.mp)) /
         20,
     ) +
-    Math.floor((rate * 2) / 100) * REFERENCE_ENEMY.fp_plus;
+    Math.floor((rate * 2) / 100) * REFERENCE_ENEMY.mp_plus;
   const reflected = userPower < targetPower,
     mastery = Math.min(300, effectiveLevel(actor, actor.skillUse[5] || 8)),
     first = reflected
       ? Math.floor(
-          ((targetPower - userPower + REFERENCE_ENEMY.fp_plus) * rate) / 100,
+          ((targetPower - userPower + REFERENCE_ENEMY.mp_plus) * rate) / 100,
         )
       : Math.floor(((userPower - targetPower) * rate) / 100),
     damage = (first + Math.floor((first * mastery) / 200)) * 2;

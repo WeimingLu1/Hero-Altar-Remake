@@ -372,17 +372,20 @@ function castSpell(
     ) +
     // 原作先整除后乘：m_damage*2/100 得整数档位再乘加力。
     Math.floor((damageRate * 2) / 100) * actor.mpPlus;
-  const enemyFpPlus = n(record, "fp_plus");
+  // 法术抵抗按敌方法力(mp)+法点(mp_plus)判定，而不是内力：没有法力的敌人
+  // （如通缉犯）不抗法。若沿用原版"内功抗法"，通缉犯按玩家内力上限缩放
+  // 的加力会让高属性玩家哪怕法力 65535 也必被反噬，实际体验失衡。
+  const enemyMpPlus = n(record, "mp_plus");
   const targetPower =
     Math.floor(
       (random(Math.max(1, diminishingBattleResource(battle.enemyMaxHp))) +
-        diminishingBattleResource(battle.enemyFp)) /
+        diminishingBattleResource(battle.enemyMp)) /
         20,
     ) +
-    Math.floor((damageRate * 2) / 100) * random(Math.max(1, enemyFpPlus));
+    Math.floor((damageRate * 2) / 100) * random(Math.max(1, enemyMpPlus));
   const reflected = userPower < targetPower;
   const first = reflected
-    ? Math.floor(((targetPower - userPower + enemyFpPlus) * damageRate) / 100)
+    ? Math.floor(((targetPower - userPower + enemyMpPlus) * damageRate) / 100)
     : Math.floor(((userPower - targetPower) * damageRate) / 100);
   // 原作(022 - Game_Battler 3.rb)：damage2 = first*mp_kf_lv/200；
   // self.damage = (first+damage2)*2，等效倍率 ×(200+精通)/100。
