@@ -205,6 +205,11 @@ export default function OriginalEntry() {
           initialScreen={start.screen}
           initialSave={start.save}
           restoreLocalSave={false}
+          exitToTitle={() => {
+            // 从游戏内主菜单返回时刷新存档标记，使“继续游戏”文案与本地存档一致。
+            setHasSave(readStorageItem(LOCAL_SAVE_KEY).ok);
+            setStart(null);
+          }}
         />
       </Suspense>
     );

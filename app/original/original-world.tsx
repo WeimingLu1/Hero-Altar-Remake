@@ -168,7 +168,6 @@ import {
   isConfirmKey,
   isMainMenuKey,
   isMenuTabKey,
-  KEYBOARD_HELP,
   menuTabFromKey,
 } from "./keybindings";
 import {
@@ -206,7 +205,8 @@ import "./battle.css";
 import "./special.css";
 import "./menu.css";
 
-export type LaunchScreen = "title" | "intro" | "create" | "help" | "play";
+// 标题页与操作说明统一由首页 OriginalEntry 呈现，世界内只剩序章/创建/游玩。
+export type LaunchScreen = "intro" | "create" | "play";
 type CreatorState = {
   step: 1 | 2;
   index: number;
@@ -297,21 +297,22 @@ const seeded = (seed: number) => {
 };
 
 export default function OriginalWorld({
-  initialScreen = "title",
+  initialScreen = "intro",
   initialSave,
   restoreLocalSave = true,
+  exitToTitle,
 }: {
   initialScreen?: LaunchScreen;
   initialSave?: WorldSave;
   restoreLocalSave?: boolean;
+  /** 返回统一标题页：由宿主（OriginalEntry）提供，缺省回退首页路由。 */
+  exitToTitle?: () => void;
 } = {}) {
   const [state, setState] = useState<WorldSave>(() => initialSave || fresh()),
     [notice, setNotice] = useState("原版地图数据已载入"),
     [eventText, setEventText] = useState(""),
     [eventNpcId, setEventNpcId] = useState<number | null>(null);
   const [screen, setScreen] = useState<LaunchScreen>(initialScreen);
-  const [titleIndex, setTitleIndex] = useState(0);
-  const [hasSave, setHasSave] = useState(false);
   const [creator, setCreator] = useState<CreatorState>({
     step: 1,
     index: 0,
@@ -459,7 +460,6 @@ export default function OriginalWorld({
     const id = window.setTimeout(() => {
       const stored = readJsonStorage(LOCAL_SAVE_KEY);
       if (!stored.ok) {
-        setHasSave(false);
         if (stored.reason === "invalid")
           setNotice("本地存档 JSON 已损坏，原数据未删除；请读取备份或开始新游戏。");
         else if (stored.reason === "unavailable")
@@ -468,11 +468,9 @@ export default function OriginalWorld({
       }
       const parsed = parseSave(stored.value);
       if (!parsed.ok) {
-        setHasSave(false);
         setNotice("本地存档格式无效，原数据未删除；请读取备份或开始新游戏。");
         return;
       }
-      setHasSave(true);
       sync(parsed.value);
     }, 0);
     return () => window.clearTimeout(id);
@@ -482,10 +480,8 @@ export default function OriginalWorld({
     const written = writeJsonStorage(LOCAL_SAVE_KEY, next);
     if (written.ok) {
       sync(next);
-      setHasSave(true);
       setNotice("原版世界进度已保存");
     } else {
-      setHasSave(false);
       setNotice(`保存失败：${storageFailureNotice(written.reason)}`);
     }
   }, [sync]);
@@ -1148,11 +1144,13 @@ export default function OriginalWorld({
     setNpcChat(null);
     setEventNpcId(null);
   }, []);
+  // 主菜单返回统一标题页：与首页同一套界面；未保存进度按既有退出语义丢弃。
   const returnToTitle = useCallback(() => {
     closeNpcChat();
     battleNarrationAbort.current?.abort();
-    setScreen("title");
-  }, [closeNpcChat]);
+    if (exitToTitle) exitToTitle();
+    else location.href = "/";
+  }, [closeNpcChat, exitToTitle]);
   const prepareGeneratedQuestOffer = useCallback((chat: NpcChatState) => {
     const current = stateRef.current,
       issuer = generatedQuestParticipant(chat.id, chat.mapId, chat.eventId);
@@ -1484,7 +1482,6 @@ export default function OriginalWorld({
     const persisted = { ...next, savedAt: new Date().toISOString() },
       written = writeJsonStorage(LOCAL_SAVE_KEY, persisted);
     sync(written.ok ? persisted : next);
-    setHasSave(written.ok);
     openOriginalNpcConversation(npcChat.id, result.text);
     setNotice(written.ok
       ? "奇遇任务完成并已自动保存；完整任务对话已清除，摘要已写入日志。"
@@ -1964,12 +1961,10 @@ export default function OriginalWorld({
             saved = stored.ok ? parseSave(stored.value) : null;
           sync(saved?.ok ? saved.value : fresh());
           setBattle(null);
-          setScreen("title");
-          setNotice(
-            saved?.ok
-              ? "你已身死，未保存的进度已经失去。 "
-              : "你已身死，且无法读取有效的本地存档，已返回初始状态。",
-          );
+          closeNpcChat();
+          battleNarrationAbort.current?.abort();
+          if (exitToTitle) exitToTitle();
+          else location.href = "/";
         }
         setBattleOutcome(null);
         setBattleItem(null);
@@ -2004,7 +1999,7 @@ export default function OriginalWorld({
         window.setTimeout(() => void openNpcConversation(target.npcId, false, target), 0);
       }
     },
-    [battle, openNpcConversation, sync],
+    [battle, closeNpcChat, exitToTitle, openNpcConversation, sync],
   );
   const leaveBattle = useCallback(() => {
     if (battle?.finished === "win" && battle.mode === "lethal") {
@@ -2390,27 +2385,6 @@ export default function OriginalWorld({
     },
     [sync],
   );
-  const beginCreation = useCallback(() => {
-    setCreator({
-      step: 1,
-      index: 0,
-      name: "",
-      gender: 0,
-      attrs: [20, 20, 20, 20],
-    });
-    setScreen("intro");
-  }, []);
-  const titleAction = useCallback(
-    (index: number) => {
-      if (index === 0) {
-        if (hasSave) setScreen("play");
-        else beginCreation();
-      } else if (index === 1) beginCreation();
-      else if (index === 2) file.current?.click();
-      else setScreen("help");
-    },
-    [beginCreation, hasSave],
-  );
   const finishCreation = useCallback(() => {
     const name = creator.name.trim(),
       total = creator.attrs.reduce((sum, value) => sum + value, 0),
@@ -2450,7 +2424,6 @@ export default function OriginalWorld({
     next.savedAt = new Date().toISOString();
     sync(next);
     const written = writeJsonStorage(LOCAL_SAVE_KEY, next);
-    setHasSave(written.ok);
     setNotice(
       written.ok
         ? `${name}踏入江湖。`
@@ -2613,20 +2586,8 @@ export default function OriginalWorld({
         const confirm = isConfirmKey(k),
           cancel = isCancelKey(k);
         if (screen !== "play") {
-          if (screen === "title") {
-            if (k === "arrowup" || k === "w")
-              setTitleIndex((titleIndex + 3) % 4);
-            else if (k === "arrowdown" || k === "s")
-              setTitleIndex((titleIndex + 1) % 4);
-            else if (confirm) titleAction(titleIndex);
-            return;
-          }
           if (screen === "intro") {
             if (confirm || cancel) setScreen("create");
-            return;
-          }
-          if (screen === "help") {
-            if (confirm || cancel) setScreen("title");
             return;
           }
           if (creator.step === 1) {
@@ -2643,7 +2604,12 @@ export default function OriginalWorld({
             else if (confirm && creator.index === 2) {
               if (!creator.name.trim()) setNotice("请先输入姓名。 ");
               else setCreator({ ...creator, step: 2, index: 0 });
-            } else if (cancel) setScreen("title");
+            } else if (cancel) {
+              closeNpcChat();
+              battleNarrationAbort.current?.abort();
+              if (exitToTitle) exitToTitle();
+              else location.href = "/";
+            }
             return;
           }
           if (k === "arrowup" || k === "w")
@@ -3208,8 +3174,7 @@ export default function OriginalWorld({
     creator,
     finishCreation,
     screen,
-    titleAction,
-    titleIndex,
+    exitToTitle,
     applyCheatAction,
   ]);
   const arcadeKind = arcade?.kind;
@@ -3442,7 +3407,6 @@ export default function OriginalWorld({
     setEventNpcId(null);
     sync(parsed.value);
     const written = writeJsonStorage(LOCAL_SAVE_KEY, parsed.value);
-    setHasSave(written.ok);
     setScreen("play");
     setNotice(
       written.ok
@@ -3507,44 +3471,6 @@ export default function OriginalWorld({
                 detail: `经验 ${state.actor.exp.toLocaleString("zh-CN")} · 当前内力 ${state.actor.fp.toLocaleString("zh-CN")}`,
               }
             : undefined;
-  if (screen === "title") {
-    const titleItems = [
-      hasSave ? "继续游戏" : "开始游戏",
-      "开始新游戏",
-      "读取 JSON 存档",
-      "操作说明",
-    ];
-    return (
-      <main className="launch-screen title-screen">
-        <div className="title-mountains" aria-hidden="true" />
-        <section className="title-card">
-          <small>RMXP 原版规则网页重制</small>
-          <h1>英雄坛说</h1>
-          <p>云游志</p>
-          <nav>
-            {titleItems.map((item, index) => (
-              <button
-                className={titleIndex === index ? "active" : ""}
-                key={item}
-                onMouseEnter={() => setTitleIndex(index)}
-                onClick={() => titleAction(index)}
-              >
-                {item}
-              </button>
-            ))}
-          </nav>
-          <em>W/S 或方向键选择 · E/Enter 确认</em>
-        </section>
-        <input
-          hidden
-          ref={file}
-          type="file"
-          accept=".json,application/json"
-          onChange={(e) => void importJson(e.target.files?.[0])}
-        />
-      </main>
-    );
-  }
   if (screen === "intro")
     return (
       <main className="launch-screen intro-screen">
@@ -3554,16 +3480,6 @@ export default function OriginalWorld({
         </div>
         <button onClick={() => setScreen("create")}>跳过序章，创建人物</button>
         <small>E/Enter 或 X/Esc 跳过</small>
-      </main>
-    );
-  if (screen === "help")
-    return (
-      <main className="launch-screen help-screen">
-        <section>
-          <h1>操作说明</h1>
-          {KEYBOARD_HELP.map((line) => <p key={line}>{line}</p>)}
-          <button onClick={() => setScreen("title")}>返回标题</button>
-        </section>
       </main>
     );
   if (screen === "create") {

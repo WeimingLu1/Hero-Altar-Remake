@@ -591,6 +591,7 @@ export function SpecialPicker({
   const dialogRef = useDialogFocus<HTMLDivElement>(),
     listRef = useRef<HTMLDivElement>(null);
   const list = battleSpecials(actor, battle.cooldowns);
+  const current = list[index];
   useEffect(() => {
     listRef.current
       ?.querySelector<HTMLElement>('[data-active="true"]')
@@ -603,30 +604,49 @@ export function SpecialPicker({
         <small>{list.length} 项已学绝招</small>
       </header>
       {list.length ? (
-        <div className="special-picker-list" ref={listRef} role="listbox" aria-label="已学绝招">
-          {list.map((special, i) => (
-            <button
-              className={index === i ? "active" : ""}
-              data-active={index === i}
-              role="option"
-              aria-selected={index === i}
-              disabled={!special.enabled}
-              onClick={() => choose(special.id)}
-              key={special.id}
-            >
-              <span>
-                {special.name}
-                <small>{special.description}</small>
-              </span>
-              <em>
-                {special.enabled
-                  ? `内力 ${special.fpCost}${special.mpCost ? ` · 法力 ${special.mpCost}` : ""}${special.hpCost ? ` · 气血 ${special.hpCost}` : ""}${special.needsAutoEquip ? " · 施展时自动换装" : ""}`
-                  : special.reason}
-              </em>
-              {/* 效果说明独占整行：未选中时单行截断，选中后完整展开。 */}
-              <small className="special-effect">{special.effect}</small>
-            </button>
-          ))}
+        <div className="special-picker-body">
+          <div className="special-picker-list" ref={listRef} role="listbox" aria-label="已学绝招">
+            {list.map((special, i) => (
+              <button
+                className={index === i ? "active" : ""}
+                data-active={index === i}
+                role="option"
+                aria-selected={index === i}
+                disabled={!special.enabled}
+                onClick={() => choose(special.id)}
+                key={special.id}
+              >
+                <b>{special.name}</b>
+                <em>
+                  {special.enabled
+                    ? `内力${special.fpCost}${special.mpCost ? `·法${special.mpCost}` : ""}`
+                    : "不可施展"}
+                </em>
+              </button>
+            ))}
+          </div>
+          {/* 主从布局：右侧详情完整展示选中绝招的出处、逐条效果与消耗。 */}
+          <aside className="special-detail" aria-live="polite">
+            {current && (
+              <>
+                <b>
+                  {current.name}
+                  {current.needsAutoEquip && <i>施展时自动换装</i>}
+                </b>
+                <p>{current.description || "原始数据未提供描述。"}</p>
+                <ul>
+                  {current.effect.split("；").map((line) => (
+                    <li key={line}>{line}</li>
+                  ))}
+                </ul>
+                <footer>
+                  {current.enabled
+                    ? `消耗：内力 ${current.fpCost}${current.mpCost ? ` · 法力 ${current.mpCost}` : ""}${current.hpCost ? ` · 气血 ${current.hpCost}` : ""}`
+                    : `暂不可施展：${current.reason}`}
+                </footer>
+              </>
+            )}
+          </aside>
         </div>
       ) : (
         <p className="special-picker-empty">尚未学会带绝招的武学。</p>
