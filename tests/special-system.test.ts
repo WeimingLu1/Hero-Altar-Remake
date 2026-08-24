@@ -3,6 +3,7 @@ import test from "node:test";
 import {
   autoEquipSpecialRequirements,
   battleSpecials,
+  expectedStrikeDamage,
   specialCheck,
   specialCooldownTurns,
   specialFpCost,
@@ -339,4 +340,22 @@ test("变熊术说明计入灵通心诀学识加成", () => {
   const boosted = battleSpecials(a).find((special) => special.id === 28)!;
   assert.match(boosted.effect, /含灵通心诀加成/);
   assert.match(boosted.effect, /防御\+250/);
+});
+test("绝招菜单列出按当前配置换算的伤害数值", () => {
+  const a = actor(); // 空手，基本拳脚/内功 120 级
+  assert.ok(expectedStrikeDamage(a) >= 1);
+  const list = battleSpecials(a);
+  const palm = list.find((special) => special.id === 1)!;
+  assert.match(palm.damage, /^伤害 约\d+（一击后强化）$/);
+  // 雪花六出完整形态 → 每击 ×22。
+  a.skills["39"] = { level: 150, points: 0 };
+  a.xue6 = true;
+  assert.match(battleSpecials(a).find((special) => special.id === 23)!.damage, /×22$/);
+  // 法术绝招展示原作威力档。
+  a.skills["52"] = { level: 120, points: 0 };
+  assert.match(battleSpecials(a).find((special) => special.id === 31)!.damage, /^威力 140$/);
+  // 纯强化/控制类绝招如实注明无直接伤害，并附基础攻击参考。
+  a.skills["21"] = { level: 120, points: 0 };
+  const buff = battleSpecials(a).find((special) => special.id === 7)!;
+  assert.match(buff.damage, /^无直接伤害（强化\/控制） · 基础攻击约\d+$/);
 });

@@ -61,7 +61,7 @@
   background: #9c8248;
 }
 
-.special-picker-list > button {
+.special-picker-list button {
   display: grid;
   grid-template-columns: minmax(0, 1fr) auto;
   gap: 5px 12px;
@@ -70,21 +70,20 @@
   padding: 9px;
   margin: 0;
   text-align: left;
-  border: 1px solid transparent;
-  border-bottom-color: #ffffff14;
-  background: transparent;
-  color: #e9dfbd;
+  border: 1px solid #ffffff10;
+  background: #ffffff05;
+  color: #ddd3b5;
   transition: border-color 120ms ease, background 120ms ease;
 }
 
-.special-picker-list > button.active {
+.special-picker-list button.active {
   border-color: #b39b58;
   background: #82663338;
   box-shadow: inset 3px 0 #f2d477;
 }
 
-.special-picker-list > button:disabled { opacity: .5; }
-.special-picker-list > button:disabled.active { opacity: .7; }
+.special-picker-list button:disabled { opacity: .5; }
+.special-picker-list button:disabled.active { opacity: .7; }
 
 .special-picker-list button > b {
   display: grid;
@@ -93,14 +92,14 @@
 }
 .special-picker-list button > b small {
   overflow: hidden;
-  color: #8e7950;
+  color: #c7a858;
   font: 8px monospace;
   letter-spacing: .12em;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
 .special-picker-list button > b span {
-  color: #e7d9b6;
+  color: #e9dfbd;
   font-size: 13px;
 }
 .special-picker-list button > em {
@@ -112,20 +111,26 @@
 }
 
 .special-card-desc,
+.special-card-damage,
 .special-card-effect {
   grid-column: 1/-1;
   font-style: normal;
   font-size: 10px;
   line-height: 1.55;
 }
-.special-card-desc { color: #99917b; }
+.special-card-desc { color: #918b79; }
+/* 伤害数值突出显示，与物品菜单的金色槽位强调一致。 */
+.special-card-damage {
+  color: #e0bf65;
+  font: 700 10px/1.5 "PingFang SC", "Microsoft YaHei", sans-serif;
+}
 .special-card-effect {
   margin-top: 1px;
   padding-top: 6px;
   border-top: 1px dashed #ffffff14;
-  color: #96ad8d;
+  color: #7fa489;
 }
-.special-picker-list > button.active .special-card-effect { color: #a9c69e; }
+.special-picker-list button.active .special-card-effect { color: #8fb39a; }
 
 .special-picker-empty {
   align-self: center;
@@ -205,5 +210,5 @@
   }
 
   .special-picker-title { padding-block: 4px 8px; }
-  .special-picker-list > button { padding-block: 7px; }
+  .special-picker-list button { padding-block: 7px; }
 }

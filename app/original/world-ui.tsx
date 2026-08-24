@@ -636,6 +636,7 @@ export function SpecialPicker({
                 <i className="special-card-desc">
                   {special.description || "原始数据未提供描述。"}
                 </i>
+                <i className="special-card-damage">{special.damage}</i>
                 <i className="special-card-effect">{special.effect}</i>
               </button>
             </div>

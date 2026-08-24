@@ -474,11 +474,16 @@ test("绝招与战斗武学面板锁定视口并只滚动内部列表", () => {
     /\.battle-bag-list,\s*\n\.battle-kungfu-list\s*\{[\s\S]*overflow-y:\s*auto/,
   );
   assert.match(specialCss, /\.special-picker\s*\{[\s\S]*overflow:\s*hidden/);
-  // 绝招按所属武学类目分组，卡片内展示出处、效果与消耗。
+  // 绝招按所属武学类目分组，卡片内展示出处、伤害、效果与消耗。
   assert.match(uiSource, /className="kungfu-category"/);
   assert.match(uiSource, /所属 · \$\{special\.owner\}/);
+  assert.match(uiSource, /special\.damage/);
   assert.match(uiSource, /className="special-card-effect"/);
   assert.match(specialCss, /\.special-picker-list\s*\{[\s\S]*grid-template-columns:\s*repeat\(2, minmax\(0, 1fr\)\)/);
+  // 卡片采用物品菜单主题色：可见卡片底、金槽位、暖色正文与绿色效果。
+  assert.match(specialCss, /\.special-picker-list button\s*\{[\s\S]*background:\s*#ffffff05/);
+  assert.match(specialCss, /\.special-card-damage\s*\{[\s\S]*color:\s*#e0bf65/);
+  assert.match(specialCss, /\.special-card-effect\s*\{[\s\S]*color:\s*#7fa489/);
 });
 
 test("奇遇选择保留完整委托对白并在任务簿展示完成日志", () => {

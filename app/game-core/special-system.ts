@@ -31,6 +31,8 @@ export type BattleSpecial = {
   owner: string;
   /** 类目排序键（原作武学 type），仅内部用于分组排序。 */
   categoryType: number;
+  /** 按当前配置换算的伤害/威力说明（每击、连击或直接伤害）。 */
+  damage: string;
 };
 const skillRecord = (id: number) =>
   (originalTables.skills[id] || {}) as OriginalRecord;
@@ -251,6 +253,7 @@ export function battleSpecials(
         ? "你长啸一声，使出雪山神技雪花六出，剑势依照雪花六角之形层叠展开，一气连出二十二剑！"
         : String((s.use_text as string[])?.[0] || `${s.name}！`),
       effect: specialEffectSummary(actor, id),
+      damage: specialDamageSummary(actor, id),
       category: skillCategoryName(categoryType),
       owner: ownerId ? String(originalTables.kungfus[ownerId]?.name || ownerId) : "",
       categoryType,
@@ -329,7 +332,7 @@ export function specialEffectSummary(actor: SceneActorState, id: number) {
       break;
     case 6:
       parts.push(
-        `卷走对手兵刃；对手空手时卷入鞭圈，造成约${effectiveLevel(actor, 19)}点伤害并禁足2回合`,
+        "卷走对手兵刃；对手空手时卷入鞭圈并禁足2回合",
       );
       break;
     case 7: {
@@ -341,7 +344,7 @@ export function specialEffectSummary(actor: SceneActorState, id: number) {
     }
     case 8:
       parts.push(
-        `掷出当前兵刃贯穿对手，命中约 ${(derivedStats(actor).str + effectiveLevel(actor, 24)) * 2} 点伤害`,
+        "掷出当前兵刃贯穿对手",
         "无论掷中掷空都硬直4–5回合",
         "普通杖掷出即损耗，自制杖自动收回",
       );
@@ -386,10 +389,10 @@ export function specialEffectSummary(actor: SceneActorState, id: number) {
       break;
     }
     case 15:
-      parts.push("刚劲伤害约内力/10+加力−对手内力/30", "落空可能自踉跄数回合");
+      parts.push("以内力刚劲攻击对手", "落空可能自踉跄数回合");
       break;
     case 16:
-      parts.push("抽走对手约内力/10+350+加力点内力");
+      parts.push("抽取对手内力，削弱其攻势");
       break;
     case 17: {
       const taiChi = effectiveLevel(actor, 32);
@@ -426,7 +429,7 @@ export function specialEffectSummary(actor: SceneActorState, id: number) {
     case 22: {
       const snow = effectiveLevel(actor, 37);
       parts.push(
-        `将对手摔倒，造成${Math.floor(snow / 3)}点伤害并禁足${Math.floor(snow / 35) + 3}回合`,
+        `将对手摔倒并禁足${Math.floor(snow / 35) + 3}回合`,
       );
       break;
     }
@@ -453,14 +456,14 @@ export function specialEffectSummary(actor: SceneActorState, id: number) {
     case 25: {
       const dragon = effectiveLevel(actor, 47);
       parts.push(
-        `虎啸伤害约${dragon + 5}点起（随对手内力上限衰减），并震慑${Math.floor(dragon / 30) + 1}回合`,
+        `虎啸震慑对手${Math.floor(dragon / 30) + 1}回合`,
       );
       break;
     }
     case 26: {
       const eagle = effectiveLevel(actor, 44);
       parts.push(
-        `召唤苍鹰盘旋${Math.floor(eagle / 10) + 1}回合，每回合六成概率抓伤50点`,
+        `召唤苍鹰盘旋${Math.floor(eagle / 10) + 1}回合，逐回合追击`,
       );
       break;
     }
@@ -499,7 +502,7 @@ export function specialEffectSummary(actor: SceneActorState, id: number) {
     }
     case 35:
       parts.push(
-        `命中造成约${effectiveLevel(actor, actor.skillUse[5] || 8)}点真火伤害，四分之一概率点燃法火`,
+        "命中造成真火伤害，四分之一概率点燃法火",
         "施法失败硬直6回合",
       );
       break;
@@ -518,6 +521,92 @@ export function specialEffectSummary(actor: SceneActorState, id: number) {
   const cooldown = specialCooldownTurns(actor, id);
   if (cooldown > 0) parts.push(`冷却${cooldown}回合`);
   return parts.join("；");
+}
+const idiv = (value: number, divisor: number) => Math.floor(value / divisor);
+// 平均随机值：randomInt(max) 的期望为 floor((max-1)/2)。
+const avgRoll = (max: number) =>
+  idiv(Math.max(1, Math.floor(max)) - 1, 2);
+// 以“自镜像”为基准，用平均随机值估算当前配置下普通攻击单次伤害。
+// 口径与战斗日志一致：显示的是出招伤害（blow damage），随当前武学、
+// 兵器、内力与加力实时变化，纯估算不结算。
+export function expectedStrikeDamage(
+  actor: SceneActorState,
+  kfDamage = 0,
+  kfForce = 0,
+) {
+  const stats = derivedStats(actor),
+    fpPlus = Math.min(
+      actor.fpPlus,
+      Math.floor(effectiveLevel(actor, actor.skillUse[3] || 1) / 2),
+    ),
+    atk = stats.atk,
+    str = stats.str,
+    fp = actor.fp;
+  let damage1 = idiv(avgRoll(atk) + atk, 2);
+  damage1 += idiv(damage1 * kfDamage, 100);
+  let fpAdd = Math.min(fp, fpPlus);
+  if (actor.weaponId > 0) fpAdd = idiv(fpAdd, 6);
+  // 镜像对手使用相同加力，与原战斗公式的 target.fpPlus 对应。
+  fpAdd += idiv(Math.min(fp, 3000), 20) - idiv(fpPlus, 25);
+  let damage2 = fpAdd <= 0 ? str : str + fpAdd;
+  if (fpAdd > 0) damage2 += idiv(damage2 * kfForce, 100);
+  const damage = damage1 + idiv(avgRoll(damage2) + damage2, 2);
+  return Math.max(1, damage);
+}
+// 每个绝招的伤害/威力说明：直接伤害型给公式数值，连击型给每击×次数，
+// 辅助/控制型如实注明无直接伤害并附基础攻击参考。
+export function specialDamageSummary(actor: SceneActorState, id: number) {
+  const strike = (kd = 0, fo = 0) => expectedStrikeDamage(actor, kd, fo);
+  const snowflake = () =>
+    actor.xue6
+      ? 22
+      : Math.max(
+          1,
+          Math.min(Math.floor((effectiveLevel(actor, 39) - 90) / 30) + 2, 5),
+        );
+  switch (id) {
+    case 1:
+    case 2:
+      return `伤害 约${strike()}（一击后强化）`;
+    case 3:
+      return `伤害 约${strike()} ×2`;
+    case 4:
+      return `伤害 约${strike(15)} ×3（每击含15%附加）`;
+    case 5:
+      return `伤害 约${strike(0, 10)} ×3`;
+    case 6:
+      return `伤害 约${effectiveLevel(actor, 19)}（卷中时）`;
+    case 8:
+      return `伤害 约${(derivedStats(actor).str + effectiveLevel(actor, 24)) * 2}（贯穿一击）`;
+    case 11:
+      return `伤害 约${strike()} ×3`;
+    case 15:
+      return `伤害 约${Math.floor(actor.fp / 10) + actor.fpPlus}（再扣对手内力/30）`;
+    case 16:
+      return `吸内力 约${Math.floor(actor.fp / 10) + 350 + actor.fpPlus}`;
+    case 21:
+      return `伤害 约${strike()} ×3`;
+    case 22:
+      return `伤害 约${Math.floor(effectiveLevel(actor, 37) / 3)}（摔投）`;
+    case 23:
+      return `伤害 约${strike()} ×${snowflake()}`;
+    case 25:
+      return `伤害 约${effectiveLevel(actor, 47) + 5}（随对手内力上限衰减）`;
+    case 26:
+      return `伤害 50/回合（六成概率）`;
+    case 35:
+      return `伤害 约${effectiveLevel(actor, actor.skillUse[5] || 8)}`;
+    case 39:
+      return "无直接伤害（冰封）";
+    default:
+      if (id >= 29 && id <= 40) {
+        const rate = Number(
+          (originalTables.skills[id]?.magic_data as number[])?.[3] || 0,
+        );
+        return `威力 ${rate}`;
+      }
+      return `无直接伤害（强化/控制） · 基础攻击约${strike()}`;
+  }
 }
 export function paySpecialCost(actor: SceneActorState, special: BattleSpecial) {
   actor.fp = Math.max(0, actor.fp - special.fpCost);
