@@ -22,7 +22,7 @@ test("root route renders the original title and new-game entry", async () => {
   assert.equal(response.status, 200);
   assert.match(response.headers.get("content-type") ?? "", /^text\/html\b/i);
   const html = await response.text();
-  assert.match(html, /<title>英雄坛说：云游志<\/title>/);
+  assert.match(html, /<title>英雄坛说<\/title>/);
   assert.match(html, /开始游戏/);
   assert.match(html, /开始新游戏/);
   assert.match(html, /读取 JSON 存档/);

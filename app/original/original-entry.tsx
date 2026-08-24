@@ -315,9 +315,7 @@ export default function OriginalEntry() {
     <main className="launch-screen title-screen">
       <div className="title-mountains" aria-hidden="true" />
       <section className="title-card">
-        <small>RMXP 原版规则网页重制</small>
         <h1>英雄坛说</h1>
-        <p>云游志</p>
         <nav aria-label="开始游戏">
           <button onClick={() => void resume()}>
             {hasSave ? "继续游戏" : "开始游戏"}
@@ -339,7 +337,6 @@ export default function OriginalEntry() {
                 ? "本地模型未连接（不影响原作玩法）"
                 : "本地模型尚未检测（可在模型设置中手动检测）"}
         </span>
-        <em>完整游戏将在选择后载入</em>
       </section>
       <input
         hidden
@@ -359,9 +356,8 @@ function LoadingGame() {
   return (
     <main className="launch-screen title-screen" aria-live="polite">
       <section className="title-card">
-        <small>正在展开江湖画卷</small>
         <h1>英雄坛说</h1>
-        <p>载入地图、人物与武学数据……</p>
+        <em>正在载入…</em>
       </section>
     </main>
   );

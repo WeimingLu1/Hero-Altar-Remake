@@ -3711,10 +3711,6 @@ export default function OriginalWorld({
     <main className="world-shell">
       <header>
         <strong>英雄坛说</strong>
-        <div>
-          <b>云游志</b>
-          <span>正式版 · 69 MAPS</span>
-        </div>
         <div className="header-actions">
           <button onClick={save}>保存</button>
           <button onClick={returnToTitle}>主菜单</button>

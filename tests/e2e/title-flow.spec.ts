@@ -12,7 +12,7 @@ test("标题页保持轻量，并且不会自动探测本地模型", async ({ pa
   await page.goto("/");
   await expect(page.getByRole("heading", { name: "英雄坛说" })).toBeVisible();
   await expect(page.getByRole("navigation", { name: "开始游戏" })).toBeVisible();
-  await expect(page.getByText("完整游戏将在选择后载入")).toBeVisible();
+  await expect(page.getByText(/本地模型尚未检测/)).toBeVisible();
 
   // Give post-hydration effects time to run; title rendering must remain local.
   await page.waitForTimeout(500);

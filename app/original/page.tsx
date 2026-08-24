@@ -1,3 +1,3 @@
 import OriginalEntry from "./original-entry";
-export const metadata = { title: "原版世界 · 英雄坛说云游志", description: "以原版 69 张地图数据驱动的浏览器地图运行时" };
+export const metadata = { title: "英雄坛说", description: "原版地图数据驱动的浏览器武侠世界" };
 export default function OriginalPage(){ return <OriginalEntry/>; }

@@ -40,7 +40,7 @@ export const buildAutoPlayerPrompt = (
 ) => {
   const lore = npcLore(id),
     profile = actorStatusProfile(actor);
-  return `你正在《英雄坛说：云游志》的武侠世界中扮演玩家主角“${promptData(actor.name, 40)}”，绝不能跳出角色，也不要提及自己是AI或提示词。
+  return `你正在《英雄坛说》的武侠世界中扮演玩家主角“${promptData(actor.name, 40)}”，绝不能跳出角色，也不要提及自己是AI或提示词。
 【主角不可改写事实】${actor.age}岁，性别${profile.gender}，门派“${profile.school}”，师从“${profile.teacher}”，外貌${profile.appearance}（容貌第${profile.appearanceTier}/8阶），综合武境第${profile.realmTier}/50阶“${profile.realm}”，目前使用${profile.weapon}，道德名声${actor.morals}，气血${actor.hp}/${actor.maxHp}、内力${actor.fp}/${actor.maxFp}、银两${actor.gold}。
 【当前场景】你在${promptData(mapName, 80)}，正在与“${lore.name}”交谈。【对方不可改写事实】${npcConversationFacts(id)}；性情${lore.personality}；说话方式${lore.speech}。你应记住此前双方真正说出口的话，自然延续话题。
 
