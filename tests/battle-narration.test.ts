@@ -4,6 +4,7 @@ import {
   battleEffectKind,
   battleFactIsImpact,
   battleNarrativeDisplaySections,
+  battleNarrativeProseIsGrounded,
   buildBattleNarrationFallback,
   buildBattleNarrationFacts,
   buildBattleNarrationPrompt,
@@ -46,10 +47,10 @@ test("battle narration prompt grounds wuxia prose in both fighters and exact res
   assert.match(prompt, /潘小莲/);
   assert.match(prompt, /豆腐店/);
   assert.match(prompt, /原版每次攻防严格依次显示/);
-  assert.match(prompt, /第1句只对应第1段/);
+  assert.match(prompt, /第1句只对应第1行/);
   assert.match(prompt, /不得.*重新判断谁出招、谁应招/);
-  assert.match(prompt, /不要标签、序号或标题/);
-  assert.match(prompt, /每段通常70至130个汉字/);
+  assert.match(prompt, /【事实N】原始事实逐字复制/);
+  assert.match(prompt, /每行演绎通常45至90个汉字/);
   assert.match(prompt, /经典金庸式武侠叙事/);
   assert.match(prompt, /命中、闪避、招架、伤害、当前气血、胜负/);
   assert.match(prompt, /起手、发力、行进路线或变招/);
@@ -59,6 +60,8 @@ test("battle narration prompt grounds wuxia prose in both fighters and exact res
   assert.match(prompt, /不得把特色招式淡化/);
   assert.match(prompt, /不足一成只能是轻微疼痛/);
   assert.match(prompt, /不得写骨折、内伤或吐血/);
+  assert.match(prompt, /不得凭空加入回血、疗伤、消耗资源/);
+  assert.match(prompt, /不能改数、把数字写成中文/);
 });
 
 test("battle narration strips old ownership labels and presents every line uniformly", () => {
@@ -75,12 +78,12 @@ test("battle narration strips old ownership labels and presents every line unifo
   ]);
 });
 
-test("battle prompt uses only original sentence order without ownership classification", () => {
+test("battle prompt uses exact numbered fact anchors without ownership classification", () => {
   const input = event();
   const prompt = buildBattleNarrationPrompt(input), facts = buildBattleNarrationFacts(input);
   assert.doesNotMatch(prompt, /【你出招】|【对手应招】|【对手出招】|【你应招】/);
-  assert.match(facts, /1\. 测试少侠一掌拍向潘小莲。\n2\. 潘小莲受到 16 点伤害。/);
-  assert.match(facts, /正文不要输出序号或分类标签/);
+  assert.match(facts, /【事实1】测试少侠一掌拍向潘小莲。\n【事实2】潘小莲受到 16 点伤害。/);
+  assert.match(facts, /逐字复制.*全角竖线“｜”/);
 });
 
 test("battle continuation preserves one output paragraph for every original log line", () => {
@@ -88,20 +91,21 @@ test("battle continuation preserves one output paragraph for every original log 
   input.facts = ["你一掌拍出。", "潘小莲受到伤害。", "潘小莲退开。"];
   assert.equal(parseBattleNarrativeSections(buildBattleNarrationFallback(input)).length, input.facts.length);
   assert.equal(buildBattleNarrationFallback(input), input.facts.join("\n"));
-  assert.match(buildBattleNarrationPrompt(input), /原始战报共有3句.*依次续写为3段/);
+  assert.match(buildBattleNarrationPrompt(input), /原始战报共有3句.*依次输出3行/);
 });
 
-test("battle display lists prose one paragraph at a time and colors only real impacts red", () => {
+test("battle display accepts only exact one-to-one fact anchors and colors real impacts red", () => {
   const input = event();
   assert.deepEqual(battleNarrativeDisplaySections(
-    "少侠沉肩递掌，掌势由虚转实，直取中宫。潘小莲横肘一封，脚下连退两步才卸去掌力。",
+    `【事实1】${input.facts[0]}｜少侠沉肩递掌，掌势由虚转实，直取中宫。\n` +
+      `【事实2】${input.facts[1]}｜掌力落在肩头，潘小莲气血微滞，随即稳住身形。`,
     input.facts,
   ), [
     { speaker: "clash", text: "少侠沉肩递掌，掌势由虚转实，直取中宫。" },
-    { speaker: "impact", text: "潘小莲横肘一封，脚下连退两步才卸去掌力。" },
+    { speaker: "impact", text: "掌力落在肩头，潘小莲气血微滞，随即稳住身形。" },
   ]);
   assert.deepEqual(battleNarrativeDisplaySections(
-    "第一句很长，必须完整显示。\n第二句也不得被截断。",
+    `【事实1】${input.facts[0]}｜掌势直取中宫。\n【事实2】${input.facts[1]}｜潘小莲肩头一沉。`,
     input.facts,
   ).map((section) => section.speaker), ["clash", "impact"]);
   assert.equal(battleFactIsImpact("剑光掠过，却未能命中。"), false);
@@ -113,6 +117,70 @@ test("battle display lists prose one paragraph at a time and colors only real im
   assert.equal(battleFactIsImpact("墨邪受到 120 点灼烧伤害。"), true);
   // 非气血损耗(如内力被挤)不标红。
   assert.equal(battleFactIsImpact("乙损失 350 点内力。"), false);
+});
+
+test("battle prose validator rejects changed numbers and facts borrowed from adjacent lines", () => {
+  assert.equal(battleNarrativeProseIsGrounded(
+    "茅盈受到 1720 点灼烧伤害。",
+    "法火透体，茅盈受到 1720 点灼烧伤害。",
+  ), true);
+  assert.equal(battleNarrativeProseIsGrounded(
+    "茅盈受到 1720 点灼烧伤害。",
+    "法火透体，茅盈受到 1477 点灼烧伤害。",
+  ), false);
+  assert.equal(battleNarrativeProseIsGrounded(
+    "茅盈受到 1720 点灼烧伤害。",
+    "法火透体，茅盈受到一千四百七十七点灼烧重创。",
+  ), false);
+  assert.equal(battleNarrativeProseIsGrounded(
+    "茅盈被雷光灼目，命中下降 8。",
+    "视线骤暗，茅盈准备施展绝招「掌心雷」。",
+  ), false);
+  assert.equal(battleNarrativeProseIsGrounded(
+    "连珠雷！",
+    "雷火接连三次轰向对手。",
+  ), false);
+});
+
+test("reported spell chain remains one-to-one when model changes damage and invents later actions", () => {
+  const facts = [
+    "铁爪苍鹰俯冲抓伤茅盈，造成 50 点伤害。",
+    "茅盈受到 1720 点灼烧伤害。",
+    "连珠雷！",
+    "你掐指念咒，电光缭绕雷声大作，一团雷火直袭茅盈。",
+    "茅盈受到 3180 点法术伤害。",
+    "茅盈被雷光灼目，命中下降 8。",
+  ];
+  const model = [
+    `【事实1】${facts[0]}｜苍鹰破空落爪，茅盈肩头衣袍顿裂，身形微晃。`,
+    `【事实2】${facts[1]}｜幽蓝法火透体，茅盈受到 1477 点灼烧重创。`,
+    `【事实3】${facts[2]}｜雷声骤起，电光在施法者指掌之间盘旋。`,
+    `【事实4】${facts[3]}｜电光裹住雷火，循着指诀所引直逼茅盈。`,
+    `【事实5】${facts[4]}｜雷火轰然炸开，茅盈受到 3180 点法术伤害。`,
+    `【事实6】${facts[5]}｜刺目雷光扰乱视线，茅盈准备施展绝招「掌心雷」。`,
+    "茅盈提气归元，恢复 10192 点气血并耗去 9266 点内力。",
+    "茅盈施展「天堂无路」，韦铭闪身避开。",
+  ].join("\n");
+  const sections = battleNarrativeDisplaySections(model, facts);
+  assert.equal(sections.length, facts.length);
+  assert.equal(sections[1].text, facts[1]);
+  assert.equal(sections[5].text, facts[5]);
+  assert.equal(sections[0].text, "苍鹰破空落爪，茅盈肩头衣袍顿裂，身形微晃。");
+  assert.equal(sections[4].text, "雷火轰然炸开，茅盈受到 3180 点法术伤害。");
+  assert.doesNotMatch(sections.map((section) => section.text).join(""), /1477|10192|9266|天堂无路/);
+});
+
+test("missing, reordered and still-streaming fact lines never shift onto neighbours", () => {
+  const facts = ["甲抬掌。", "乙受到 20 点伤害。", "乙退开。"];
+  const reordered = `【事实2】${facts[1]}｜掌力落下。\n【事实1】${facts[0]}｜甲沉肩发力。`;
+  assert.deepEqual(
+    battleNarrativeDisplaySections(reordered, facts).map((section) => section.text),
+    facts,
+  );
+  const streaming = `【事实1】${facts[0]}｜甲沉肩发力。\n【事实2】${facts[1]}｜乙肩头一震。`;
+  assert.deepEqual(battleNarrativeDisplaySections(streaming, facts, false), [
+    { speaker: "clash", text: "甲沉肩发力。" },
+  ]);
 });
 
 test("震字诀三条原始日志只按原顺序续写，不再判断攻守归属", () => {

@@ -401,6 +401,7 @@ export default function OriginalWorld({
     nameInput = useRef<HTMLInputElement>(null),
     chatAbort = useRef<AbortController | null>(null),
     battleNarrationAbort = useRef<AbortController | null>(null),
+    battleNarrationSerial = useRef(0),
     battleNarrativesRef = useRef<BattleNarrative[]>([]),
     battlePlaybackRef = useRef<BattlePlaybackState | null>(null),
     battlePlaybackReopenInner = useRef<number | null>(null),
@@ -1741,7 +1742,9 @@ export default function OriginalWorld({
     const controller = new AbortController();
     battleNarrationAbort.current?.abort();
     battleNarrationAbort.current = controller;
+    const requestId = ++battleNarrationSerial.current;
     const entry: BattleNarrative = {
+      requestId,
       turn: event.battle.turn,
       facts: event.facts,
       text: "",
@@ -1749,21 +1752,15 @@ export default function OriginalWorld({
       loading: true,
       error: "",
     };
-    const previous = battleNarrativesRef.current;
-    battleNarrativesRef.current = [...previous, entry];
+    battleNarrativesRef.current = [...battleNarrativesRef.current, entry];
     setBattleNarratives(battleNarrativesRef.current);
     const history: ChatMessage[] = [
-      ...previous.filter((item) => item.text).slice(-6).map((item) => ({
-        role: "assistant" as const,
-        content: item.text,
-        speaker: `战斗叙事·第${item.turn}回合`,
-      })),
       { role: "user", speaker: "战斗引擎事实", content: buildBattleNarrationFacts(event) } as const,
     ];
     const updateEntry = (change: (item: BattleNarrative) => BattleNarrative) => {
       if (!runtimeMounted.current) return;
       const next = battleNarrativesRef.current.map((item) =>
-        item === entry || (item.turn === entry.turn && item.loading) ? change(item) : item,
+        item.requestId === requestId ? change(item) : item,
       );
       battleNarrativesRef.current = next;
       setBattleNarratives(next);
@@ -1784,7 +1781,7 @@ export default function OriginalWorld({
         system: buildBattleNarrationPrompt(event),
         messages: history,
         nextSpeaker: "战斗叙事",
-        maxOutputTokens: Math.min(4096, Math.max(512, event.facts.length * 180)),
+        maxOutputTokens: Math.min(3072, Math.max(384, event.facts.length * 110)),
         timeoutMs: Math.min(90_000, Math.max(30_000, event.facts.length * 4_000)),
         temperature: 0.62,
         topP: 0.85,

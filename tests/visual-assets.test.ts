@@ -191,6 +191,8 @@ test("战报生成期间仍可打开战斗药品且中止战报不会永久锁�
   assert.match(source, /if \(controller\.signal\.aborted\)[\s\S]*battleNarrationAbort\.current[\s\S]*loading: false/);
   assert.match(source, /text: item\.text \|\| buildBattleNarrationFallback\(event\),\s*loading: false/);
   assert.match(source, /openItem} disabled=\{Boolean\(battle\.finished\)\}/);
+  assert.match(source, /const requestId = \+\+battleNarrationSerial\.current/);
+  assert.match(source, /item\.requestId === requestId/);
 });
 
 test("离开游玩界面或卸载世界会中止主动交谈和战报请求", () => {
@@ -439,7 +441,7 @@ test("任务交谈预先锁定同一委托背景，战斗舞台按招式演出�
   assert.match(battleCss, /battle-narrative-copy p\{display:block.*font-size:17px/);
   assert.match(battleCss, /narrative-impact\{color:#ff8f79/);
   assert.match(uiSource, /battleFactIsImpact\(fact\)/);
-  assert.match(worldSource, /maxOutputTokens: Math\.min\(4096/);
+  assert.match(worldSource, /maxOutputTokens: Math\.min\(3072/);
   assert.match(battleCss, /prefers-reduced-motion/);
 });
 

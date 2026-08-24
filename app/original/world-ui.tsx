@@ -718,7 +718,7 @@ export function BattleView({
               ? item.facts.slice(0, playback!.index + 1)
               : item.facts;
           return (
-          <article className={index === narratives.length - 1 ? "latest" : ""} key={`${item.turn}-${index}`}>
+          <article className={index === narratives.length - 1 ? "latest" : ""} key={item.requestId}>
             <header>
               <time>第 {item.turn} 回合</time>
               <small>{visibleFacts.map((fact, factIndex) => (
