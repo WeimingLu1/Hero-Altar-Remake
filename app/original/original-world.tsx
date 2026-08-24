@@ -95,6 +95,7 @@ import {
   generatedQuestObjective,
   generatedQuestParticipant,
   generatedQuestPrompt,
+  generatedQuestStageName,
   markGeneratedQuestBattleWin,
   shouldOfferGeneratedQuest,
   type GeneratedQuestDraft,
@@ -3732,17 +3733,27 @@ export default function OriginalWorld({
               </section>
               {state.tasks.generatedQuest ? (
                 <section className="task-journal-generated">
-                  <small>当前奇遇</small>
-                  <h3>{state.tasks.generatedQuest.title}</h3>
-                  <p>{state.tasks.generatedQuest.premise}</p>
-                  <strong>{generatedQuestObjective(state.tasks.generatedQuest)}</strong>
-                  <p>
-                    目标地点：{state.tasks.generatedQuest.target.mapName} · 发布人：{state.tasks.generatedQuest.issuer.name}
-                  </p>
-                  <p>
+                  <header className="task-quest-head">
+                    <div>
+                      <small>当前奇遇</small>
+                      <h3>{state.tasks.generatedQuest.title}</h3>
+                    </div>
+                    <span className="task-quest-stage">
+                      {generatedQuestStageName(state.tasks.generatedQuest.stage)}
+                    </span>
+                  </header>
+                  <p className="task-quest-premise">{state.tasks.generatedQuest.premise}</p>
+                  <strong className="task-quest-objective">
+                    {generatedQuestObjective(state.tasks.generatedQuest)}
+                  </strong>
+                  <div className="task-quest-meta">
+                    <span>目标地点 · {state.tasks.generatedQuest.target.mapName}</span>
+                    <span>发布人 · {state.tasks.generatedQuest.issuer.name}</span>
+                  </div>
+                  <div className="task-quest-reward">
                     奖励：经验 {state.tasks.generatedQuest.reward.exp} · 潜能 {state.tasks.generatedQuest.reward.potential} · 银两 {state.tasks.generatedQuest.reward.gold}
                     {state.tasks.generatedQuest.reward.item ? ` · ${state.tasks.generatedQuest.reward.item.name}` : ""}
-                  </p>
+                  </div>
                   <div className="task-transcript">
                     {state.tasks.generatedQuest.transcript.length ?
                       state.tasks.generatedQuest.transcript.map((entry) => (

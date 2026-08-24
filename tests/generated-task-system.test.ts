@@ -18,6 +18,7 @@ import {
   markGeneratedQuestBattleWin,
   normalizeGeneratedQuest,
   shouldOfferGeneratedQuest,
+  type GeneratedQuest,
 } from "../app/game-core/generated-task-system";
 import { newActor } from "../app/game-core/save-system";
 import { freshTaskState } from "../app/game-core/task-system";
@@ -38,12 +39,13 @@ test("生成任务在三轮背景铺垫后由NPC第四句固定提出，不受�
   assert.equal(shouldOfferGeneratedQuest({ completedNpcReplies: 8, offeredThisSession: false, tasks }), true);
 });
 
-test("任务候选使用真实地图事件并按人物条件过滤三种类型", () => {
+test("任务候选使用真实地图事件并按人物条件过滤两种类型", () => {
   const actor = newActor(), tasks = freshTaskState(), issuer = generatedQuestParticipant(13, 15);
   assert.ok(issuer);
   const kinds = generatedQuestEligibleKinds(issuer!, actor, tasks);
+  // 只保留发布人当面切磋与委派挑战两类，机会均等；拜访已不再生成。
   assert.ok(kinds.includes("duel"));
-  assert.ok(kinds.includes("visit"));
+  assert.ok(!kinds.includes("visit"));
   assert.ok(kinds.includes("delegated-duel"));
   actor.killList = [17, 21, 32, 47];
   const draft = createGeneratedQuestDraft({ issuer: issuer!, actor, tasks, random: sequence(0, 0, 99) });
@@ -52,27 +54,37 @@ test("任务候选使用真实地图事件并按人物条件过滤三种类型",
   assert.equal(draft?.stage, "accepted");
 });
 
-test("拜访任务保存目标地点、完整对话并在目标交谈后进入复命", () => {
-  const actor = newActor(), tasks = freshTaskState(), issuer = generatedQuestParticipant(2)!;
-  const draft = createGeneratedQuestDraft({ issuer, actor, tasks, random: sequence(0, 0, 99) });
-  assert.equal(draft?.kind, "visit");
-  assert.ok(draft?.target.mapName);
-  assert.equal(acceptGeneratedQuest(tasks, draft!), true);
-  assert.equal(tasks.generatedQuestSerial, 1);
-  assert.equal(tasks.generatedQuestNextOfferAt, tasks.clock);
-  appendGeneratedQuestTranscript(tasks, { speaker: "player", speech: "我接下了。" });
-  appendGeneratedQuestTranscript(tasks, { speaker: "npc", npcId: issuer.npcId, speech: "一路小心。" });
-  assert.equal(tasks.generatedQuest?.transcript.length, 2);
-  assert.deepEqual(generatedQuestCurrentNpc(tasks.generatedQuest!), draft!.target);
-  assert.equal(advanceGeneratedQuestAfterDialogue(tasks, tasks.generatedQuest!.target), true);
+test("旧存档遗留的拜访任务仍可读取并在目标交谈后进入复命", () => {
+  const tasks = freshTaskState(),
+    issuer = generatedQuestParticipant(2)!,
+    target = generatedQuestParticipant(125)!;
+  const draft: GeneratedQuest = {
+    version: 1,
+    id: "llm-old-visit-1",
+    kind: "visit",
+    stage: "travel",
+    title: "代旧人物拜访某目标",
+    premise: "旧存档遗留的拜访委托。",
+    issuer,
+    target,
+    reward: { exp: 100, potential: 33, gold: 50 },
+    transcript: [],
+  };
+  // 拜访不再新生成，但读档时旧 visit 任务仍能通过 normalize 与推进。
+  assert.equal(normalizeGeneratedQuest(structuredClone(draft))?.kind, "visit");
+  tasks.generatedQuest = draft;
+  assert.deepEqual(generatedQuestCurrentNpc(tasks.generatedQuest!), target);
+  assert.equal(advanceGeneratedQuestAfterDialogue(tasks, target), true);
   assert.equal(tasks.generatedQuest?.stage, "report");
-  assert.deepEqual(generatedQuestCurrentNpc(tasks.generatedQuest!), draft!.issuer);
+  assert.deepEqual(generatedQuestCurrentNpc(tasks.generatedQuest!), issuer);
   assert.match(generatedQuestObjective(tasks.generatedQuest!), /复命/);
 });
 
 test("任务头顶标记严格跟随当前阶段的下一名 NPC", () => {
   const actor = newActor(), tasks = freshTaskState(), issuer = generatedQuestParticipant(13)!;
-  const draft = createGeneratedQuestDraft({ issuer, actor, tasks, random: sequence(2, 0, 99) })!;
+  // 强制抽取委派挑战：发布人与目标不同，才能验证标记在两者间切换。
+  const draft = createGeneratedQuestDraft({ issuer, actor, tasks, random: sequence(1, 0, 99) })!;
+  assert.equal(draft.kind, "delegated-duel");
   acceptGeneratedQuest(tasks, draft);
   assert.deepEqual(generatedQuestCurrentNpc(tasks.generatedQuest!), draft.target);
   tasks.generatedQuest!.stage = "defeated";
@@ -85,7 +97,7 @@ test("任务头顶标记严格跟随当前阶段的下一名 NPC", () => {
 
 test("委派战斗由目标一句承接后开战，只由匹配胜利推进并在战后复命", () => {
   const actor = newActor(), tasks = freshTaskState(), issuer = generatedQuestParticipant(13)!;
-  const draft = createGeneratedQuestDraft({ issuer, actor, tasks, random: sequence(2, 0, 99) });
+  const draft = createGeneratedQuestDraft({ issuer, actor, tasks, random: sequence(1, 0, 99) });
   assert.equal(draft?.kind, "delegated-duel");
   acceptGeneratedQuest(tasks, draft!);
   appendGeneratedQuestTranscript(tasks, {
@@ -156,7 +168,7 @@ test("生成任务只识别精确地图事件，第三方与同ID的其他事件
   acceptGeneratedQuest(tasks, draft);
   const quest = tasks.generatedQuest!;
   assert.equal(generatedQuestInteraction(quest, issuer), "issuer-reminder");
-  assert.equal(generatedQuestInteraction(quest, quest.target), "visit-target");
+  assert.equal(generatedQuestInteraction(quest, quest.target), "challenge-target");
   const wrongEvent = { ...quest.target, eventId: quest.target.eventId + 999 };
   assert.equal(generatedQuestInteraction(quest, wrongEvent), null);
   assert.equal(advanceGeneratedQuestAfterDialogue(tasks, wrongEvent), false);

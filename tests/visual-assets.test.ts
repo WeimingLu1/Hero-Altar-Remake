@@ -499,3 +499,12 @@ test("奇遇选择保留完整委托对白并在任务簿展示完成日志", ()
   assert.match(worldSource, /奇遇任务完成并已自动保存/);
   assert.match(worldCss, /\.task-history-list[^}]*overflow-y:\s*auto/);
 });
+
+test("任务簿当前奇遇卡片按阶段徽章/目标/奖励分区展示且对白单独滚动", () => {
+  assert.match(worldSource, /generatedQuestStageName\(state\.tasks\.generatedQuest\.stage\)/);
+  assert.match(worldSource, /className="task-quest-objective"/);
+  assert.match(worldSource, /className="task-quest-reward"/);
+  assert.match(worldCss, /\.task-journal-generated\s*\{[\s\S]*flex-direction:\s*column/);
+  assert.match(worldCss, /\.task-transcript\s*\{[\s\S]*overflow:\s*auto/);
+  assert.match(worldCss, /\.task-quest-stage\s*\{/);
+});

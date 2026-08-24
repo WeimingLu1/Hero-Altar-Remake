@@ -397,15 +397,12 @@ export function generatedQuestEligibleKinds(
   tasks: TaskState,
 ) {
   if (isGeneratedQuestReservedNpc(issuer.npcId)) return [];
+  // 只保留两种奇遇，机会均等：发布人当面挑战玩家（duel），或委托玩家
+  // 前往挑战目标 NPC（delegated-duel）。拜访类已按要求移除，不再生成；
+  // 旧存档中的 visit 任务仍可读取与推进。
   const kinds: GeneratedQuestKind[] = [],
-    issuerLore = npcLore(issuer.npcId),
-    playerRealm = actorStatusProfile(actor).realmValue;
-  if (
-    issuerLore.age >= 16 &&
-    Math.abs(npcMartialProfile(issuer.npcId).value - playerRealm) <= 20
-  ) kinds.push("duel");
-  if (candidateParticipants(issuer.npcId, actor, tasks, false).length)
-    kinds.push("visit");
+    issuerLore = npcLore(issuer.npcId);
+  if (issuerLore.age >= 16) kinds.push("duel");
   if (candidateParticipants(issuer.npcId, actor, tasks, true).length)
     kinds.push("delegated-duel");
   return kinds;
@@ -663,7 +660,7 @@ export function generatedQuestObjective(quest: GeneratedQuest) {
 
 export type GeneratedQuestPromptDisclosure = "prelude" | "offer" | "active";
 
-const generatedQuestStageName = (stage: GeneratedQuestStage) => ({
+export const generatedQuestStageName = (stage: GeneratedQuestStage) => ({
   accepted: "已经接受，等待出发",
   confrontation: "已经见面，等待切磋",
   travel: "正在前往目标处",
@@ -722,7 +719,7 @@ export function generatedQuestFallbackText(quest: GeneratedQuest, ref: Generated
       return `${quest.target.name}已经听明来意，请你回${quest.issuer.mapName}向${quest.issuer.name}复命。`;
     if (quest.stage === "defeated")
       return `${quest.target.name}认下这场胜负，请你回去向${quest.issuer.name}复命。`;
-    return `${quest.target.name}已经听明来意，准备与你进行一场点到为止的切磋。`;
+    return `${quest.target.name}已经听明来意，准备与你进行一场点到为止的切磋，分个高下后再回${quest.issuer.mapName}向${quest.issuer.name}复命。`;
   }
   if (isIssuer)
     return `此事尚未办妥：${generatedQuestObjective(quest)}办好再来见我。`;
