@@ -2807,7 +2807,7 @@ export default function OriginalWorld({
           if (battleOutcome !== null) {
             if (["arrowup", "arrowdown", "w", "s"].includes(k))
               setBattleOutcome((battleOutcome + 1) % 2);
-            else if (confirm) settleBattle(battleOutcome === 0);
+            else if (confirm) settleBattle(battleOutcome === 1);
             else if (cancel) setBattleOutcome(null);
             return;
           }
@@ -3865,10 +3865,10 @@ export default function OriginalWorld({
         )}{" "}
         {battle && battleOutcome !== null && (
           <Choice
-            title="是否取其性命？"
-            items={["砍头", "手下留情"]}
+            title="如何处置对手？"
+            items={["手下留情", "杀死"]}
             index={battleOutcome}
-            choose={(index) => settleBattle(index === 0)}
+            choose={(index) => settleBattle(index === 1)}
           />
         )}{" "}
         {battle && battleItem !== null && (

@@ -568,6 +568,35 @@ export function specialDamageSummary(actor: SceneActorState, id: number) {
     case 1:
     case 2:
       return `伤害 约${strike()}（一击后强化）`;
+    // 法术类在 default 分支统一按 castSpell 公式估算。case 35/39 已在上方处理。
+    case 29:
+    case 30:
+    case 31:
+    case 32:
+    case 33:
+    case 34:
+    case 36:
+    case 37:
+    case 38:
+    case 40: {
+      let damage = 0,
+        reflected = false;
+      if (id === 32 || id === 36 || id === 40) {
+        for (const spellId of ((originalTables.skills[id]?.magic_data as number[]) ||
+          []).slice(2, 5) as number[]) {
+          const estimate = expectedSpellDamage(actor, spellId);
+          damage += estimate.damage;
+          reflected = reflected || estimate.reflected;
+        }
+      } else {
+        const estimate = expectedSpellDamage(actor, id);
+        damage = estimate.damage;
+        reflected = estimate.reflected;
+      }
+      return reflected
+        ? "伤害：法力对抗不足时可能反噬"
+        : `对普通敌人约${Math.max(1, damage)}`;
+    }
     case 3:
       return `伤害 约${strike()} ×2`;
     case 4:
@@ -599,14 +628,48 @@ export function specialDamageSummary(actor: SceneActorState, id: number) {
     case 39:
       return "无直接伤害（冰封）";
     default:
-      if (id >= 29 && id <= 40) {
-        const rate = Number(
-          (originalTables.skills[id]?.magic_data as number[])?.[3] || 0,
-        );
-        return `威力 ${rate}`;
-      }
       return `无直接伤害（强化/控制） · 基础攻击约${strike()}`;
   }
+}
+// “普通敌人”参考基准：用于把 castSpell 的法术伤害公式换算成可读的估算值，
+// 只作菜单展示，不参与结算。
+const REFERENCE_ENEMY = { maxhp: 3000, fp: 2000, fp_plus: 40 };
+const diminishingResource = (value: number) => {
+  const safe = Math.max(0, Math.floor(value));
+  return safe <= 5000
+    ? safe
+    : 5000 + Math.floor(Math.sqrt((safe - 5000) * 5000));
+};
+// 按 castSpell 的真实公式，用平均随机值估算单个法术对普通敌人的期望伤害；
+// 法力对抗不足时与原战斗一致判为反噬（可能伤及自身）。
+function expectedSpellDamage(actor: SceneActorState, spellId: number) {
+  const data = (originalTables.skills[spellId]?.magic_data as number[]) || [],
+    rate = Number(data[3] || 0);
+  const avg = (max: number) =>
+    Math.floor((Math.max(1, Math.floor(max)) - 1) / 2);
+  const userPower =
+    Math.floor(
+      (avg(diminishingResource(actor.maxHp)) +
+        diminishingResource(Math.min(actor.mp, actor.maxMp * 2))) /
+        20,
+    ) +
+    Math.floor((rate * 2) / 100) * actor.mpPlus;
+  const targetPower =
+    Math.floor(
+      (avg(diminishingResource(REFERENCE_ENEMY.maxhp)) +
+        diminishingResource(REFERENCE_ENEMY.fp)) /
+        20,
+    ) +
+    Math.floor((rate * 2) / 100) * REFERENCE_ENEMY.fp_plus;
+  const reflected = userPower < targetPower,
+    mastery = Math.min(300, effectiveLevel(actor, actor.skillUse[5] || 8)),
+    first = reflected
+      ? Math.floor(
+          ((targetPower - userPower + REFERENCE_ENEMY.fp_plus) * rate) / 100,
+        )
+      : Math.floor(((userPower - targetPower) * rate) / 100),
+    damage = (first + Math.floor((first * mastery) / 200)) * 2;
+  return { reflected, damage: Math.max(0, damage) };
 }
 export function paySpecialCost(actor: SceneActorState, special: BattleSpecial) {
   actor.fp = Math.max(0, actor.fp - special.fpCost);

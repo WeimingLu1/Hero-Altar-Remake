@@ -351,9 +351,13 @@ test("绝招菜单列出按当前配置换算的伤害数值", () => {
   a.skills["39"] = { level: 150, points: 0 };
   a.xue6 = true;
   assert.match(battleSpecials(a).find((special) => special.id === 23)!.damage, /×22$/);
-  // 法术绝招展示原作威力档。
+  // 法术绝招按 castSpell 真实公式估算对普通敌人的伤害。
   a.skills["52"] = { level: 120, points: 0 };
-  assert.match(battleSpecials(a).find((special) => special.id === 31)!.damage, /^威力 140$/);
+  a.skillUse[5] = 52;
+  a.mp = a.maxMp = 3000;
+  a.mpPlus = 200;
+  const spell = battleSpecials(a).find((special) => special.id === 31)!;
+  assert.match(spell.damage, /^对普通敌人约\d+$/);
   // 纯强化/控制类绝招如实注明无直接伤害，并附基础攻击参考。
   a.skills["21"] = { level: 120, points: 0 };
   const buff = battleSpecials(a).find((special) => special.id === 7)!;

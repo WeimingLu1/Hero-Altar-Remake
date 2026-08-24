@@ -448,6 +448,10 @@ test("战斗界面提供完整行囊与临阵武学切换入口", () => {
   assert.match(uiSource, /武学 <kbd>M<\/kbd>/);
   assert.match(uiSource, /export function BattleBagPicker/);
   assert.match(uiSource, /export function BattleSkillPicker/);
+  // 生死战胜利处置：手下留情为默认第一项，杀死为第二项。
+  assert.match(worldSource, /title="如何处置对手？"/);
+  assert.match(worldSource, /items=\{\["手下留情", "杀死"\]\}/);
+  assert.match(worldSource, /settleBattle\(index === 1\)/);
   // 战斗行囊复用主菜单 bag-list 的完整条目设计(分类、像素图标、描述、加成)。
   assert.match(uiSource, /className="bag-list battle-bag-list"/);
   assert.match(uiSource, /item-pixel kind-\$\{entry\.kind\}/);

@@ -48,10 +48,11 @@ for (const map of originalMaps) {
 
 const text = (npc: OriginalRecord) =>
   ((npc.des_text as string[] | undefined) || []).filter(Boolean).join("");
+// 完整枚举该角色 skill_list 中的全部武功；不得截断，否则“了解这些武功”
+// 会漏掉如雪山内功(41)等真实武学，与“查看”的完整武功表互相矛盾。
 const skillNames = (npc: OriginalRecord) =>
   ((npc.skill_list as number[][] | undefined) || [])
-    .map(([id, level]) => `${originalTables.kungfus[id]?.name || `功夫${id}`} ${level}级`)
-    .slice(0, 8);
+    .map(([id, level]) => `${originalTables.kungfus[id]?.name || `功夫${id}`} ${level}级`);
 
 function npcSkillLevel(npc: OriginalRecord, id: number) {
   return ((npc.skill_list as number[][] | undefined) || [])
