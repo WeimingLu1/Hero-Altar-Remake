@@ -12,7 +12,9 @@ import {
   studyOnce,
   npcStatus,
   resolveSpecialNpcTalk,
+  studyOptions,
 } from "../app/game-core/npc-system";
+import { originalTables } from "../app/game-core/original-data";
 import type { SceneActorState } from "../app/game-core/scene-event";
 const actor = (): SceneActorState => ({
   inventory: {},
@@ -113,6 +115,16 @@ test("白瑞德拜师按实时实战根骨计算基本内功加成", () => {
   assert.equal(join.ok, true);
   assert.equal(a.teacherId, 111);
   assert.equal(a.classId, 6);
+});
+
+test("师父战斗新增武功不会越过原作教学列表开放给玩家", () => {
+  const mastered = ((originalTables.enemies[111]?.skill_list as number[][]) || []).map(
+      ([skillId]) => skillId,
+    ),
+    teachable = studyOptions(111).map((entry) => entry.id);
+  assert.ok(mastered.includes(38), "强化后的白瑞德应补全雪山入门十三式");
+  assert.ok(!teachable.includes(38), "新增战斗武功不应自动变成可请教武功");
+  assert.ok(teachable.includes(39), "原作可传授的雪山剑法必须保留");
 });
 
 test("已有门派或自立门户时不能绕过原作规则改投别派", () => {

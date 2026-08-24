@@ -86,6 +86,30 @@ test("high-level NPCs regularly spend force to perform their own offensive speci
   }
   assert.ok(specialTurns >= 25 && specialTurns <= 55, String(specialTurns));
 });
+test("NPC 会从完整已学武功而非仅运用槽选择本门绝招", () => {
+  const a = actor();
+  a.hp = a.maxHp = 100000;
+  const round = battleRound(beginOriginalBattle(132, 10), a);
+  assert.ok(round.log.some((line) => line.includes("恶虎啸")));
+  assert.ok(!((originalTables.enemies[132]?.skill_use as number[]) || []).includes(43));
+  assert.ok(((originalTables.enemies[132]?.skill_list as number[][]) || []).some(([id]) => id === 43));
+});
+test("NPC 辅助绝招、法术和独立冷却会真实改变战斗状态", () => {
+  const flowerActor = actor();
+  flowerActor.hp = flowerActor.maxHp = 100000;
+  const flower = battleRound(beginOriginalBattle(59, 11), flowerActor);
+  assert.ok(flower.enemyBuff.turns > 0);
+  assert.ok(flower.enemyBuff.agi > 0 || flower.enemyBuff.eva > 0);
+  assert.ok(Object.keys(flower.enemyCooldowns).length > 0);
+
+  const spellActor = actor();
+  spellActor.hp = spellActor.maxHp = 100000;
+  spellActor.mp = spellActor.maxMp = 50000;
+  const spell = battleRound(beginOriginalBattle(144, 9), spellActor);
+  assert.ok(spell.log.some((line) => line.includes("法术伤害")));
+  assert.ok(spellActor.hp < 100000);
+  assert.ok(spell.enemyMp < Number(originalTables.enemies[144]?.mp || 0));
+});
 test("original sparring round is deterministic and changes combat state", () => {
   const a = actor(),
     b = actor(),

@@ -4,6 +4,7 @@ import {
   originalText,
   type OriginalRecord,
 } from "./original-data";
+import npcTeachingJson from "../../game-data/npc-teaching.json";
 import { derivedStats } from "./inventory-system";
 import type { SceneActorState } from "./scene-event";
 import { npcLoreStatus } from "./npc-lore";
@@ -224,7 +225,8 @@ export function resolveSpecialNpcTalk(id: number, actor: SceneActorState) {
 }
 
 export function studyOptions(id: number) {
-  return ((enemy(id).skill_list as number[][]) || []).map(
+  const teaching = ((npcTeachingJson as { data?: Array<number[][] | null> }).data || [])[id];
+  return (((teaching || enemy(id).skill_list) as number[][]) || []).map(
     ([skillId, maxLevel]) => ({
       id: skillId,
       name: String(originalTables.kungfus[skillId]?.name || skillId),

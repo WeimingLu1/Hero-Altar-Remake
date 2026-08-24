@@ -1,6 +1,5 @@
-// 重平衡所有 NPC：把「等级 → 公平数值」的曲线写进原始数据，
-// 移除对运行时倍率强化层的依赖。数值与武功都以满级玩家为对标基准，
-// 玩家保持最强，顶级高手（门派掌门/宗师）与玩家旗鼓相当。
+// 从固定的强化版提取数据重新生成网页版 NPC 武学与战斗数值。
+// 生成过程必须可重复运行：严禁把已经生成过的 enemies.json 再当输入叠加强化。
 //
 // 用法：node scripts/rebalance-npcs.mjs
 import { readFileSync, writeFileSync } from "node:fs";
@@ -8,151 +7,253 @@ import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 
 const root = join(dirname(fileURLToPath(import.meta.url)), "..");
+const baselinePath = join(root, "game-data", "enemies_plus.json");
 const enemiesPath = join(root, "game-data", "enemies.json");
+const teachingPath = join(root, "game-data", "npc-teaching.json");
 const kungfusPath = join(root, "game-data", "kungfus.json");
+const weaponsPath = join(root, "game-data", "weapons.json");
 
-const enemies = JSON.parse(readFileSync(enemiesPath, "utf8"));
+const baseline = JSON.parse(readFileSync(baselinePath, "utf8"));
+const enemies = structuredClone(baseline);
 const kungfus = JSON.parse(readFileSync(kungfusPath, "utf8")).data;
+const weapons = JSON.parse(readFileSync(weaponsPath, "utf8")).data;
 const data = enemies.data;
 
+const SCHOOL_POOLS = {
+  1: [12, 15, 16, 14, 13], // 八卦：掌、轻、内、刀、八阵掌
+  2: [17, 20, 21, 18, 19, 22], // 花间：掌、轻、内、刀、鞭、学识
+  3: [23, 25, 26, 24, 27], // 红莲：拳、轻、内、杖、教义
+  4: [28, 30, 31, 29], // 尹贺：拳、轻、内、刀
+  5: [32, 35, 36, 33, 34], // 太极：拳、轻、内、剑、刀
+  6: [37, 40, 41, 39, 38], // 雪山：擒拿、轻、内、雪山剑、入门剑
+  7: [43, 46, 47, 44, 42, 45, 48], // 兽王：拳、轻、内、鹰爪、猿拳、刀、学识
+  8: [49, 50, 51, 52, 53, 54, 55], // 茅山：掌、轻、内、三系法术、学识
+};
+
+const schoolForSkill = (id) => {
+  if (id >= 12 && id <= 16) return 1;
+  if (id >= 17 && id <= 22) return 2;
+  if (id >= 23 && id <= 27) return 3;
+  if (id >= 28 && id <= 31) return 4;
+  if (id >= 32 && id <= 36) return 5;
+  if (id >= 37 && id <= 41) return 6;
+  if (id >= 42 && id <= 48) return 7;
+  if (id >= 49 && id <= 55) return 8;
+  return 0; // 56–59 为秘传，不参与门派推断。
+};
 const kungfuType = (id) => Number(kungfus[id]?.type || 0);
-// 战斗等级只算「专门武功」(id>=12)：原版数据给商人/平民填了很高的基本武功
-// (基本招架254等)作为数据伪影，不应算作真实战斗等级，否则卖花妞也会被抬成宗师。
 const combatLevel = (skillList) =>
   (skillList || []).reduce((highest, [id, level]) => {
-    const t = kungfuType(id);
-    return id >= 12 && t >= 1 && t <= 10
+    const type = kungfuType(id);
+    return id >= 12 && type >= 1 && type <= 10
       ? Math.max(highest, Number(level || 0))
       : highest;
   }, 0);
-const isCaster = (skillList) =>
-  (skillList || []).some(([id, level]) => kungfuType(id) === 8 && Number(level) > 0);
 
-// —— 玩家数值基准（NPC 略低于玩家；规则公平，两者同一上限）——
-// 玩家可通过物品(如王蛇胆 add_mfp 无上限)把内力上限堆到 65535，气血随之到 ~16783。
-// NPC 天花板取适中值：血 8000 / 内力 30000——让顶级宗师与高属性玩家旗鼓相当，
-// 又不因伤害公式每击封顶而把战斗拖成上百回合拉锯。
-const CEIL = {
-  hp: 12000,
-  fp: 45000,
-  four: 45, // 玩家约 55
-  atk: 110, // 玩家 99-300（自制武器）
-  pdef: 200, // 玩家可叠到 400
-  hit: 75,
-  eva: 45,
-};
-// stat = base + (ceiling - base) * (level/255)^p
-const curve = (level, base, ceiling, p) =>
-  Math.floor(base + (ceiling - base) * Math.pow(level / 255, p));
-const cap = (value, ceiling) => Math.min(ceiling, Math.max(0, Math.round(value)));
-
-// —— 武功等级阶梯：按原始档位分档，让更多高手足以与满级玩家过招 ——
-// 宗师/顶尖高手/高手统一高武功与高数值，其余人按曲线平滑下降。
-const TIERS = [
-  { min: 220, skill: 254, stat: 1.0 }, // 宗师（门派掌门/三大宗师）→ 满血
-  { min: 180, skill: 250, stat: 0.85 }, // 顶尖高手
-  { min: 140, skill: 242, stat: 0.6 }, // 高手
-];
-const tierFor = (lvl0) => TIERS.find((t) => lvl0 >= t.min) || null;
-const topTierLevel = 254;
-const targetLevel = (lvl0) =>
-  Math.max(lvl0, Math.round(topTierLevel * Math.pow(lvl0 / 250, 0.5)));
-// NPC 经验对标玩家（玩家满级 1000 万给 kfPower 加 10 万）。
-// 分档高手取玩家的 45%-80%，让命中率不被玩家 1000 万经验彻底碾压。
-const targetExp = (lvl0) => {
-  const tier = tierFor(lvl0);
-  if (tier && tier.min >= 220) return 6_500_000;
-  if (tier && tier.min >= 180) return 6_000_000;
-  if (tier && tier.min >= 140) return 5_000_000;
-  return Math.round(2_500_000 * Math.pow(lvl0 / 255, 1.3));
+const rankFor = (level) => {
+  if (level >= 220) return { name: "宗师", skill: 254, stat: 1, exp: 6_500_000, count: 99 };
+  if (level >= 180) return { name: "掌门", skill: 245, stat: 0.88, exp: 6_000_000, count: 99 };
+  if (level >= 140) return { name: "长老", skill: 220, stat: 0.68, exp: 5_000_000, count: 99 };
+  if (level >= 100) return { name: "高手", skill: 185, stat: 0.48, exp: 3_500_000, count: 99 };
+  if (level >= 60) return { name: "弟子", skill: 145, stat: 0.3, exp: 2_000_000, count: 5 };
+  return { name: "入门", skill: 110, stat: 0.16, exp: 1_000_000, count: 4 };
 };
 
-// —— 每个 NPC 的原始战斗等级与数值，用于同级基准（保留个体差异）——
-const originalLevel = data.map((e) => (e ? combatLevel(e.skill_list) : 0));
+const primarySchool = (record) => {
+  const declared = Number(record.type || 0);
+  if (declared >= 1 && declared <= 8) return declared;
+  const score = new Map();
+  for (const [id, level] of record.skill_list || []) {
+    const school = schoolForSkill(id);
+    if (school) score.set(school, (score.get(school) || 0) + Number(level || 0));
+  }
+  return [...score].sort((a, b) => b[1] - a[1] || a[0] - b[0])[0]?.[0] || 0;
+};
+
+const orderedSchoolPool = (school, weaponId) => {
+  const pool = [...(SCHOOL_POOLS[school] || [])];
+  const weaponType = Number(weapons[weaponId]?.type ?? -1);
+  const desiredKungfuType = weaponType >= 0 ? weaponType + 3 : 0;
+  const order = new Map(pool.map((id, index) => [id, index]));
+  return pool.sort((a, b) => {
+    const priority = (id) => {
+      const type = kungfuType(id);
+      if (type === 2 || type === 9 || type === 1) return 0;
+      if (desiredKungfuType && type === desiredKungfuType) return 1;
+      if (type === 8) return 2;
+      if (type >= 3 && type <= 7) return 3;
+      return 4; // 学识等非直接战斗武功只给高阶人物。
+    };
+    return priority(a) - priority(b) || order.get(a) - order.get(b);
+  });
+};
+
+const originalLevel = data.map((record) => (record ? combatLevel(record.skill_list) : 0));
 const bucketIndex = (level) =>
   level < 40 ? 0 : level < 80 ? 1 : level < 120 ? 2 : level < 160 ? 3 : level < 200 ? 4 : level < 230 ? 5 : 6;
-
-const STAT_KEYS = ["maxhp", "maxfp", "str", "agi", "int", "bon", "atk", "pdef", "base_hit", "base_eva", "exp"];
+const STAT_KEYS = ["maxhp", "maxfp", "str", "agi", "int", "bon", "atk", "pdef", "base_hit", "base_eva"];
 const buckets = Array.from({ length: 7 }, () => ({}));
-data.forEach((e, i) => {
-  if (!e) return;
-  const bucket = buckets[bucketIndex(originalLevel[i])];
-  for (const key of STAT_KEYS) {
-    const v = Number(e[key] || 0);
-    (bucket[key] ||= []).push(v);
-  }
+data.forEach((record, id) => {
+  if (!record) return;
+  const bucket = buckets[bucketIndex(originalLevel[id])];
+  for (const key of STAT_KEYS) (bucket[key] ||= []).push(Number(record[key] || 0));
 });
-const median = (arr) => {
-  if (!arr || !arr.length) return 0;
-  const s = [...arr].sort((a, b) => a - b);
-  const mid = Math.floor(s.length / 2);
-  return s.length % 2 ? s[mid] : Math.round((s[mid - 1] + s[mid]) / 2);
+const median = (values) => {
+  if (!values?.length) return 0;
+  const sorted = [...values].sort((a, b) => a - b);
+  const middle = Math.floor(sorted.length / 2);
+  return sorted.length % 2
+    ? sorted[middle]
+    : Math.round((sorted[middle - 1] + sorted[middle]) / 2);
 };
-const bucketMedians = buckets.map((b) => {
-  const out = {};
-  for (const key of STAT_KEYS) out[key] = median(b[key]);
-  return out;
-});
+const bucketMedians = buckets.map((bucket) =>
+  Object.fromEntries(STAT_KEYS.map((key) => [key, median(bucket[key])])),
+);
 const identityFactor = (existing, cohortMedian) =>
-  cohortMedian > 0 ? Math.max(0.8, Math.min(1.2, Number(existing || 0) / cohortMedian)) : 1;
+  cohortMedian > 0
+    ? Math.max(0.8, Math.min(1.2, Number(existing || 0) / cohortMedian))
+    : 1;
+const cap = (value, ceiling) => Math.min(ceiling, Math.max(0, Math.round(value)));
 
-let changed = 0, kept = 0;
-for (let i = 0; i < data.length; i++) {
-  const e = data[i];
-  if (!e) continue;
-  const lvl0 = originalLevel[i];
-  if (lvl0 <= 0) {
-    kept++; // 百姓 / 无战斗武学者保持原值
+const CEIL = { hp: 12000, fp: 45000, four: 45, atk: 110, pdef: 200, hit: 75, eva: 45 };
+const bestSkillOfType = (skills, type) =>
+  [...skills.entries()]
+    .filter(([id, level]) => kungfuType(id) === type && level > 0)
+    .sort(
+      (a, b) =>
+        Number(b[0] >= 12) - Number(a[0] >= 12) ||
+        b[1] - a[1] ||
+        b[0] - a[0],
+    )[0]?.[0] || 0;
+
+// 战斗掌握与教学上限分离：新增到师父身上的战斗武功不会自动开放给玩家请教。
+const teaching = {
+  format: "rmxp-hero-data",
+  version: 1,
+  kind: "npc-teaching",
+  data: data.map((record, id) =>
+    record && (Number(record.type || 0) > 0 || id === 7 || id === 31)
+      ? structuredClone(record.skill_list || [])
+      : null,
+  ),
+};
+
+const report = [];
+for (let id = 0; id < data.length; id++) {
+  const record = data[id];
+  if (!record) continue;
+  const level0 = originalLevel[id];
+  if (id === 198) {
+    report.push({ id, name: record.name, rank: "动态通缉占位", school: 0, before: 0, after: 0, added: [] });
     continue;
   }
-  // 1) 武功阶梯：分档统一高武功，其余按曲线平滑下降
-  const tier = tierFor(lvl0);
-  if (tier) {
-    e.skill_list = e.skill_list.map(([id, lv]) =>
-      kungfuType(id) >= 1 && kungfuType(id) <= 10 ? [id, tier.skill] : [id, lv],
-    );
-  } else {
-    const target = targetLevel(lvl0);
-    const scale = target / lvl0;
-    e.skill_list = e.skill_list.map(([id, lv]) =>
-      lv <= 0 ? [id, 0] : [id, Math.min(254, Math.round(Number(lv) * scale))],
-    );
+
+  if (level0 <= 0) {
+    // 百姓与非战斗人物只略升生存能力，不凭空授予门派绝学。
+    const maxhp = Math.min(1500, Math.max(Number(record.maxhp || 1), Math.round(Number(record.maxhp || 1) * 1.2)));
+    const maxfp = Math.min(2000, Math.max(Number(record.maxfp || 0), Math.round(Number(record.maxfp || 0) * 1.15)));
+    record.maxhp = record.hp = record.full_hp = maxhp;
+    record.maxfp = record.fp = record.maxsp = maxfp;
+    for (const key of ["str", "agi", "int", "bon"])
+      record[key] = Math.min(35, Number(record[key] || 20) + 1);
+    record.base_str = record.str;
+    record.base_agi = record.agi;
+    record.base_int = record.int;
+    record.base_bon = record.bon;
+    record.atk = Math.max(5, Number(record.atk || 0));
+    record.pdef = Math.max(5, Number(record.pdef || 0));
+    record.base_hit = Math.max(3, Number(record.base_hit || 0));
+    record.base_eva = Math.max(2, Number(record.base_eva || 0));
+    report.push({ id, name: record.name, rank: "百姓", school: 0, before: 0, after: 0, added: [] });
+    continue;
   }
-  const level = combatLevel(e.skill_list);
-  // 2) 经验对标玩家（只影响 NPC 自身 kfPower，击杀奖励不含经验）
-  e.exp = targetExp(lvl0);
-  const cohort = bucketMedians[bucketIndex(lvl0)];
-  const idv = (key, existing) => identityFactor(existing, cohort[key]);
-  const caster = isCaster(e.skill_list);
-  // 3) 数值 = 玩家对标曲线 × 同级个体差异；分档高手按档位比例取天花板
-  const scaled = (base, ceiling, p, key, existing) =>
-    tier
-      ? cap(ceiling * tier.stat * idv(key, existing), ceiling)
-      : cap(curve(level, base, ceiling, p) * idv(key, existing), ceiling);
-  const maxhp = scaled(100, CEIL.hp, 2.2, "maxhp", e.maxhp);
-  const maxfp = scaled(80, CEIL.fp, 2.2, "maxfp", e.maxfp);
-  const maxmp = caster ? scaled(80, CEIL.fp, 2.2, "maxfp", e.maxfp) : 0;
-  e.maxhp = e.hp = e.full_hp = maxhp;
-  e.maxfp = e.fp = e.maxsp = maxfp;
-  e.maxmp = e.mp = maxmp;
-  // 加力封顶 等级/3（玩家「内功/2」≈127），NPC 加力参与战斗伤害，
-  // 让高手与满级玩家的伤害端更接近；force 倍率已封顶控制上限
-  e.fp_plus = Math.max(Number(e.fp_plus || 0), Math.floor(level / 3));
-  e.mp_plus = caster ? Math.max(Number(e.mp_plus || 0), Math.floor(level / 3)) : 0;
-  // 四维对标玩家（约 50 顶），先天=实战
-  for (const key of ["str", "agi", "int", "bon"]) {
-    e[key] = scaled(15, CEIL.four, 1.1, key, e[key]);
+
+  const rank = rankFor(level0);
+  const school = primarySchool(record);
+  const skills = new Map(
+    (record.skill_list || []).map(([skillId, level]) => [
+      Number(skillId),
+      Math.min(254, Math.max(Number(level || 0), Math.round((Number(level || 0) * rank.skill) / Math.max(1, level0)))),
+    ]),
+  );
+  const added = [];
+
+  if (school) {
+    const pool = orderedSchoolPool(school, Number(record.weapon_id || 0)).filter(
+      (skillId) => kungfuType(skillId) !== 11 || level0 >= 140,
+    );
+    const chosen = rank.count >= pool.length ? pool : pool.slice(0, rank.count);
+    for (const skillId of chosen) {
+      if (skills.has(skillId)) continue;
+      const type = kungfuType(skillId);
+      const equippedWeaponType = Number(weapons[Number(record.weapon_id || 0)]?.type ?? -1) + 3;
+      const learnedLevel = type === 11
+        ? Math.max(60, Math.floor(rank.skill * 0.65))
+        : type >= 3 && type <= 7 && type !== equippedWeaponType
+          ? Math.max(70, Math.floor(rank.skill * 0.82))
+          : rank.skill;
+      skills.set(skillId, learnedLevel);
+      added.push(skillId);
+    }
   }
-  e.base_str = e.str; e.base_agi = e.agi; e.base_int = e.int; e.base_bon = e.bon;
-  e.atk = scaled(8, CEIL.atk, 1.3, "atk", e.atk);
-  e.pdef = scaled(8, CEIL.pdef, 1.3, "pdef", e.pdef);
-  e.base_hit = scaled(5, CEIL.hit, 1.2, "base_hit", e.base_hit);
-  e.base_eva = scaled(3, CEIL.eva, 1.2, "base_eva", e.base_eva);
-  changed++;
+
+  // 每一门专门武功都补足对应基础功夫；所有武林人物具备基本内功、拳脚、轻功和招架。
+  const requiredBasics = new Set([1, 2, 9, 10]);
+  for (const skillId of skills.keys()) {
+    const type = kungfuType(skillId);
+    if (skillId >= 12 && type >= 1 && type <= 10) requiredBasics.add(type);
+  }
+  for (const basicId of requiredBasics)
+    skills.set(basicId, Math.max(skills.get(basicId) || 0, rank.skill));
+
+  record.skill_list = [...skills.entries()];
+  record.skill_count = record.skill_list.length;
+  const weaponType = Number(weapons[Number(record.weapon_id || 0)]?.type ?? -1);
+  const hand = bestSkillOfType(skills, 2) || 2;
+  const armed = weaponType >= 0 ? bestSkillOfType(skills, weaponType + 3) : 0;
+  const dodge = bestSkillOfType(skills, 9) || 9;
+  const inner = bestSkillOfType(skills, 1) || 1;
+  const magic = bestSkillOfType(skills, 8);
+  record.skill_use = [hand, armed, dodge, inner, armed || hand, magic];
+
+  const cohort = bucketMedians[bucketIndex(level0)];
+  const scaled = (ceiling, key, existing) =>
+    cap(ceiling * rank.stat * identityFactor(existing, cohort[key]), ceiling);
+  const maxhp = Math.max(Number(record.maxhp || 1), scaled(CEIL.hp, "maxhp", record.maxhp));
+  const maxfp = Math.max(Number(record.maxfp || 0), scaled(CEIL.fp, "maxfp", record.maxfp));
+  const caster = [...skills.keys()].some((skillId) => kungfuType(skillId) === 8);
+  const maxmp = caster ? Math.max(Number(record.maxmp || 0), maxfp) : 0;
+  record.maxhp = record.hp = record.full_hp = maxhp;
+  record.maxfp = record.fp = record.maxsp = maxfp;
+  record.maxmp = record.mp = maxmp;
+  record.exp = Math.max(Number(record.exp || 0), rank.exp);
+  record.fp_plus = Math.max(Number(record.fp_plus || 0), Math.floor(rank.skill / 3));
+  record.mp_plus = caster ? Math.max(Number(record.mp_plus || 0), Math.floor(rank.skill / 3)) : 0;
+  for (const key of ["str", "agi", "int", "bon"])
+    record[key] = Math.max(Number(record[key] || 0), scaled(CEIL.four, key, record[key]));
+  record.base_str = record.str;
+  record.base_agi = record.agi;
+  record.base_int = record.int;
+  record.base_bon = record.bon;
+  record.atk = Math.max(Number(record.atk || 0), scaled(CEIL.atk, "atk", record.atk));
+  record.pdef = Math.max(Number(record.pdef || 0), scaled(CEIL.pdef, "pdef", record.pdef));
+  record.base_hit = Math.max(Number(record.base_hit || 0), scaled(CEIL.hit, "base_hit", record.base_hit));
+  record.base_eva = Math.max(Number(record.base_eva || 0), scaled(CEIL.eva, "base_eva", record.base_eva));
+  report.push({ id, name: record.name, rank: rank.name, school, before: level0, after: combatLevel(record.skill_list), added });
 }
 
 writeFileSync(enemiesPath, JSON.stringify(enemies, null, 2) + "\n");
-console.log(`完成：重写 ${changed} 个 NPC，保留 ${kept} 个无战斗武学者。`);
-for (const id of [111, 196, 144, 129, 76]) {
-  console.log(`  ${data[id].name}(${id}): lv${combatLevel(data[id].skill_list)} exp${data[id].exp} hp${data[id].maxhp} fp${data[id].maxfp} atk${data[id].atk} str${data[id].str} 主攻${data[id].skill_use[0]}:${data[id].skill_list.find(([s]) => s === (Number(data[id].weapon_id||0) > 0 ? data[id].skill_use[1] : data[id].skill_use[0]))?.[1]}`);
+writeFileSync(teachingPath, JSON.stringify(teaching, null, 2) + "\n");
+
+const martial = report.filter((entry) => entry.before > 0);
+const civilians = report.filter((entry) => entry.rank === "百姓");
+const addedSkills = martial.reduce((sum, entry) => sum + entry.added.length, 0);
+console.log(`完成：强化 ${martial.length} 名武林人物、${civilians.length} 名普通人物；新增 ${addedSkills} 门人物武功。`);
+for (const school of Object.keys(SCHOOL_POOLS).map(Number)) {
+  const members = martial.filter((entry) => entry.school === school);
+  console.log(`  门派 ${school}：${members.length} 人，新增 ${members.reduce((sum, entry) => sum + entry.added.length, 0)} 门武功`);
+}
+for (const id of [76, 111, 129, 144, 196]) {
+  const record = data[id];
+  console.log(`  ${record.name}(${id})：lv${combatLevel(record.skill_list)} hp${record.maxhp} fp${record.maxfp} 武功${record.skill_list.length}门`);
 }

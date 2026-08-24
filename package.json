@@ -15,6 +15,7 @@
     "test:ssr": "node --test tests/rendered-html.test.mjs",
     "test:e2e": "playwright test",
     "test:e2e:chromium": "playwright test --project=chromium",
+    "rebalance:npcs": "node scripts/rebalance-npcs.mjs",
     "test:coverage": "tsx --test --experimental-test-coverage --test-coverage-exclude=\"tests/**\" --test-coverage-exclude=\"game-data/**\" --test-coverage-exclude=\"app/original/world-renderer.tsx\" --test-coverage-lines=90 --test-coverage-branches=75 --test-coverage-functions=90 tests/*.test.ts",
     "budgets": "node scripts/check-budgets.mjs",
     "audit": "npm audit --audit-level=high",

@@ -33,6 +33,7 @@ export type OriginalBattle = {
   log: string[];
   finished: "win" | "lose" | null;
   cooldowns: Record<string, number>;
+  enemyCooldowns: Record<string, number>;
   buff: {
     hit: number;
     str: number;
@@ -42,6 +43,21 @@ export type OriginalBattle = {
     pdef: number;
     fenshen: number;
     turns: number;
+  };
+  enemyBuff: {
+    hit: number;
+    str: number;
+    eva: number;
+    agi: number;
+    atk: number;
+    pdef: number;
+    fenshen: number;
+    turns: number;
+  };
+  playerDebuff: {
+    hit: number;
+    turns: number;
+    burnTurns: number;
   };
   enemyDebuff: {
     hit: number;
@@ -144,7 +160,7 @@ function player(
   };
   return {
     exp: actor.exp,
-    hit: stats.hit + buff.hit,
+    hit: stats.hit + buff.hit + (battle?.playerDebuff.hit || 0),
     eva: stats.eva + buff.eva,
     attackKfLv: skills.attack,
     dodgeKfLv: skills.dodge,
@@ -187,25 +203,35 @@ function enemy(
     eagleTurns: 0,
     burnTurns: 0,
   };
+  const buff = battle?.enemyBuff || {
+    hit: 0,
+    str: 0,
+    eva: 0,
+    agi: 0,
+    atk: 0,
+    pdef: 0,
+    fenshen: -1,
+    turns: 0,
+  };
   return {
     exp: n(record, "exp"),
-    hit: n(record, "base_hit") + debuff.hit,
-    eva: n(record, "base_eva"),
+    hit: n(record, "base_hit") + debuff.hit + buff.hit,
+    eva: n(record, "base_eva") + buff.eva,
     attackKfLv: level(attackId),
     dodgeKfLv: level(uses[2] || 9),
     // 原作招架取招架槽 skill_use[4](026 - Game_Enemy.rb parry_kf_lv)，非内功槽。
     parryKfLv: level(uses[4] || 10),
-    agi: n(record, "agi"),
+    agi: n(record, "agi") + buff.agi,
     int: n(record, "int"),
-    str: n(record, "str"),
-    atk: n(record, "atk"),
-    pdef: n(record, "pdef"),
+    str: n(record, "str") + buff.str,
+    atk: n(record, "atk") + buff.atk,
+    pdef: n(record, "pdef") + buff.pdef,
     fp,
     fpPlus: n(record, "fp_plus"),
     weaponId: battle ? battle.enemyWeaponId : n(record, "weapon_id"),
     movable: debuff.busy <= 0,
     // 原作缺省 -1(021 - Game_Battler 2.rb)：无影分身时永不触发残影格挡。
-    fenshen: -1,
+    fenshen: buff.fenshen,
     kfAp: move.ap,
     kfDp: move.dp,
     kfPp: move.pp,
@@ -411,6 +437,10 @@ function tick(battle: OriginalBattle, actor: SceneActorState) {
     battle.cooldowns[id]--;
     if (battle.cooldowns[id] <= 0) delete battle.cooldowns[id];
   }
+  for (const id of Object.keys(battle.enemyCooldowns)) {
+    battle.enemyCooldowns[id]--;
+    if (battle.enemyCooldowns[id] <= 0) delete battle.enemyCooldowns[id];
+  }
   if (battle.buff.turns > 0 && --battle.buff.turns === 0)
     battle.buff = {
       hit: 0,
@@ -423,6 +453,19 @@ function tick(battle: OriginalBattle, actor: SceneActorState) {
       fenshen: -1,
       turns: 0,
     };
+  if (battle.enemyBuff.turns > 0 && --battle.enemyBuff.turns === 0)
+    battle.enemyBuff = {
+      hit: 0,
+      str: 0,
+      eva: 0,
+      agi: 0,
+      atk: 0,
+      pdef: 0,
+      fenshen: -1,
+      turns: 0,
+    };
+  if (battle.playerDebuff.turns > 0 && --battle.playerDebuff.turns === 0)
+    battle.playerDebuff.hit = 0;
   if (battle.enemyDebuff.busy > 0) battle.enemyDebuff.busy--;
   if (battle.playerBusy > 0) battle.playerBusy--;
   if (battle.enemyDebuff.turns > 0 && --battle.enemyDebuff.turns === 0)
@@ -446,6 +489,31 @@ function tick(battle: OriginalBattle, actor: SceneActorState) {
     if (damage > 0)
       battle.log.push(`${battle.enemyName}受到 ${damage} 点灼烧伤害。`);
   }
+  if (battle.playerDebuff.burnTurns > 0) {
+    const record = battleEnemyRecord(battle),
+      uses = (record.skill_use as number[] | undefined) || [],
+      magicId = uses[5] || 8,
+      level = ((record.skill_list as number[][] | undefined) || []).find(
+        ([id]) => id === magicId,
+      )?.[1] || 0,
+      damage = burningDamage(
+        battle.enemyMp,
+        actor.fp,
+        level,
+        lcg(battle),
+      );
+    actor.hp = Math.max(0, actor.hp - damage);
+    battle.playerDebuff.burnTurns--;
+    if (damage > 0) battle.log.push(`你受到 ${damage} 点灼烧伤害。`);
+    if (actor.hp <= 0) {
+      battle.finished = "lose";
+      battle.log.push(
+        battle.mode === "spar"
+          ? "你眼前一黑，已无力再战。切磋到此为止。"
+          : "你已无力再战。",
+      );
+    }
+  }
 }
 
 export function burningDamage(
@@ -464,6 +532,126 @@ export function burningDamage(
     ? Math.max(1, Math.floor((pressure * rateBasisPoints) / 10000))
     : 0;
 }
+type EnemySpecial = {
+  id: number;
+  name: string;
+  type: number;
+  ownerId: number;
+  level: number;
+  fpCost: number;
+  mpCost: number;
+};
+
+function enemySpecialText(battle: OriginalBattle, special: EnemySpecial) {
+  return String(
+    (originalTables.skills[special.id]?.use_text as string[])?.[0] ||
+      `${battle.enemyName}施展${special.name}！`,
+  )
+    .replaceAll("user", battle.enemyName)
+    .replaceAll("target", "你")
+    .replaceAll(
+      "weapon",
+      String(originalTables.weapons[battle.enemyWeaponId]?.name || "兵刃"),
+    );
+}
+
+function enemyAttackOnce(
+  battle: OriginalBattle,
+  actor: SceneActorState,
+  record: OriginalRecord,
+  random: RandomInt,
+  blank: Move,
+  move: Move,
+) {
+  const attacker = enemy(record, battle.enemyFp, move, battle),
+    target = player(actor, blank, battle),
+    received = attackEffect(attacker, target, random);
+  battle.log.push(move.text, resultText(received, "你"));
+  battle.enemyFp = attacker.fp;
+  actor.hp = Math.max(0, actor.hp - numericDamage(received));
+  actor.maxHp = Math.max(actor.hp, actor.maxHp - received.hurt);
+}
+
+function applyEnemySupportSpecial(
+  battle: OriginalBattle,
+  special: EnemySpecial,
+) {
+  const power = Math.max(8, Math.floor(special.level / 8)),
+    turns = Math.min(9, 3 + Math.floor(special.level / 60));
+  if ([1, 2, 9, 10].includes(special.id)) {
+    battle.enemyBuff.atk += power * 2;
+    battle.enemyBuff.str += power;
+    battle.enemyBuff.hit += Math.floor(power / 2);
+  } else if (special.id === 7) {
+    battle.enemyBuff.agi += power;
+    battle.enemyBuff.eva += power * 2;
+  } else if (special.id === 13) {
+    battle.playerDebuff.hit -= power;
+    battle.playerDebuff.turns = Math.max(battle.playerDebuff.turns, turns);
+  } else if (special.id === 14) {
+    battle.enemyBuff.fenshen = Math.min(70, 30 + Math.floor(special.level / 5));
+    battle.enemyBuff.eva += power;
+  } else if ([20, 24].includes(special.id)) {
+    battle.enemyBuff.pdef += power * 3;
+    battle.enemyBuff.eva += power;
+  } else if (special.id === 27) {
+    battle.enemyBuff.agi += power * 2;
+    battle.enemyBuff.atk += power;
+  } else if (special.id === 28) {
+    battle.enemyBuff.str += power * 2;
+    battle.enemyBuff.pdef += power * 3;
+  } else {
+    battle.enemyBuff.hit += power;
+    battle.enemyBuff.atk += power;
+  }
+  battle.enemyBuff.turns = Math.max(battle.enemyBuff.turns, turns);
+  battle.log.push(`${battle.enemyName}的战斗气势陡然攀升。`);
+}
+
+function castEnemySpell(
+  battle: OriginalBattle,
+  actor: SceneActorState,
+  record: OriginalRecord,
+  special: EnemySpecial,
+  random: RandomInt,
+) {
+  const enemyPower =
+      diminishingBattleResource(battle.enemyMp) +
+      special.level * 20 +
+      n(record, "mp_plus") * 30,
+    stats = derivedStats(actor),
+    playerGuard =
+      diminishingBattleResource(actor.mp) + actor.mpPlus * 20 + stats.int * 50,
+    baseDamage = Math.max(
+      Math.floor(special.level / 2),
+      Math.floor((enemyPower - Math.floor(playerGuard * 0.45)) / 20),
+    ),
+    strikes = [32, 36, 40].includes(special.id) ? 3 : 1;
+  let total = 0;
+  for (let strike = 0; strike < strikes; strike++) {
+    const variance = 85 + random(31),
+      damage = Math.max(1, Math.floor((baseDamage * variance) / 100 / strikes));
+    total += damage;
+    actor.hp = Math.max(0, actor.hp - damage);
+    if (actor.hp <= 0) break;
+  }
+  battle.log.push(`${special.name}命中，共造成 ${total} 点法术伤害。`);
+  if ([29, 31, 32].includes(special.id)) {
+    battle.playerDebuff.hit -= Math.max(6, Math.floor(special.level / 15));
+    battle.playerDebuff.turns = Math.max(battle.playerDebuff.turns, 3);
+  }
+  if ([30, 33, 34, 35, 36].includes(special.id))
+    battle.playerDebuff.burnTurns = Math.max(
+      battle.playerDebuff.burnTurns,
+      2 + Math.floor(special.level / 80),
+    );
+  if ([37, 38, 39, 40].includes(special.id))
+    battle.playerBusy = Math.max(
+      battle.playerBusy,
+      1 + Math.floor(special.level / 90),
+    );
+}
+
 function enemyTurn(
   battle: OriginalBattle,
   actor: SceneActorState,
@@ -493,33 +681,47 @@ function enemyTurn(
     em = special
       ? {
           ...baseMove,
-          text: String(
-            (originalTables.skills[special.id]?.use_text as string[])?.[0] ||
-              `${battle.enemyName}施展${special.name}！`,
-          )
-            .replaceAll("user", battle.enemyName)
-            .replaceAll("target", "你")
-            .replaceAll(
-              "weapon",
-              String(originalTables.weapons[battle.enemyWeaponId]?.name || "兵刃"),
-            ),
+          text: enemySpecialText(battle, special),
           ap: baseMove.ap + 18 + Math.floor(enemyLevel / 12),
           damage: baseMove.damage + 20,
           force: baseMove.force + 10,
         }
       : baseMove;
-  const attacker = enemy(record, battle.enemyFp, em, battle),
-    target = player(actor, blank, battle);
   if (special) {
-    attacker.fp = Math.max(0, attacker.fp - special.fpCost);
+    battle.enemyFp = Math.max(0, battle.enemyFp - special.fpCost);
     battle.enemyMp = Math.max(0, battle.enemyMp - special.mpCost);
+    battle.enemyCooldowns[String(special.id)] = Math.min(
+      9,
+      2 + Math.floor((special.fpCost + special.mpCost) / 180),
+    );
     battle.log.push(`${battle.enemyName}施展绝招「${special.name}」！`);
+    if (special.id >= 29 || special.type === 0) battle.log.push(em.text);
   }
-  const received = attackEffect(attacker, target, random);
-  battle.log.push(em.text, resultText(received, "你"));
-  battle.enemyFp = attacker.fp;
-  actor.hp = Math.max(0, actor.hp - numericDamage(received));
-  actor.maxHp = Math.max(actor.hp, actor.maxHp - received.hurt);
+  if (!special) enemyAttackOnce(battle, actor, record, random, blank, em);
+  else if (special.id >= 29)
+    castEnemySpell(battle, actor, record, special, random);
+  else if (special.type === 0)
+    applyEnemySupportSpecial(battle, special);
+  else {
+    const strikes = [11, 21, 23].includes(special.id) ? 3 : 1;
+    for (let strike = 0; strike < strikes && actor.hp > 0; strike++)
+      enemyAttackOnce(battle, actor, record, random, blank, em);
+    if ([6, 17, 18, 19, 22, 25].includes(special.id) && random(100) < 60)
+      battle.playerBusy = Math.max(
+        battle.playerBusy,
+        1 + Math.floor(special.level / 90),
+      );
+    if (special.id === 6 && actor.weaponId > 0 && random(100) < 55) {
+      actor.weaponId = 0;
+      battle.log.push("你手中兵刃被鞭圈带得脱手飞出！");
+    }
+    if (special.id === 16) {
+      const drained = Math.min(actor.fp, Math.max(50, Math.floor(special.level * 1.5)));
+      actor.fp -= drained;
+      battle.log.push(`你的内力被太极劲卸去 ${drained} 点。`);
+    }
+    if (special.id === 8) battle.enemyWeaponId = 0;
+  }
   const defeatAt =
     battle.mode === "story" && battle.enemyId === 149
       ? Math.floor(fullHp(actor) / 2)
@@ -544,15 +746,39 @@ function chooseEnemySpecial(
       level < 80 ? 0 : level < 120 ? 12 : level < 160 ? 20 : level < 200 ? 28 : 38;
   if (chance === 0) return null;
   if (random(100) >= chance) return null;
-  const ids = [
-    ...new Set(
-      ((record.skill_use as number[] | undefined) || []).flatMap(
-        (id) => (originalTables.kungfus[id]?.skill as number[] | undefined) || [],
-      ),
+  const learned = new Map(
+      ((record.skill_list as number[][] | undefined) || []).map(([id, skillLevel]) => [
+        Number(id),
+        Number(skillLevel || 0),
+      ]),
     ),
-  ].filter((id) => id > 0 && Number(originalTables.skills[id]?.type || 0) === 2);
-  const usable = ids.flatMap((id) => {
+    weaponType = Number(
+      originalTables.weapons[battle.enemyWeaponId]?.type ?? -1,
+    ),
+    candidates = [...learned.entries()].flatMap(([ownerId, ownerLevel]) =>
+      ((originalTables.kungfus[ownerId]?.skill as number[] | undefined) || [])
+        .filter((id) => id > 0)
+        .map((id) => ({ id, ownerId, ownerLevel })),
+    ),
+    unique = [
+      ...new Map(candidates.map((candidate) => [candidate.id, candidate])).values(),
+    ];
+  const usable = unique.flatMap(({ id, ownerId, ownerLevel }) => {
     const skill = originalTables.skills[id] || {},
+      ownerType = Number(originalTables.kungfus[ownerId]?.type || 0),
+      weaponOk =
+        ownerType === 1 ||
+        ownerType === 8 ||
+        ownerType === 11 ||
+        (ownerType === 2
+          ? battle.enemyWeaponId <= 0
+          : ownerType >= 3 && ownerType <= 6
+            ? weaponType === ownerType - 3
+            : true),
+      requirementsOk = ((skill.require as number[][] | undefined) || []).every(
+        ([requiredId, requiredLevel]) =>
+          requiredId <= 0 || (learned.get(requiredId) || 0) >= requiredLevel,
+      ),
       fpCost = Number(skill.fp_cost || 0),
       rawMpCost = Number(skill.mp_cost || 0),
       // 与玩家同一口径(023 - Game_Battler 4.rb get_mp_cost)：显式 mp_cost 优先，
@@ -565,8 +791,21 @@ function chooseEnemySpecial(
         : rawMpCost,
       mpGate =
         id >= 29 ? Math.max(n(record, "mp_plus") * 2 + 100, mpCost) : mpCost;
-    return battle.enemyFp >= fpCost && battle.enemyMp >= mpGate
-      ? [{ id, name: String(skill.name || `绝招${id}`), fpCost, mpCost }]
+    return weaponOk &&
+      requirementsOk &&
+      !battle.enemyCooldowns[String(id)] &&
+      battle.enemyFp >= fpCost &&
+      battle.enemyMp >= mpGate &&
+      !(Number(skill.type || 0) === 0 && battle.enemyBuff.turns > 0)
+      ? [{
+          id,
+          name: String(skill.name || `绝招${id}`),
+          type: Number(skill.type || 0),
+          ownerId,
+          level: ownerLevel,
+          fpCost,
+          mpCost,
+        }]
       : [];
   });
   return usable.length ? usable[random(usable.length)] : null;
@@ -594,6 +833,7 @@ export function beginOriginalBattle(
     log: [`${String(e.name || "江湖中人")}抱拳道：“请赐教！”`],
     finished: null,
     cooldowns: {},
+    enemyCooldowns: {},
     buff: {
       hit: 0,
       str: 0,
@@ -605,6 +845,17 @@ export function beginOriginalBattle(
       fenshen: -1,
       turns: 0,
     },
+    enemyBuff: {
+      hit: 0,
+      str: 0,
+      eva: 0,
+      agi: 0,
+      atk: 0,
+      pdef: 0,
+      fenshen: -1,
+      turns: 0,
+    },
+    playerDebuff: { hit: 0, turns: 0, burnTurns: 0 },
     enemyDebuff: { hit: 0, busy: 0, turns: 0, eagleTurns: 0, burnTurns: 0 },
     enemyOverride,
     questContext,
@@ -643,6 +894,7 @@ export function attemptEscape(source: OriginalBattle, actor: SceneActorState) {
   };
   tick(battle, actor);
   battle.turn++;
+  if (battle.finished) return { escaped: false, battle };
   const victoryAt = storyVictoryAt(battle);
   if (battle.enemyHp <= victoryAt) {
     battle.finished = "win";
@@ -661,6 +913,7 @@ export function battleItemRound(
   if (battle.finished) return battle;
   tick(battle, actor);
   battle.turn++;
+  if (battle.finished) return battle;
   battle.log.push(itemText);
   const blank: Move = {
       text: "",
@@ -680,6 +933,7 @@ export function battleRound(source: OriginalBattle, actor: SceneActorState) {
   const battle = structuredClone(source);
   if (battle.finished) return battle;
   tick(battle, actor);
+  if (battle.finished) return battle;
   const victoryAt = storyVictoryAt(battle);
   if (battle.enemyHp <= victoryAt) {
     battle.finished = "win";
@@ -754,6 +1008,7 @@ export function specialRound(
     return battle;
   }
   tick(battle, actor);
+  if (battle.finished) return battle;
   const victoryAt = storyVictoryAt(battle);
   if (battle.enemyHp <= victoryAt) {
     battle.finished = "win";
