@@ -453,6 +453,13 @@ test("战斗界面提供完整行囊与临阵武学切换入口", () => {
   // 气血条同时显示当前气血、受伤后的可用上限与未受伤健康上限；
   // 日常侧栏和双方战斗条使用同一套分层语义。
   assert.match(uiSource, /function BattleResourceBar/);
+  assert.match(uiSource, /className="battle-live-fact"/);
+  assert.match(uiSource, /className=\{`battle-popup/);
+  assert.match(uiSource, /aria-busy=\{Boolean\(playback\)\}/);
+  assert.match(worldSource, /buildBattlePlayback/);
+  assert.match(worldSource, /battlePlaybackRef\.current/);
+  assert.match(battleCss, /battle-number-rise/);
+  assert.match(battleCss, /transition:width \.5s/);
   assert.match(uiSource, /function BattleEffectStrip/);
   assert.match(uiSource, /battleStatusEffects\(battle, "enemy", enemyBurnRate\)/);
   assert.match(uiSource, /effects=\{playerEffects\}/);

@@ -211,6 +211,16 @@ test("战斗中可打开完整行囊并临阵切换攻防武学", async ({ page 
   await expect(bag.getByRole("button", { name: /匕首/ })).toBeVisible();
   await expect(bag.getByRole("button", { name: /布衣/ })).toBeVisible();
   await page.keyboard.press("i");
+
+  // 引擎先结算、界面再逐事实播放：播放期间不能叠加下一回合。
+  const attack = battle.getByRole("button", { name: /普通攻击 E/ });
+  await attack.click();
+  await expect(battle.locator(".battle-live-fact")).toBeVisible();
+  await expect(battle).toHaveAttribute("aria-busy", "true");
+  await expect(attack).toBeDisabled();
+  await expect(battle.locator(".battle-live-fact")).toBeHidden({ timeout: 10_000 });
+  await expect(battle).toHaveAttribute("aria-busy", "false");
+  await expect(attack).toBeEnabled();
 });
 
 test("多轮奇遇日志仍可保存并在任务簿中纵向滚动", async ({ page }) => {

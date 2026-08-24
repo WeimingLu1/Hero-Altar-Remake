@@ -59,6 +59,10 @@ import {
   battleNarrativeDisplaySections,
   type BattleNarrative,
 } from "../game-core/battle-narration";
+import type {
+  BattlePlaybackFrame,
+  BattlePresentation,
+} from "../game-core/battle-playback";
 import {
   battleStatusEffects,
   type BattleStatusEffect,
@@ -551,6 +555,7 @@ export function Choice({
 export function BattleView({
   battle,
   narratives,
+  playback,
   actor,
   hp,
   maxHp,
@@ -565,6 +570,12 @@ export function BattleView({
 }: {
   battle: OriginalBattle;
   narratives: BattleNarrative[];
+  playback: {
+    turn: number;
+    index: number;
+    total: number;
+    frame: BattlePlaybackFrame;
+  } | null;
   actor: SceneActorState;
   hp: number;
   maxHp: number;
@@ -580,7 +591,12 @@ export function BattleView({
   const dialogRef = useDialogFocus<HTMLDivElement>();
   const logRef = useRef<HTMLDivElement>(null);
   const latestNarrative = narratives.at(-1);
-  const effect = latestNarrative?.effect || "fist";
+  const effect =
+    playback?.frame.popup?.kind === "heal" ||
+    playback?.frame.popup?.kind === "wound"
+      ? "item"
+      : latestNarrative?.effect || "fist";
+  const presented = playback?.frame.presentation;
   const enemyRecord =
     battle.enemyOverride || originalTables.enemies[battle.enemyId] || {};
   const playerHealthyHp = fullHp(actor);
@@ -612,8 +628,8 @@ export function BattleView({
     });
   }, [battle.log.length, latestNarrative?.loading, latestNarrative?.text.length]);
   return (
-    <div ref={dialogRef} tabIndex={-1} className="battle" role="dialog" aria-modal="true" aria-label={`与${battle.enemyName}战斗`}>
-      <div className={`battle-stage effect-${effect}`} key={`${latestNarrative?.turn || 0}-${effect}`}>
+    <div ref={dialogRef} tabIndex={-1} className="battle" role="dialog" aria-modal="true" aria-busy={Boolean(playback)} aria-label={`与${battle.enemyName}战斗`}>
+      <div className={`battle-stage effect-${effect}`} key={`${latestNarrative?.turn || 0}-${effect}-${playback?.index ?? "idle"}`}>
         <div className="battle-arena" aria-hidden="true"><i /><i /><i /></div>
         <div className="fighter hero">
           <CharacterPortrait
@@ -642,6 +658,20 @@ export function BattleView({
           <i className="fx-impact" /><i className="fx-ring" />
           <i className="fx-particle p1" /><i className="fx-particle p2" /><i className="fx-particle p3" />
         </div>
+        {playback && (
+          <div className="battle-live-fact" role="status" aria-live="assertive">
+            <small>即时结算 {playback.index + 1}/{playback.total}</small>
+            <strong>{playback.frame.fact}</strong>
+          </div>
+        )}
+        {playback?.frame.popup && (
+          <strong
+            className={`battle-popup ${playback.frame.popup.side} ${playback.frame.popup.kind}`}
+            aria-hidden="true"
+          >
+            {playback.frame.popup.text}
+          </strong>
+        )}
         <div className="fighter enemy">
           <CharacterPortrait
             npcId={battle.enemyId}
@@ -654,16 +684,16 @@ export function BattleView({
       <div className="battle-bars">
         <div className="side-bars">
           <b>你</b>
-          <BattleResourceBar label="气血" value={hp} limit={maxHp} ceiling={playerHealthyHp} tone="health" />
-          <BattleResourceBar label="内力" value={actor.fp} limit={actor.maxFp} tone="force" />
-          <BattleResourceBar label="法力" value={actor.mp} limit={actor.maxMp} tone="magic" />
+          <BattleResourceBar label="气血" value={presented?.playerHp ?? hp} limit={presented?.playerMaxHp ?? maxHp} ceiling={playerHealthyHp} tone="health" />
+          <BattleResourceBar label="内力" value={presented?.playerFp ?? actor.fp} limit={presented?.playerMaxFp ?? actor.maxFp} tone="force" />
+          <BattleResourceBar label="法力" value={presented?.playerMp ?? actor.mp} limit={presented?.playerMaxMp ?? actor.maxMp} tone="magic" />
           <BattleEffectStrip effects={playerEffects} owner="玩家" />
         </div>
         <div className="side-bars enemy">
           <b>{battle.enemyName}</b>
-          <BattleResourceBar label="气血" value={battle.enemyHp} limit={battle.enemyMaxHp} ceiling={enemyHealthyHp} tone="health" />
-          <BattleResourceBar label="内力" value={battle.enemyFp} limit={Number(enemyRecord.maxfp || 0)} tone="force" />
-          <BattleResourceBar label="法力" value={battle.enemyMp} limit={Number(enemyRecord.maxmp || 0)} tone="magic" />
+          <BattleResourceBar label="气血" value={presented?.enemyHp ?? battle.enemyHp} limit={presented?.enemyMaxHp ?? battle.enemyMaxHp} ceiling={enemyHealthyHp} tone="health" />
+          <BattleResourceBar label="内力" value={presented?.enemyFp ?? battle.enemyFp} limit={Number(enemyRecord.maxfp || 0)} tone="force" />
+          <BattleResourceBar label="法力" value={presented?.enemyMp ?? battle.enemyMp} limit={Number(enemyRecord.maxmp || 0)} tone="magic" />
           <BattleEffectStrip effects={enemyEffects} owner={battle.enemyName} />
         </div>
       </div>
@@ -676,35 +706,47 @@ export function BattleView({
       >
         <header><span>战况实录</span><i>LIVE</i></header>
         {!narratives.length && <p className="battle-opening"><span>{battle.log[0]}</span></p>}
-        {narratives.map((item, index) => (
+        {narratives.map((item, index) => {
+          const playingThisEntry = Boolean(
+              playback &&
+                index === narratives.length - 1 &&
+                playback.turn === item.turn &&
+                playback.total === item.facts.length &&
+                item.facts[playback.index] === playback.frame.fact,
+            ),
+            visibleFacts = playingThisEntry
+              ? item.facts.slice(0, playback!.index + 1)
+              : item.facts;
+          return (
           <article className={index === narratives.length - 1 ? "latest" : ""} key={`${item.turn}-${index}`}>
             <header>
               <time>第 {item.turn} 回合</time>
-              <small>{item.facts.map((fact, factIndex) => (
+              <small>{visibleFacts.map((fact, factIndex) => (
                 <span className={battleFactIsImpact(fact) ? "impact" : undefined} key={factIndex}>{fact}</span>
               ))}</small>
             </header>
             <div className="battle-narrative-copy">
-              {battleNarrativeDisplaySections(item.text, item.facts, !item.loading).map((section, sectionIndex) => (
+              {!playingThisEntry && battleNarrativeDisplaySections(item.text, item.facts, !item.loading).map((section, sectionIndex) => (
                 <p className={`narrative-${section.speaker}`} key={sectionIndex}>
                   <span>{section.text}</span>
                 </p>
               ))}
-              {!item.text && <p className="narrative-loading">风声骤紧，正在演绎这一回合……</p>}
+              {playingThisEntry && <p className="narrative-loading">正在按真实结算顺序演出本回合……</p>}
+              {!playingThisEntry && !item.text && <p className="narrative-loading">风声骤紧，正在演绎这一回合……</p>}
             </div>
             {item.error && <em>小说战报生成中断，已保留真实结算：{item.error}</em>}
           </article>
-        ))}
+        )})}
         <div className="battle-log-anchor" aria-hidden="true" />
       </div>
       <nav>
-        <button onClick={battle.finished ? leave : fight}>
+        <button onClick={battle.finished ? leave : fight} disabled={Boolean(playback)}>
           {battle.finished ? "处理战果" : "普通攻击"} <kbd>E</kbd>
         </button>
-        <button onClick={openSpecial} disabled={Boolean(battle.finished)}>
+        <button onClick={openSpecial} disabled={Boolean(battle.finished || playback)}>
           绝招 <kbd>Q</kbd>
         </button>
-        <button onClick={openInner} disabled={Boolean(battle.finished)}>
+        <button onClick={openInner} disabled={Boolean(battle.finished || playback)}>
           调息 <kbd>O</kbd>
         </button>
         <button onClick={openItem} disabled={Boolean(battle.finished)}>
@@ -718,7 +760,7 @@ export function BattleView({
         </button>
         <button
           onClick={battle.mode === "spar" ? leave : flee}
-          disabled={Boolean(battle.finished)}
+          disabled={Boolean(battle.finished || playback)}
         >
           {battle.mode === "spar" ? "退出" : "逃跑"}{" "}
           <kbd>{battle.mode === "spar" ? "X" : "G"}</kbd>
@@ -1017,9 +1059,11 @@ export function BattleInnerPicker({
 }
 export function BattleInfoPanel({
   battle,
+  presentation,
   close,
 }: {
   battle: OriginalBattle;
+  presentation?: BattlePresentation;
   close: () => void;
 }) {
   const dialogRef = useDialogFocus<HTMLDivElement>();
@@ -1032,9 +1076,9 @@ export function BattleInfoPanel({
       ? `${originalTables.weapons[weaponId].name}`
       : "";
   const stats = [
-    ["气血", `${battle.enemyHp}/${battle.enemyMaxHp}`],
-    ["内力", `${battle.enemyFp}/${Number(record.maxfp || 0)}`],
-    ["法力", `${battle.enemyMp}/${Number(record.maxmp || 0)}`],
+    ["气血", `${presentation?.enemyHp ?? battle.enemyHp}/${presentation?.enemyMaxHp ?? battle.enemyMaxHp}`],
+    ["内力", `${presentation?.enemyFp ?? battle.enemyFp}/${Number(record.maxfp || 0)}`],
+    ["法力", `${presentation?.enemyMp ?? battle.enemyMp}/${Number(record.maxmp || 0)}`],
     ["膂力", String(Number(record.str || 0))],
     ["敏捷", String(Number(record.agi || 0))],
     ["悟性", String(Number(record.int || 0))],

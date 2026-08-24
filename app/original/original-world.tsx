@@ -144,6 +144,12 @@ import {
   type BattleNarrationEvent,
 } from "../game-core/battle-narration";
 import {
+  battlePresentation,
+  buildBattlePlayback,
+  type BattlePlaybackFrame,
+  type BattlePresentation,
+} from "../game-core/battle-playback";
+import {
   probeLlmHealth,
   streamNpcReply,
   type ChatMessage,
@@ -251,6 +257,11 @@ type NpcChatState = {
   started: boolean;
   shownAt: number;
 };
+type BattlePlaybackState = {
+  turn: number;
+  index: number;
+  frames: BattlePlaybackFrame[];
+};
 // 自动交谈一次开启最多推进的步数(约 12 轮往返)；到达后自动关闭，
 // 避免挂机时无限消耗本地模型资源。
 const NPC_AUTO_TURN_LIMIT = 24;
@@ -346,6 +357,8 @@ export default function OriginalWorld({
   const [pendingSwordBattle, setPendingSwordBattle] =
     useState<OriginalBattle | null>(null);
   const [battleNarratives, setBattleNarratives] = useState<BattleNarrative[]>([]);
+  const [battlePlayback, setBattlePlayback] =
+    useState<BattlePlaybackState | null>(null);
   const [battleOutcome, setBattleOutcome] = useState<number | null>(null);
   const [battleItem, setBattleItem] = useState<number | null>(null);
   const [specialMenu, setSpecialMenu] = useState<number | null>(null);
@@ -389,6 +402,8 @@ export default function OriginalWorld({
     chatAbort = useRef<AbortController | null>(null),
     battleNarrationAbort = useRef<AbortController | null>(null),
     battleNarrativesRef = useRef<BattleNarrative[]>([]),
+    battlePlaybackRef = useRef<BattlePlaybackState | null>(null),
+    battlePlaybackReopenInner = useRef<number | null>(null),
     llmHealthCache = useRef<{ checkedAt: number; ok: boolean } | null>(null),
     runtimeMounted = useRef(true),
     stateRef = useRef<WorldSave>(state),
@@ -1675,9 +1690,52 @@ export default function OriginalWorld({
     battleNarrationAbort.current?.abort();
     battleNarrationAbort.current = null;
     battleNarrativesRef.current = [];
+    battlePlaybackRef.current = null;
+    battlePlaybackReopenInner.current = null;
     const id = window.setTimeout(() => setBattleNarratives([]), 0);
-    return () => window.clearTimeout(id);
+    const playbackId = window.setTimeout(() => setBattlePlayback(null), 0);
+    return () => {
+      window.clearTimeout(id);
+      window.clearTimeout(playbackId);
+    };
   }, [battle]);
+  const startBattlePlayback = useCallback(
+    (
+      facts: string[],
+      before: BattlePresentation,
+      after: BattlePresentation,
+      turn: number,
+      enemyName: string,
+    ) => {
+      const frames = buildBattlePlayback(facts, before, after, enemyName);
+      if (!frames.length) return;
+      const playback = { turn, index: 0, frames };
+      battlePlaybackRef.current = playback;
+      setBattlePlayback(playback);
+    },
+    [],
+  );
+  useEffect(() => {
+    if (!battlePlayback) return;
+    const frame = battlePlayback.frames[battlePlayback.index],
+      timer = window.setTimeout(() => {
+        setBattlePlayback((active) => {
+          if (!active || active !== battlePlayback) return active;
+          if (active.index >= active.frames.length - 1) {
+            battlePlaybackRef.current = null;
+            const reopenInner = battlePlaybackReopenInner.current;
+            battlePlaybackReopenInner.current = null;
+            if (reopenInner !== null)
+              window.setTimeout(() => setBattleInner(reopenInner), 0);
+            return null;
+          }
+          const next = { ...active, index: active.index + 1 };
+          battlePlaybackRef.current = next;
+          return next;
+        });
+      }, frame.durationMs);
+    return () => window.clearTimeout(timer);
+  }, [battlePlayback]);
   const narrateBattleRound = useCallback(async (event: BattleNarrationEvent) => {
     if (!event.facts.length) return;
     const controller = new AbortController();
@@ -1772,32 +1830,56 @@ export default function OriginalWorld({
     }
   }, []);
   const fight = useCallback(() => {
-    if (!battle || battle.finished) return;
-    const playerHpBefore = stateRef.current.actor.hp,
-      enemyHpBefore = battle.enemyHp,
+    if (!battle || battle.finished || battlePlaybackRef.current) return;
+    const before = battlePresentation(stateRef.current.actor, battle),
+      playerHpBefore = before.playerHp,
+      enemyHpBefore = before.enemyHp,
       logLength = battle.log.length,
       next = structuredClone(stateRef.current),
-      round = battleRound(battle, next.actor);
+      round = battleRound(battle, next.actor),
+      facts = round.log.slice(logLength);
     sync(next);
     setBattle(round);
+    startBattlePlayback(
+      facts,
+      before,
+      battlePresentation(next.actor, round),
+      round.turn,
+      round.enemyName,
+    );
     void narrateBattleRound({
       battle: round,
       actor: next.actor,
       mapName: getOriginalMap(next.position.mapId).name,
-      facts: round.log.slice(logLength),
+      facts,
       playerHpBefore,
       enemyHpBefore,
     });
-  }, [battle, narrateBattleRound, sync]);
+  }, [battle, narrateBattleRound, startBattlePlayback, sync]);
   // 战斗内调息：吸气恢复气血、疗伤恢复伤势上限，均不消耗回合（与原版一致），
   // 成功后保持子菜单打开以便连续调息；内力/气血不足等失败原因直接提示。
   const fightInnerAction = useCallback(
     (index: number) => {
-      if (!battle) return;
-      const next = structuredClone(stateRef.current);
+      if (!battle || battlePlaybackRef.current) return;
+      const before = battlePresentation(stateRef.current.actor, battle),
+        next = structuredClone(stateRef.current);
       if (index === 0) {
         const ok = recoverHp(next.actor);
         sync(next);
+        if (ok) {
+          const after = battlePresentation(next.actor, battle),
+            healed = after.playerHp - before.playerHp,
+            cost = before.playerFp - after.playerFp;
+          battlePlaybackReopenInner.current = index;
+          setBattleInner(null);
+          startBattlePlayback(
+            [`你提气归元，恢复 ${healed} 点气血，消耗 ${cost} 点内力。`],
+            before,
+            after,
+            battle.turn,
+            battle.enemyName,
+          );
+        }
         setNotice(
           ok
             ? "吸气调息，气血有所恢复（不消耗回合）。"
@@ -1807,18 +1889,32 @@ export default function OriginalWorld({
       }
       const ok = healWounds(next.actor);
       sync(next);
+      if (ok) {
+        const after = battlePresentation(next.actor, battle),
+          healed = after.playerMaxHp - before.playerMaxHp,
+          cost = before.playerFp - after.playerFp;
+        battlePlaybackReopenInner.current = index;
+        setBattleInner(null);
+        startBattlePlayback(
+          [`你运转内功疗伤，伤势上限恢复 ${healed} 点，消耗 ${cost} 点内力。`],
+          before,
+          after,
+          battle.turn,
+          battle.enemyName,
+        );
+      }
       setNotice(
         ok
           ? "运功疗伤，伤势有所恢复（不消耗回合）。"
           : "当前条件不足以疗伤：需内功有效等级≥45、内力≥100、内力上限≥150且确有伤势。",
       );
     },
-    [battle, sync],
+    [battle, startBattlePlayback, sync],
   );
   // 战斗内加力步进：A/D 或鼠标在子菜单的加力行上调整。
   const changeBattleForce = useCallback(
     (delta: number) => {
-      if (!battle || battleInner !== 2) return;
+      if (!battle || battleInner !== 2 || battlePlaybackRef.current) return;
       const next = structuredClone(stateRef.current),
         value = setForcePower(next.actor, next.actor.fpPlus + delta);
       sync(next);
@@ -1828,8 +1924,9 @@ export default function OriginalWorld({
   );
   const fightSpecial = useCallback(
     (id?: number) => {
-      if (!battle || !id) return;
-      const next = structuredClone(stateRef.current);
+      if (!battle || !id || battlePlaybackRef.current) return;
+      const before = battlePresentation(stateRef.current.actor, battle),
+        next = structuredClone(stateRef.current);
       // 绝招要求的功夫只要已学会，就临阵自动换装后直接施展；
       // 换装后仍不满足(内力/冷却/兵器不符/没学过)则提示且不改存档。
       autoEquipSpecialRequirements(next.actor, id);
@@ -1844,26 +1941,34 @@ export default function OriginalWorld({
         );
         return;
       }
-      const playerHpBefore = stateRef.current.actor.hp,
-        enemyHpBefore = battle.enemyHp,
+      const playerHpBefore = before.playerHp,
+        enemyHpBefore = before.enemyHp,
         logLength = battle.log.length,
         playerTechnique = special.name,
-        round = specialRound(battle, next.actor, id);
+        round = specialRound(battle, next.actor, id),
+        facts = round.log.slice(logLength);
       sync(next);
       setBattle(round);
       setSpecialMenu(null);
+      startBattlePlayback(
+        facts,
+        before,
+        battlePresentation(next.actor, round),
+        round.turn,
+        round.enemyName,
+      );
       void narrateBattleRound({
         battle: round,
         actor: next.actor,
         mapName: getOriginalMap(next.position.mapId).name,
-        facts: round.log.slice(logLength),
+        facts,
         playerHpBefore,
         enemyHpBefore,
         playerTechnique,
         effectHint: "special",
       });
     },
-    [battle, narrateBattleRound, sync],
+    [battle, narrateBattleRound, startBattlePlayback, sync],
   );
   const settleBattle = useCallback(
     (kill: boolean) => {
@@ -2047,6 +2152,7 @@ export default function OriginalWorld({
     [battle, closeNpcChat, exitToTitle, openNpcConversation, sync],
   );
   const leaveBattle = useCallback(() => {
+    if (battlePlaybackRef.current) return;
     if (battle?.finished === "win" && battle.mode === "lethal") {
       setBattleOutcome(0);
       return;
@@ -2054,9 +2160,12 @@ export default function OriginalWorld({
     settleBattle(false);
   }, [battle, settleBattle]);
   const fleeBattle = useCallback(() => {
-    if (!battle || battle.finished) return;
-    const next = structuredClone(stateRef.current),
-      result = attemptEscape(battle, next.actor);
+    if (!battle || battle.finished || battlePlaybackRef.current) return;
+    const before = battlePresentation(stateRef.current.actor, battle),
+      logLength = battle.log.length,
+      next = structuredClone(stateRef.current),
+      result = attemptEscape(battle, next.actor),
+      facts = result.battle.log.slice(logLength);
     sync(next);
     if (result.escaped) {
       setBattle(null);
@@ -2064,37 +2173,64 @@ export default function OriginalWorld({
       setSpecialMenu(null);
       setBattleSkill(null);
       setNotice("成功脱离战斗");
-    } else setBattle(result.battle);
-  }, [battle, sync]);
+    } else {
+      setBattle(result.battle);
+      startBattlePlayback(
+        facts,
+        before,
+        battlePresentation(next.actor, result.battle),
+        result.battle.turn,
+        result.battle.enemyName,
+      );
+      void narrateBattleRound({
+        battle: result.battle,
+        actor: next.actor,
+        mapName: getOriginalMap(next.position.mapId).name,
+        facts,
+        playerHpBefore: before.playerHp,
+        enemyHpBefore: before.enemyHp,
+        playerTechnique: "逃跑",
+      });
+    }
+  }, [battle, narrateBattleRound, startBattlePlayback, sync]);
   const consumeBattleItem = useCallback(
     (entry?: BagEntry) => {
-      if (!entry || !battle) return;
-      const next = structuredClone(stateRef.current),
+      if (!entry || !battle || battlePlaybackRef.current) return;
+      const before = battlePresentation(stateRef.current.actor, battle),
+        next = structuredClone(stateRef.current),
         result = activateBattleEntry(next.actor, entry);
       if (!result.ok) {
         setNotice(result.text);
         return;
       }
-      const playerHpBefore = stateRef.current.actor.hp,
-        enemyHpBefore = battle.enemyHp,
+      const playerHpBefore = before.playerHp,
+        enemyHpBefore = before.enemyHp,
         logLength = battle.log.length,
-        round = battleItemRound(battle, next.actor, result.text);
+        round = battleItemRound(battle, next.actor, result.text),
+        facts = round.log.slice(logLength);
       sync(next);
       setBattle(round);
       setNotice(result.text);
       setBattleItem(null);
+      startBattlePlayback(
+        facts,
+        before,
+        battlePresentation(next.actor, round),
+        round.turn,
+        round.enemyName,
+      );
       void narrateBattleRound({
         battle: round,
         actor: next.actor,
         mapName: getOriginalMap(next.position.mapId).name,
-        facts: round.log.slice(logLength),
+        facts,
         playerHpBefore,
         enemyHpBefore,
         playerTechnique: entry.name,
         effectHint: "item",
       });
     },
-    [battle, narrateBattleRound, sync],
+    [battle, narrateBattleRound, startBattlePlayback, sync],
   );
   const activateBagEntry = useCallback(
     (entry?: BagEntry) => {
@@ -3999,6 +4135,16 @@ export default function OriginalWorld({
           <BattleView
             battle={battle}
             narratives={battleNarratives}
+            playback={
+              battlePlayback
+                ? {
+                    turn: battlePlayback.turn,
+                    index: battlePlayback.index,
+                    total: battlePlayback.frames.length,
+                    frame: battlePlayback.frames[battlePlayback.index],
+                  }
+                : null
+            }
             actor={state.actor}
             hp={state.actor.hp}
             maxHp={state.actor.maxHp}
@@ -4024,6 +4170,9 @@ export default function OriginalWorld({
         {battle && battleInfo && (
           <BattleInfoPanel
             battle={battle}
+            presentation={
+              battlePlayback?.frames[battlePlayback.index].presentation
+            }
             close={() => setBattleInfo(false)}
           />
         )}{" "}
