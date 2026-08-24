@@ -59,6 +59,10 @@ import {
   battleNarrativeDisplaySections,
   type BattleNarrative,
 } from "../game-core/battle-narration";
+import {
+  battleStatusEffects,
+  type BattleStatusEffect,
+} from "../game-core/battle-status-effects";
 import { freshTaskState, type TaskState } from "../game-core/task-system";
 import type { WorldSave } from "../game-core/save-system";
 import {
@@ -321,6 +325,35 @@ function BattleResourceBar({
     </label>
   );
 }
+
+function BattleEffectStrip({
+  effects,
+  owner,
+}: {
+  effects: BattleStatusEffect[];
+  owner: string;
+}) {
+  if (!effects.length) return null;
+  return (
+    <section className="battle-effects" aria-label={`${owner}当前战斗效果`}>
+      {effects.map((effect) => (
+        <article
+          className={`battle-effect ${effect.kind}`}
+          title={`${effect.name}：${effect.detail}，剩余 ${effect.turns} 回合`}
+          aria-label={`${effect.name}，${effect.detail}，剩余 ${effect.turns} 回合`}
+          key={effect.key}
+        >
+          <i aria-hidden="true">{effect.icon}</i>
+          <span>
+            <b>{effect.name}</b>
+            <em>{effect.detail}</em>
+          </span>
+          <small>{effect.turns}回合</small>
+        </article>
+      ))}
+    </section>
+  );
+}
 export function Arcade({
   game,
   actor,
@@ -555,6 +588,21 @@ export function BattleView({
     battle.enemyMaxHp,
     Number(enemyRecord.maxhp || battle.enemyMaxHp),
   );
+  const enemySkillUse = (enemyRecord.skill_use as number[] | undefined) || [];
+  const enemyMagicId = enemySkillUse[5] || 8;
+  const enemyMagicLevel =
+    ((enemyRecord.skill_list as number[][] | undefined) || []).find(
+      ([id]) => id === enemyMagicId,
+    )?.[1] || 0;
+  const playerBurnRate = (500 + Math.min(300, enemyMagicLevel)) / 100;
+  const playerMagicLevel = effectiveLevel(actor, actor.skillUse[5] || 8);
+  const enemyBurnRate = (500 + Math.min(300, playerMagicLevel)) / 100;
+  const playerEffects = battleStatusEffects(
+    battle,
+    "player",
+    playerBurnRate,
+  );
+  const enemyEffects = battleStatusEffects(battle, "enemy", enemyBurnRate);
   useEffect(() => {
     const log = logRef.current;
     if (!log) return;
@@ -609,12 +657,14 @@ export function BattleView({
           <BattleResourceBar label="气血" value={hp} limit={maxHp} ceiling={playerHealthyHp} tone="health" />
           <BattleResourceBar label="内力" value={actor.fp} limit={actor.maxFp} tone="force" />
           <BattleResourceBar label="法力" value={actor.mp} limit={actor.maxMp} tone="magic" />
+          <BattleEffectStrip effects={playerEffects} owner="玩家" />
         </div>
         <div className="side-bars enemy">
           <b>{battle.enemyName}</b>
           <BattleResourceBar label="气血" value={battle.enemyHp} limit={battle.enemyMaxHp} ceiling={enemyHealthyHp} tone="health" />
           <BattleResourceBar label="内力" value={battle.enemyFp} limit={Number(enemyRecord.maxfp || 0)} tone="force" />
           <BattleResourceBar label="法力" value={battle.enemyMp} limit={Number(enemyRecord.maxmp || 0)} tone="magic" />
+          <BattleEffectStrip effects={enemyEffects} owner={battle.enemyName} />
         </div>
       </div>
       <div
