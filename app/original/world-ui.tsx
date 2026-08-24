@@ -225,23 +225,99 @@ export function StatusBar({
   label,
   value,
   max,
+  ceiling,
+  ceilingLabel = "健康",
+  deficitLabel = "伤势",
+  tone = "default",
 }: {
   label: string;
   value: number;
   max: number;
+  ceiling?: number;
+  ceilingLabel?: string;
+  deficitLabel?: string;
+  tone?: "default" | "health" | "force" | "magic";
 }) {
-  const percent = Math.max(0, Math.min(100, (value / Math.max(1, max)) * 100));
+  const scale = Math.max(1, value, max, ceiling || 0);
+  const percent = Math.max(0, Math.min(100, (value / scale) * 100));
+  const limitPercent = Math.max(0, Math.min(100, (max / scale) * 100));
+  const deficit = ceiling === undefined ? 0 : Math.max(0, ceiling - max);
   return (
-    <label>
+    <label className={`status-bar tone-${tone}`}>
       <span>
         {label}{" "}
         <em>
           {value.toLocaleString("zh-CN")}/{max.toLocaleString("zh-CN")}
         </em>
       </span>
-      <i>
+      <i
+        role="progressbar"
+        aria-label={`${label} ${value}，当前上限 ${max}${ceiling === undefined ? "" : `，${ceilingLabel}上限 ${ceiling}`}`}
+        aria-valuemin={0}
+        aria-valuemax={scale}
+        aria-valuenow={Math.max(0, value)}
+      >
+        {ceiling !== undefined && (
+          <u aria-hidden="true" style={{ width: `${limitPercent}%` }} />
+        )}
         <b style={{ width: `${percent}%` }} />
+        {ceiling !== undefined && max < scale && (
+          <s aria-hidden="true" style={{ left: `${limitPercent}%` }} />
+        )}
       </i>
+      {ceiling !== undefined && (
+        <small>
+          {ceilingLabel} {ceiling.toLocaleString("zh-CN")}
+          {deficit > 0
+            ? ` · ${deficitLabel} −${deficit.toLocaleString("zh-CN")}`
+            : " · 状态完整"}
+        </small>
+      )}
+    </label>
+  );
+}
+
+function BattleResourceBar({
+  label,
+  value,
+  limit,
+  ceiling,
+  tone,
+}: {
+  label: string;
+  value: number;
+  limit: number;
+  ceiling?: number;
+  tone: "health" | "force" | "magic";
+}) {
+  const scale = Math.max(1, value, limit, ceiling || 0);
+  const valuePercent = Math.max(0, Math.min(100, (value / scale) * 100));
+  const limitPercent = Math.max(0, Math.min(100, (limit / scale) * 100));
+  const wound = ceiling === undefined ? 0 : Math.max(0, ceiling - limit);
+  return (
+    <label className={`battle-resource tone-${tone}`}>
+      {label}
+      <i
+        role="progressbar"
+        aria-label={`${label} ${value}，当前上限 ${limit}${ceiling === undefined ? "" : `，健康上限 ${ceiling}`}`}
+        aria-valuemin={0}
+        aria-valuemax={scale}
+        aria-valuenow={Math.max(0, value)}
+      >
+        {ceiling !== undefined && (
+          <u aria-hidden="true" style={{ width: `${limitPercent}%` }} />
+        )}
+        <b aria-hidden="true" style={{ width: `${valuePercent}%` }} />
+        {ceiling !== undefined && limit < scale && (
+          <s aria-hidden="true" style={{ left: `${limitPercent}%` }} />
+        )}
+      </i>
+      <em>
+        {value}/{limit}
+        {ceiling !== undefined && (
+          <small>{wound > 0 ? `健康 ${ceiling} · 伤势 −${wound}` : `健康 ${ceiling}`}</small>
+        )}
+      </em>
     </label>
   );
 }
@@ -474,6 +550,11 @@ export function BattleView({
   const effect = latestNarrative?.effect || "fist";
   const enemyRecord =
     battle.enemyOverride || originalTables.enemies[battle.enemyId] || {};
+  const playerHealthyHp = fullHp(actor);
+  const enemyHealthyHp = Math.max(
+    battle.enemyMaxHp,
+    Number(enemyRecord.maxhp || battle.enemyMaxHp),
+  );
   useEffect(() => {
     const log = logRef.current;
     if (!log) return;
@@ -525,43 +606,15 @@ export function BattleView({
       <div className="battle-bars">
         <div className="side-bars">
           <b>你</b>
-          <label>
-            气血 <meter min="0" max={Math.max(1, maxHp)} value={hp} />
-            <em>{hp}/{maxHp}</em>
-          </label>
-          <label>
-            内力 <meter min="0" max={Math.max(1, actor.maxFp)} value={actor.fp} />
-            <em>{actor.fp}/{actor.maxFp}</em>
-          </label>
-          <label>
-            法力 <meter min="0" max={Math.max(1, actor.maxMp)} value={actor.mp} />
-            <em>{actor.mp}/{actor.maxMp}</em>
-          </label>
+          <BattleResourceBar label="气血" value={hp} limit={maxHp} ceiling={playerHealthyHp} tone="health" />
+          <BattleResourceBar label="内力" value={actor.fp} limit={actor.maxFp} tone="force" />
+          <BattleResourceBar label="法力" value={actor.mp} limit={actor.maxMp} tone="magic" />
         </div>
         <div className="side-bars enemy">
           <b>{battle.enemyName}</b>
-          <label>
-            气血 <meter min="0" max={Math.max(1, battle.enemyMaxHp)} value={battle.enemyHp} />
-            <em>{battle.enemyHp}/{battle.enemyMaxHp}</em>
-          </label>
-          <label>
-            内力{" "}
-            <meter
-              min="0"
-              max={Math.max(1, Number(enemyRecord.maxfp || 0))}
-              value={battle.enemyFp}
-            />
-            <em>{battle.enemyFp}/{Number(enemyRecord.maxfp || 0)}</em>
-          </label>
-          <label>
-            法力{" "}
-            <meter
-              min="0"
-              max={Math.max(1, Number(enemyRecord.maxmp || 0))}
-              value={battle.enemyMp}
-            />
-            <em>{battle.enemyMp}/{Number(enemyRecord.maxmp || 0)}</em>
-          </label>
+          <BattleResourceBar label="气血" value={battle.enemyHp} limit={battle.enemyMaxHp} ceiling={enemyHealthyHp} tone="health" />
+          <BattleResourceBar label="内力" value={battle.enemyFp} limit={Number(enemyRecord.maxfp || 0)} tone="force" />
+          <BattleResourceBar label="法力" value={battle.enemyMp} limit={Number(enemyRecord.maxmp || 0)} tone="magic" />
         </div>
       </div>
       <div

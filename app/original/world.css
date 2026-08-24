@@ -114,15 +114,46 @@
   color: #aeb9ae;
 }
 .vital-stack label i {
+  position: relative;
+  display: block;
   height: 4px;
   overflow: hidden;
   background: #071009;
 }
+.vital-stack label i u {
+  position: absolute;
+  inset: 0 auto 0 0;
+  display: block;
+  background: #5d3c2f;
+  text-decoration: none;
+}
 .vital-stack label i b {
+  position: absolute;
+  inset: 0 auto 0 0;
   display: block;
   height: 100%;
   background: linear-gradient(90deg, #668f5f, #cfb65f);
 }
+.vital-stack label i s {
+  position: absolute;
+  z-index: 2;
+  top: 0;
+  bottom: 0;
+  width: 1px;
+  background: #f4d58b;
+  box-shadow: 0 0 3px #000;
+  text-decoration: none;
+}
+.vital-stack .status-bar > small {
+  color: #927f6d;
+  font-size: 8px;
+  line-height: 1.1;
+  text-align: right;
+}
+.vital-stack .tone-health i b { background: linear-gradient(90deg, #87362f, #d56450); }
+.vital-stack .tone-health i u { background: #552c28; }
+.vital-stack .tone-force i b { background: linear-gradient(90deg, #315d86, #64a2c9); }
+.vital-stack .tone-magic i b { background: linear-gradient(90deg, #58437f, #9276c5); }
 .actor-numbers,
 .actor-resources {
   display: grid !important;

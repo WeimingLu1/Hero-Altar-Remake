@@ -50,6 +50,7 @@ import {
   activateBattleEntry,
   battleBagEntries,
   discardEntry,
+  fullHp,
   type BagEntry,
 } from "../game-core/inventory-system";
 import {
@@ -4171,16 +4172,20 @@ export default function OriginalWorld({
             label="气血"
             value={state.actor.hp}
             max={state.actor.maxHp}
+            ceiling={fullHp(state.actor)}
+            tone="health"
           />
           <StatusBar
             label="内力"
             value={state.actor.fp}
             max={state.actor.maxFp}
+            tone="force"
           />
           <StatusBar
             label="法力"
             value={state.actor.mp}
             max={state.actor.maxMp}
+            tone="magic"
           />
           <StatusBar
             label="饱食"

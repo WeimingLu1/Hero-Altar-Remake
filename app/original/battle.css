@@ -9,12 +9,17 @@
 .side-bars.enemy{border-color:#8e5848;background:#3a211d18}
 .side-bars>b{display:flex;align-items:center;justify-content:space-between;gap:8px;color:#e7d9b6;font-size:12px;letter-spacing:.1em}
 .side-bars>b button{padding:2px 8px;border:1px solid #9b8957;background:#201f18;color:#f0dfae;font-size:9px}
-.side-bars label{display:grid;grid-template-columns:34px 1fr 88px;align-items:center;gap:8px;font-size:11px;color:#cfc5a6}
-.side-bars meter{width:100%;height:11px;accent-color:#a24c3d}
-.side-bars.enemy meter{accent-color:#c06a4b}
-.side-bars label:nth-child(3) meter{accent-color:#4f7fa8}
-.side-bars label:nth-child(4) meter{accent-color:#7d6bb0}
+.side-bars label{display:grid;grid-template-columns:34px 1fr 132px;align-items:center;gap:8px;font-size:11px;color:#cfc5a6}
+.battle-resource>i{position:relative;display:block;overflow:hidden;width:100%;height:9px;border:1px solid #ffffff18;background:#050907;box-shadow:inset 0 1px 3px #000}
+.battle-resource>i u,.battle-resource>i b{position:absolute;inset:0 auto 0 0;display:block;text-decoration:none}
+.battle-resource>i u{background:#512923}
+.battle-resource>i b{background:linear-gradient(90deg,#85352e,#d7614c)}
+.battle-resource>i s{position:absolute;z-index:2;top:-1px;bottom:-1px;width:1px;background:#f2d58b;box-shadow:0 0 4px #000;text-decoration:none}
+.battle-resource.tone-force>i b{background:linear-gradient(90deg,#28567d,#5c9fc8)}
+.battle-resource.tone-magic>i b{background:linear-gradient(90deg,#513c78,#8f71c2)}
+.side-bars.enemy .battle-resource.tone-health>i b{background:linear-gradient(90deg,#8e382e,#df7558)}
 .side-bars em{text-align:right;font:9px monospace;color:#c6c0aa}
+.side-bars em small{display:block;margin-top:1px;color:#a98b77;font:8px sans-serif;white-space:nowrap}
 .battle-log{position:relative;overflow-y:auto;min-height:0;padding:0 16px 14px;background:linear-gradient(180deg,#030604aa,#0007);border:1px solid #ffffff18;scroll-behavior:smooth;scrollbar-color:#7c6c43 #080d09}
 .battle-log>header{position:sticky;top:0;z-index:1;display:flex;align-items:center;gap:8px;margin:0 -16px 10px;padding:8px 14px;border-bottom:1px solid #8f7d4b55;background:#0a100cde;backdrop-filter:blur(4px);color:#b9aa7d;font-size:11px;letter-spacing:.18em}
 .battle-log>header i{padding:2px 5px;border:1px solid #b84f43;color:#e47b68;font:8px monospace;letter-spacing:.08em;animation:battle-live-pulse 1.4s ease-in-out infinite}

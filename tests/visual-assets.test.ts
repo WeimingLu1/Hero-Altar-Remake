@@ -450,6 +450,13 @@ test("战斗界面提供完整行囊与临阵武学切换入口", () => {
   assert.match(uiSource, /export function BattleSkillPicker/);
   // 战斗内新增：双方内力/法力条、调息子菜单与对手情报面板。
   assert.match(uiSource, /className="side-bars"/);
+  // 气血条同时显示当前气血、受伤后的可用上限与未受伤健康上限；
+  // 日常侧栏和双方战斗条使用同一套分层语义。
+  assert.match(uiSource, /function BattleResourceBar/);
+  assert.match(uiSource, /ceiling=\{playerHealthyHp\}/);
+  assert.match(uiSource, /ceiling=\{enemyHealthyHp\}/);
+  assert.match(uiSource, /伤势 −\$\{wound\}/);
+  assert.match(worldSource, /ceiling=\{fullHp\(state\.actor\)\}/);
   assert.match(uiSource, /调息 <kbd>O<\/kbd>/);
   assert.match(uiSource, /情报 <kbd>V<\/kbd>/);
   assert.match(uiSource, /export function BattleInnerPicker/);
