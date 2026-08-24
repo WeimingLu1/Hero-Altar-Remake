@@ -15,6 +15,7 @@ import {
   specialCooldownTurns,
   specialFpCost,
   specialMpCost,
+  spellGuardStats,
 } from "./special-system";
 import { npcCombatLevel } from "./npc-combat-scaling";
 import { MAX_PLAYER_EXP } from "./progression-limits";
@@ -398,20 +399,25 @@ function castSpell(
     ) +
     // 原作先整除后乘：m_damage*2/100 得整数档位再乘加力。
     Math.floor((damageRate * 2) / 100) * actor.mpPlus;
-  // 法术抵抗按敌方法力(mp)+法点(mp_plus)判定，而不是内力：没有法力的敌人
-  // （如通缉犯）不抗法。若沿用原版"内功抗法"，通缉犯按玩家内力上限缩放
-  // 的加力会让高属性玩家哪怕法力 65535 也必被反噬，实际体验失衡。
-  const enemyMpPlus = n(record, "mp_plus");
+  // 原作以内力/加力抗法；术士同时拥有法力/法点时取较强的一套。动态
+  // 通缉犯的加力按玩家上限生成，spellGuardStats 会单独限幅，避免必反弹。
+  const guard = spellGuardStats(
+    battle.enemyFp,
+    battle.enemyMp,
+    n(record, "fp_plus"),
+    n(record, "mp_plus"),
+    battle.enemyId === 198,
+  );
   const targetPower =
     Math.floor(
       (random(Math.max(1, diminishingBattleResource(battle.enemyMaxHp))) +
-        diminishingBattleResource(battle.enemyMp)) /
+        diminishingBattleResource(guard.resource)) /
         20,
     ) +
-    Math.floor((damageRate * 2) / 100) * random(Math.max(1, enemyMpPlus));
+    Math.floor((damageRate * 2) / 100) * random(Math.max(1, guard.plus));
   const reflected = userPower < targetPower;
   const first = reflected
-    ? Math.floor(((targetPower - userPower + enemyMpPlus) * damageRate) / 100)
+    ? Math.floor(((targetPower - userPower + guard.plus) * damageRate) / 100)
     : Math.floor(((userPower - targetPower) * damageRate) / 100);
   // 原作(022 - Game_Battler 3.rb)：damage2 = first*mp_kf_lv/200；
   // self.damage = (first+damage2)*2，等效倍率 ×(200+精通)/100。
@@ -615,13 +621,21 @@ function castEnemySpell(
   special: EnemySpecial,
   random: RandomInt,
 ) {
-  const enemyPower =
+  const guard = spellGuardStats(
+      actor.fp,
+      actor.mp,
+      actor.fpPlus,
+      actor.mpPlus,
+    ),
+    enemyPower =
       diminishingBattleResource(battle.enemyMp) +
       special.level * 20 +
       n(record, "mp_plus") * 30,
     stats = derivedStats(actor),
     playerGuard =
-      diminishingBattleResource(actor.mp) + actor.mpPlus * 20 + stats.int * 50,
+      diminishingBattleResource(guard.resource) +
+      guard.plus * 20 +
+      stats.int * 50,
     baseDamage = Math.max(
       Math.floor(special.level / 2),
       Math.floor((enemyPower - Math.floor(playerGuard * 0.45)) / 20),

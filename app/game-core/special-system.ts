@@ -66,6 +66,23 @@ export function specialMpCost(actor: SceneActorState, id: number) {
     ? cost
     : actor.mpPlus + Number((s.magic_data as number[])?.[0] || 0);
 }
+
+// 原作以目标当前内力/加力抵抗法术；Web 版术士还有独立法力/法点，
+// 因此两套资源取较强者。动态通缉犯的加力按玩家内力上限生成，可能远超
+// 正常宗师，单独限到 120，避免所有法术都被无条件反弹。
+export function spellGuardStats(
+  fp: number,
+  mp: number,
+  fpPlus: number,
+  mpPlus: number,
+  dynamicWanted = false,
+) {
+  const plus = Math.max(0, Math.floor(fpPlus), Math.floor(mpPlus));
+  return {
+    resource: Math.max(0, Math.floor(fp), Math.floor(mp)),
+    plus: dynamicWanted ? Math.min(120, plus) : plus,
+  };
+}
 function kungfuWeaponRequirement(actor: SceneActorState, kungfuId: number) {
   const type = skillType(kungfuId), name = originalTables.kungfus[kungfuId]?.name,
     weaponName = type === 3 ? "剑类兵器" : type === 4 ? "刀类兵器" : type === 5
@@ -631,9 +648,15 @@ export function specialDamageSummary(actor: SceneActorState, id: number) {
       return `无直接伤害（强化/控制） · 基础攻击约${strike()}`;
   }
 }
-// “普通敌人”参考基准：用于把 castSpell 的法术伤害公式换算成可读的估算值，
-// 只作菜单展示，不参与结算。法术抵抗按敌方法力判定，参考敌人带少量法力。
-const REFERENCE_ENEMY = { maxhp: 3000, mp: 1000, mp_plus: 20 };
+// “普通武林敌人”参考基准：用于把 castSpell 的法术伤害公式换算成可读的
+// 估算值，只作菜单展示，不参与结算。
+const REFERENCE_ENEMY = {
+  maxhp: 3000,
+  fp: 6000,
+  mp: 0,
+  fp_plus: 40,
+  mp_plus: 0,
+};
 const diminishingResource = (value: number) => {
   const safe = Math.max(0, Math.floor(value));
   return safe <= 5000
@@ -644,7 +667,13 @@ const diminishingResource = (value: number) => {
 // 法力对抗不足时与原战斗一致判为反噬（可能伤及自身）。
 function expectedSpellDamage(actor: SceneActorState, spellId: number) {
   const data = (originalTables.skills[spellId]?.magic_data as number[]) || [],
-    rate = Number(data[3] || 0);
+    rate = Number(data[3] || 0),
+    guard = spellGuardStats(
+      REFERENCE_ENEMY.fp,
+      REFERENCE_ENEMY.mp,
+      REFERENCE_ENEMY.fp_plus,
+      REFERENCE_ENEMY.mp_plus,
+    );
   const avg = (max: number) =>
     Math.floor((Math.max(1, Math.floor(max)) - 1) / 2);
   const userPower =
@@ -657,15 +686,15 @@ function expectedSpellDamage(actor: SceneActorState, spellId: number) {
   const targetPower =
     Math.floor(
       (avg(diminishingResource(REFERENCE_ENEMY.maxhp)) +
-        diminishingResource(REFERENCE_ENEMY.mp)) /
+        diminishingResource(guard.resource)) /
         20,
     ) +
-    Math.floor((rate * 2) / 100) * REFERENCE_ENEMY.mp_plus;
+    Math.floor((rate * 2) / 100) * guard.plus;
   const reflected = userPower < targetPower,
     mastery = Math.min(300, effectiveLevel(actor, actor.skillUse[5] || 8)),
     first = reflected
       ? Math.floor(
-          ((targetPower - userPower + REFERENCE_ENEMY.mp_plus) * rate) / 100,
+          ((targetPower - userPower + guard.plus) * rate) / 100,
         )
       : Math.floor(((userPower - targetPower) * rate) / 100),
     damage = (first + Math.floor((first * mastery) / 200)) * 2;

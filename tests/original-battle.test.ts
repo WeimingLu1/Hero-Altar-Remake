@@ -12,7 +12,10 @@ import {
 } from "../app/game-core/original-battle";
 import type { SceneActorState } from "../app/game-core/scene-event";
 import { originalTables } from "../app/game-core/original-data";
-import { battleSpecials } from "../app/game-core/special-system";
+import {
+  battleSpecials,
+  spellGuardStats,
+} from "../app/game-core/special-system";
 const actor = (): SceneActorState => ({
   inventory: {},
   gold: 100,
@@ -68,6 +71,20 @@ test("high spell resources use diminishing formula inputs instead of a damage ca
   assert.ok(diminishingBattleResource(65000) > diminishingBattleResource(10000));
   assert.ok(diminishingBattleResource(65000) < 65000);
 });
+test("法术抗性取内力与法力较强者，动态通缉犯加成限于宗师区间", () => {
+  assert.deepEqual(spellGuardStats(36_000, 0, 84, 0), {
+    resource: 36_000,
+    plus: 84,
+  });
+  assert.deepEqual(spellGuardStats(8_000, 20_000, 40, 70), {
+    resource: 20_000,
+    plus: 70,
+  });
+  assert.deepEqual(spellGuardStats(45_000, 0, 1125, 0, true), {
+    resource: 45_000,
+    plus: 120,
+  });
+});
 test("burning damage applies only a level-scaled fraction of the force gap", () => {
   const low = burningDamage(65000, 0, 0, () => 0),
     master = burningDamage(65000, 0, 300, () => 0);
@@ -109,6 +126,16 @@ test("NPC 辅助绝招、法术和独立冷却会真实改变战斗状态", () =
   assert.ok(spell.log.some((line) => line.includes("法术伤害")));
   assert.ok(spellActor.hp < 100000);
   assert.ok(spell.enemyMp < Number(originalTables.enemies[144]?.mp || 0));
+
+  const unguarded = actor(),
+    innerGuarded = actor();
+  unguarded.hp = unguarded.maxHp = 100000;
+  innerGuarded.hp = innerGuarded.maxHp = 100000;
+  innerGuarded.fp = innerGuarded.maxFp = 50000;
+  innerGuarded.fpPlus = 100;
+  battleRound(beginOriginalBattle(144, 9), unguarded);
+  battleRound(beginOriginalBattle(144, 9), innerGuarded);
+  assert.ok(innerGuarded.hp > unguarded.hp);
 });
 test("original sparring round is deterministic and changes combat state", () => {
   const a = actor(),
@@ -220,6 +247,56 @@ function specialActor(specialId: number) {
   }
   return a;
 }
+
+test("冰凌剑对宗师造成重创但不再稳定一招击杀", () => {
+  let totalDamage = 0,
+    kills = 0;
+  for (let seed = 1; seed <= 200; seed++) {
+    const a = specialActor(40);
+    a.hp = a.maxHp = 12_000;
+    a.mp = a.maxMp = 45_000;
+    a.mpPlus = 100;
+    a.exp = 1_000_000;
+    const battle = beginOriginalBattle(111, seed),
+      initialHp = battle.enemyHp,
+      result = specialRound(battle, a, 40);
+    totalDamage += initialHp - result.enemyHp;
+    if (result.enemyHp === 0) kills++;
+  }
+  const averageDamage = totalDamage / 200;
+  assert.equal(kills, 0);
+  assert.ok(averageDamage >= 3_000 && averageDamage <= 6_000, String(averageDamage));
+});
+
+test("动态通缉犯抗法有强度但不会因超高加力变成必反弹", () => {
+  const wanted = {
+    ...originalTables.enemies[198],
+    name: "动态通缉犯",
+    hp: 12_000,
+    maxhp: 12_000,
+    fp: 45_000,
+    maxfp: 45_000,
+    fp_plus: 1125,
+    mp: 0,
+    maxmp: 0,
+    mp_plus: 0,
+    exp: 1_000_000,
+  };
+  let reflectedRounds = 0,
+    totalDamage = 0;
+  for (let seed = 1; seed <= 200; seed++) {
+    const a = specialActor(40);
+    a.hp = a.maxHp = 12_000;
+    a.mp = a.maxMp = 45_000;
+    a.mpPlus = 100;
+    a.exp = 1_000_000;
+    const result = specialRound(beginOriginalBattle(198, seed, wanted), a, 40);
+    totalDamage += 12_000 - result.enemyHp;
+    if (result.log.some((line) => line.includes("反弹"))) reflectedRounds++;
+  }
+  assert.ok(reflectedRounds > 0 && reflectedRounds < 200, String(reflectedRounds));
+  assert.ok(totalDamage > 0);
+});
 
 const sturdyEnemy = {
   ...originalTables.enemies[1],
