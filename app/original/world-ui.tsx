@@ -539,10 +539,7 @@ export function BattleView({
           </label>
         </div>
         <div className="side-bars enemy">
-          <b>
-            {battle.enemyName}
-            <button type="button" onClick={openInfo} title="查看对手全部参数">情报</button>
-          </b>
+          <b>{battle.enemyName}</b>
           <label>
             气血 <meter min="0" max={Math.max(1, battle.enemyMaxHp)} value={battle.enemyHp} />
             <em>{battle.enemyHp}/{battle.enemyMaxHp}</em>
@@ -1130,7 +1127,7 @@ export function CultivationPanel({
             })}
           </div>
         </section>
-        <section className="cultivation-section">
+        <section className="cultivation-section cultivation-practice-section">
           <h4>自行练习</h4>
           {practice.length ? (
             <div className="cultivation-practice">

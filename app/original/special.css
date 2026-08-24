@@ -222,6 +222,26 @@
 .battle-info-skills > i { color: #b99a51; font-size: 9px; font-style: normal; letter-spacing: .14em; }
 .battle-info-skills p { margin: 6px 0 0; color: #d9d0b5; font-size: 10px; line-height: 1.7; }
 .battle-info-skills.empty { color: #839087; font-size: 10px; }
+/* 情报面板关闭按钮与其它菜单按钮同款主题。 */
+.battle-info-panel footer {
+  display: flex;
+  justify-content: center;
+  gap: 8px;
+  padding-top: 8px;
+}
+.battle-info-panel footer button {
+  padding: 7px 18px;
+  border: 1px solid #9b8957;
+  background: #201f18;
+  color: #f0dfae;
+  font-size: 11px;
+  cursor: pointer;
+}
+.battle-info-panel footer button:hover {
+  border-color: #e2c66f;
+  background: #2c2718;
+  color: #f7e3a5;
+}
 
 .special-picker footer {
   padding: 9px 8px 1px;
