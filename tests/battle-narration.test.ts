@@ -5,6 +5,7 @@ import {
   battleFactIsImpact,
   battleFactTechniqueNames,
   battleNarrativeDisplaySections,
+  battleNarrationRequiredTokens,
   battleNarrativeTextTokens,
   buildBattleNarrationFallback,
   buildBattleNarrationFacts,
@@ -63,9 +64,11 @@ test("battle narration prompt grounds wuxia prose in both fighters and exact res
   assert.match(prompt, /不得写骨折、内伤或吐血/);
   assert.match(prompt, /不得凭空加入回血、疗伤、消耗资源/);
   assert.match(prompt, /不能遗漏、改数、重复、把数字写成中文/);
-  assert.match(prompt, /招式名称.*必须在该行演绎中原字保留/);
+  assert.match(prompt, /每一个招式名称.*都必须在同编号演绎中原字出现/);
   assert.match(prompt, /界面会自动高亮这些数字/);
   assert.match(prompt, /界面会自动高亮招式名/);
+  assert.match(prompt, /最高优先级执行顺序/);
+  assert.match(prompt, /任何文学润色都不得挤掉这些必显词/);
 });
 
 test("battle narration strips old ownership labels and presents every line uniformly", () => {
@@ -88,6 +91,28 @@ test("battle prompt uses exact numbered fact anchors without ownership classific
   assert.doesNotMatch(prompt, /【你出招】|【对手应招】|【对手出招】|【你应招】/);
   assert.match(facts, /【事实1】测试少侠一掌拍向潘小莲。\n【事实2】潘小莲受到 16 点伤害。/);
   assert.match(facts, /逐字复制.*全角竖线“｜”/);
+});
+
+test("battle prompt lists exact required techniques and numbers for every fact", () => {
+  const input = event();
+  input.facts = [
+    "你一招「劈雷坠地」捶向余鸿儒双腿。",
+    "余鸿儒受到 488 点伤害。",
+    "余鸿儒一招「弯弓射雕」，手中精钢杖脱手飞出。",
+    "你侧身避开。",
+  ];
+  assert.equal(battleNarrationRequiredTokens(input.facts), [
+    "事实1：必显招式=劈雷坠地；必显数字=无",
+    "事实2：必显招式=无；必显数字=488",
+    "事实3：必显招式=弯弓射雕；必显数字=无",
+    "事实4：必显招式=无；必显数字=无",
+  ].join("\n"));
+  const facts = buildBattleNarrationFacts(input);
+  assert.match(facts, /逐行必显清单/);
+  assert.match(facts, /事实1：必显招式=劈雷坠地；必显数字=无/);
+  assert.match(facts, /事实2：必显招式=无；必显数字=488/);
+  assert.match(facts, /事实3：必显招式=弯弓射雕；必显数字=无/);
+  assert.match(facts, /不得用代词、中文数字或泛称替代/);
 });
 
 test("battle continuation preserves one output paragraph for every original log line", () => {

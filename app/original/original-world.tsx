@@ -1783,8 +1783,8 @@ export default function OriginalWorld({
         nextSpeaker: "战斗叙事",
         maxOutputTokens: Math.min(3072, Math.max(384, event.facts.length * 110)),
         timeoutMs: Math.min(90_000, Math.max(30_000, event.facts.length * 4_000)),
-        temperature: 0.62,
-        topP: 0.85,
+        temperature: 0.46,
+        topP: 0.78,
         signal: controller.signal,
         onToken: (token) => {
           tokenBuffer += token;

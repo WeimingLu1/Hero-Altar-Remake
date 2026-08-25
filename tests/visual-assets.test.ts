@@ -445,6 +445,8 @@ test("任务交谈预先锁定同一委托背景，战斗舞台按招式演出�
   assert.match(battleCss, /narrative-impact\{color:#ff8f79/);
   assert.match(uiSource, /battleFactIsImpact\(fact\)/);
   assert.match(worldSource, /maxOutputTokens: Math\.min\(3072/);
+  assert.match(worldSource, /temperature: 0\.46/);
+  assert.match(worldSource, /topP: 0\.78/);
   assert.match(battleCss, /prefers-reduced-motion/);
 });
 

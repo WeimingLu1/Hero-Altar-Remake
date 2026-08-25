@@ -114,6 +114,13 @@ export function battleFactTechniqueNames(fact: string) {
   return [...new Set(names)].sort((a, b) => b.length - a.length);
 }
 
+export function battleNarrationRequiredTokens(facts: string[]) {
+  return facts.map((fact, index) => {
+    const techniques = battleFactTechniqueNames(fact), numbers = numberTokens(fact);
+    return `事实${index + 1}：必显招式=${techniques.join("、") || "无"}；必显数字=${numbers.join("、") || "无"}`;
+  }).join("\n");
+}
+
 const numberedBattleNarrativeProse = (
   text: string,
   facts: string[],
@@ -207,6 +214,7 @@ export function buildBattleNarrationPrompt(event: BattleNarrationEvent) {
 【对手】${promptData(battle.enemyName, 60)}，${Number(record.age || 30)}岁，${lore.appearance}；${lore.identity}；${lore.personality}；经历：${lore.background}；综合武境第${levelTier(martial.value)}阶“${martial.realm}”；使用${enemyWeapon}；主要武功：${skills}。
 【本回合所用武学】玩家明确使用“${playerAttack}”；对手当前攻击武学为“${enemyAttack}”。引擎逐条事实中的原始出招句是本回合动作设计的第一依据。
 【本回合逐条续写协议】原始战报共有${factCount}句，你必须依次输出${factCount}行。每行格式固定为“【事实N】原始事实逐字复制｜只属于该事实的演绎”，其中N从1连续到${factCount}。事实锚点必须逐字复制，不能改标点、数字或措辞；第1句只对应第1行，第2句只对应第2行，以此类推。不得合并、拆分、删减、补行或重新判断谁出招、谁应招。
+【最高优先级执行顺序】用户消息会附带“逐行必显清单”。写每一行时必须先找到同编号清单，把其中所有“必显招式”和“必显数字”原样写入竖线后的演绎正文，再补充武侠动作描写。任何文学润色都不得挤掉这些必显词。清单写“无”才可不写；不要输出清单本身。
 
 原作战报格式依据：原版每次攻防严格依次显示“攻击者的原始出招句”与“目标的闪避/招架/命中结果及伤势状态”；一回合若双方都能行动，就是玩家攻防两段，再接对手攻防两段。
 
@@ -218,8 +226,8 @@ export function buildBattleNarrationPrompt(event: BattleNarrationEvent) {
 4. 必须保留并重点演绎原始出招句中的招式、动作方向、攻击部位、兵器和关键意象，围绕它具体描写起手、发力、路线、变招、拆解与落点；不得把特色招式淡化成泛泛的“一拳”“一掌”“一剑”，也不得换成双方没有使用的其他武功。
 5. 每个实际出招者至少写清起手、发力、行进路线或变招中的两项，并写出双方距离和攻防节奏；只加入有助于看清交锋的兵刃碰撞、内力或可观察伤势，不要逐项堆砌无关环境、衣袂、神态和呼吸。
 6. 非必要不加入对话；允许一声极短的喝声或闷哼，不能聊天，也不能凭空泄露隐秘设定。
-7. 对应原始事实里出现的每一个阿拉伯数字都必须在该行演绎中逐字出现，不能遗漏、改数、重复、把数字写成中文，也不能新增距离、次数、回合、层数或招数等数量；界面会自动高亮这些数字，不要自行添加 Markdown 星号或其他标记。
-7a. 对应原始事实里的招式名称（包括「」中的招名以及火风暴、连珠雷等绝招名）必须在该行演绎中原字保留，不能改名、省略或换成泛称；界面会自动高亮招式名，不要自行添加 Markdown 星号或其他标记。
+7. “逐行必显清单”中的每一个阿拉伯数字都必须在同编号演绎中逐字出现，并保留原事实里的“点伤害 / 点气血 / 点内力”等单位和语义；不能遗漏、改数、重复、把数字写成中文，也不能新增距离、次数、回合、层数或招数等数量。界面会自动高亮这些数字，不要自行添加 Markdown 星号或其他标记。
+7a. “逐行必显清单”中的每一个招式名称（包括「」中的招名以及火风暴、连珠雷等绝招名）都必须在同编号演绎中原字出现，不能改名、省略或换成泛称。界面会自动高亮招式名，不要自行添加 Markdown 星号或其他标记。
 7b. 除非对应原始日志明确写出兵器脱手、折断、毁坏或掉落，否则不得描写任何一方兵器坠地、脱手或损毁；小说描写不能暗示游戏里没有发生的装备变化。
 8. 严格按本回合损失占最大气血的比例控制伤势：零伤害只能写卸力或未破防；不足一成只能是轻微疼痛、擦伤或气息波动；一至三成可以写明显疼痛、淤伤、踉跄，但事实未注明时不得写骨折、内伤或吐血；超过三成才可描写重创。只有结算明确落败或死亡时才能写失去战力或死亡。
 9. 采用经典金庸式武侠叙事所强调的清峻、明快和人招合一的效果，但不得照抄任何现成作品：既写招式，也写攻守双方一瞬间的判断、胆气和身份气度；以准确动词和攻防因果制造画面，不靠空泛成语与形容词堆砌。避免现代网络用语和游戏系统口吻。
@@ -230,6 +238,9 @@ export function buildBattleNarrationFacts(event: BattleNarrationEvent) {
   const { battle, actor, facts, playerHpBefore, enemyHpBefore } = event;
   return `这是第${battle.turn}回合刚刚完成的唯一真实结算。以下逐条内容包含原始招式描述，必须在正文中得到清晰演绎：
 ${facts.map((line, index) => `【事实${index + 1}】${line}`).join("\n")}
+【逐行必显清单｜只执行，不要复述】
+${battleNarrationRequiredTokens(facts)}
+先逐项确认同编号的必显招式和必显数字已经写入演绎正文，再补动作与气势；不得用代词、中文数字或泛称替代。
 原始日志一句对应一个续写行，必须输出全部${facts.length}行，顺序和数量都不能改变。每行先逐字复制上面的“【事实N】原始事实”，再写一个全角竖线“｜”，然后续写；这是唯一允许的输出格式。
 结算前：${actor.name}气血${playerHpBefore}/${actor.maxHp}；${battle.enemyName}气血${enemyHpBefore}/${battle.enemyMaxHp}。
 结算后：${actor.name}气血${actor.hp}/${actor.maxHp}；${battle.enemyName}气血${battle.enemyHp}/${battle.enemyMaxHp}。
