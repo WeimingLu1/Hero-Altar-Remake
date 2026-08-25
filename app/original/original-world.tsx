@@ -137,9 +137,12 @@ import { actorStatusProfile } from "../game-core/status-system";
 import { buildNpcSystemPrompt, npcLore } from "../game-core/npc-lore";
 import {
   battleEffectKind,
+  battleNarrativeInvalidFactIndexes,
   buildBattleNarrationFallback,
   buildBattleNarrationFacts,
   buildBattleNarrationPrompt,
+  buildBattleNarrationRepairPrompt,
+  mergeBattleNarrativeAnswers,
   type BattleNarrative,
   type BattleNarrationEvent,
 } from "../game-core/battle-narration";
@@ -1795,11 +1798,35 @@ export default function OriginalWorld({
       if (tokenFlush !== null) window.cancelAnimationFrame(tokenFlush);
       tokenFlush = null;
       tokenBuffer = "";
+      const invalidIndexes = battleNarrativeInvalidFactIndexes(answer, event.facts);
+      let repair = "", repairError = "";
+      if (invalidIndexes.length) {
+        try {
+          repair = await streamNpcReply({
+            system: buildBattleNarrationRepairPrompt(event, invalidIndexes),
+            messages: [{
+              role: "user",
+              speaker: "战斗引擎校验",
+              content: "请只补写列出的未通过事实，严格保留其数字和招式名称。",
+            }],
+            nextSpeaker: "战斗叙事补写",
+            maxOutputTokens: Math.min(1536, Math.max(256, invalidIndexes.length * 120)),
+            timeoutMs: Math.min(45_000, Math.max(18_000, invalidIndexes.length * 3_500)),
+            temperature: 0.38,
+            topP: 0.78,
+            signal: controller.signal,
+            onToken: () => {},
+          });
+        } catch (error) {
+          if (controller.signal.aborted) throw error;
+          repairError = error instanceof Error ? error.message : "未通过段落补写失败";
+        }
+      }
       updateEntry((item) => ({
         ...item,
-        text: answer,
+        text: mergeBattleNarrativeAnswers(answer, repair, event.facts),
         loading: false,
-        error: "",
+        error: repairError,
       }));
     } catch (error) {
       if (tokenFlush !== null) window.cancelAnimationFrame(tokenFlush);

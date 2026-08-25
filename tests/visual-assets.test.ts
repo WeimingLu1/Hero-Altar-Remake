@@ -434,6 +434,9 @@ test("任务交谈预先锁定同一委托背景，战斗舞台按招式演出�
   assert.match(worldSource, /相关人物关系、旧因/);
   assert.match(worldSource, /迫切风险与为何需要玩家相助/);
   assert.match(uiSource, /battleNarrativeDisplaySections/);
+  assert.match(uiSource, /battleNarrativeTextTokens/);
+  assert.match(battleCss, /battle-narrative-number/);
+  assert.match(battleCss, /battle-narrative-technique/);
   for (const effect of ["fist", "sword", "blade", "staff", "whip", "spell", "special", "item"])
     assert.match(battleCss, new RegExp(`effect-${effect}`));
   assert.doesNotMatch(uiSource, /你出招|你应招|对手出招|对手应招|交锋结果/);

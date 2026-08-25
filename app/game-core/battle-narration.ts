@@ -29,6 +29,12 @@ export type BattleEffectKind =
 export type BattleNarrativeSection = {
   speaker: "clash" | "impact";
   text: string;
+  factIndex?: number;
+};
+
+export type BattleNarrativeToken = {
+  kind: "text" | "number" | "technique";
+  text: string;
 };
 
 export type BattleNarrationEvent = {
@@ -76,7 +82,6 @@ const FACT_MARKER = /【事实(\d+)】/g;
 
 type TaggedFactProse = {
   index: number;
-  order: number;
   body: string;
   closed: boolean;
 };
@@ -85,7 +90,6 @@ const taggedFactProse = (text: string): TaggedFactProse[] => {
   const markers = [...text.matchAll(FACT_MARKER)];
   return markers.map((marker, order) => ({
     index: Number(marker[1]) - 1,
-    order,
     body: text.slice(
       (marker.index || 0) + marker[0].length,
       markers[order + 1]?.index ?? text.length,
@@ -109,6 +113,27 @@ const claimRules: Array<[RegExp, RegExp]> = [
   [/(?:倒地不起|失去战力|当场死亡|气绝|毙命|落败|认输)/, /倒地不起|失去战力|死亡|气绝|毙命|落败|认输/],
 ];
 
+const knownTechniqueNames = [...originalTables.skills, ...originalTables.kungfus]
+  .flatMap((record) => record?.name ? [String(record.name).trim()] : [])
+  .filter((name) => name.length >= 2)
+  .sort((a, b) => b.length - a.length);
+
+export function battleFactTechniqueNames(fact: string) {
+  const names = [
+    ...fact.matchAll(/[「『“]([^」』”]{2,24})[」』”]/g),
+  ].map((match) => match[1]);
+  for (const name of knownTechniqueNames)
+    if (fact.includes(name)) names.push(name);
+  return [...new Set(names)].sort((a, b) => b.length - a.length);
+}
+
+const normalizedFactAnchor = (text: string) => text.normalize("NFKC")
+  .replace(/[\s,，.。;；:：!！?？'"“”‘’「」『』()（）[\]【】、…—-]/g, "");
+
+export function battleFactAnchorMatches(expected: string, candidate: string) {
+  return normalizedFactAnchor(expected) === normalizedFactAnchor(candidate);
+}
+
 /**
  * A model paragraph is accepted only when it carries the exact engine line as
  * its anchor and adds no numerical or result claim unsupported by that line.
@@ -123,9 +148,64 @@ export function battleNarrativeProseIsGrounded(fact: string, prose: string) {
     if (!remaining) return false;
     allowedNumbers.set(token, remaining - 1);
   }
+  if ([...allowedNumbers.values()].some((remaining) => remaining > 0)) return false;
   for (const quote of prose.matchAll(/[「『“]([^」』”]{2,24})[」』”]/g))
     if (!fact.includes(quote[1])) return false;
+  if (battleFactTechniqueNames(fact).some((name) => !prose.includes(name))) return false;
   return claimRules.every(([claim, license]) => !claim.test(prose) || license.test(fact));
+}
+
+const validBattleNarrativeProse = (
+  text: string,
+  facts: string[],
+  requireClosed = false,
+) => {
+  const result = new Map<number, string>(), seen = new Set<number>();
+  let previous = -1;
+  for (const candidate of taggedFactProse(text)) {
+    if (
+      candidate.index < 0 || candidate.index >= facts.length ||
+      candidate.index <= previous || seen.has(candidate.index) ||
+      (requireClosed && !candidate.closed)
+    ) continue;
+    previous = candidate.index;
+    seen.add(candidate.index);
+    const divider = candidate.body.indexOf("｜");
+    if (divider < 0) continue;
+    const anchor = candidate.body.slice(0, divider).trim(),
+      prose = candidate.body.slice(divider + 1).trim(),
+      fact = facts[candidate.index];
+    if (battleFactAnchorMatches(fact, anchor) && battleNarrativeProseIsGrounded(fact, prose))
+      result.set(candidate.index, prose);
+  }
+  return result;
+};
+
+export function battleNarrativeInvalidFactIndexes(text: string, facts: string[]) {
+  const valid = validBattleNarrativeProse(text, facts);
+  return facts.flatMap((_, index) => valid.has(index) ? [] : [index]);
+}
+
+export function mergeBattleNarrativeAnswers(primary: string, repair: string, facts: string[]) {
+  const first = validBattleNarrativeProse(primary, facts),
+    fixed = validBattleNarrativeProse(repair, facts);
+  return facts.map((fact, index) => {
+    const prose = fixed.get(index) || first.get(index);
+    return prose ? `【事实${index + 1}】${fact}｜${prose}` : `【事实${index + 1}】${fact}`;
+  }).join("\n");
+}
+
+const escapedPattern = (text: string) => text.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+
+export function battleNarrativeTextTokens(text: string, fact: string): BattleNarrativeToken[] {
+  const techniques = battleFactTechniqueNames(fact),
+    patterns = [...techniques, ...numberTokens(text)].sort((a, b) => b.length - a.length);
+  if (!patterns.length) return [{ kind: "text", text }];
+  const techniqueSet = new Set(techniques), regex = new RegExp(`(${patterns.map(escapedPattern).join("|")})`, "g");
+  return text.split(regex).filter(Boolean).map((part) => ({
+    kind: techniqueSet.has(part) ? "technique" : /^\d/.test(part) ? "number" : "text",
+    text: part,
+  }));
 }
 
 /**
@@ -139,24 +219,16 @@ export function battleNarrativeDisplaySections(
   complete = true,
 ) {
   if (!facts.length) return parseBattleNarrativeSections(text);
-  const tagged = taggedFactProse(text), sections: BattleNarrativeSection[] = [];
-  const visibleCount = complete ? facts.length : tagged.filter((item) => item.closed).length;
-  for (let index = 0; index < visibleCount; index++) {
-    const fact = facts[index], candidate = tagged[index];
-    let content = fact;
-    if (candidate && candidate.index === index && candidate.order === index && (complete || candidate.closed)) {
-      const anchor = `${fact}｜`;
-      if (candidate.body.startsWith(anchor)) {
-        const prose = candidate.body.slice(anchor.length).trim();
-        if (battleNarrativeProseIsGrounded(fact, prose)) content = prose;
-      }
-    }
-    sections.push({
-      speaker: battleFactIsImpact(fact) ? "impact" : "clash",
+  const valid = validBattleNarrativeProse(text, facts, !complete),
+    indexes = complete ? facts.map((_, index) => index) : [...valid.keys()];
+  return indexes.map((index) => {
+    const fact = facts[index], content = valid.get(index) || fact;
+    return {
+      factIndex: index,
+      speaker: battleFactIsImpact(fact) ? "impact" as const : "clash" as const,
       text: content,
-    });
-  }
-  return sections;
+    };
+  });
 }
 
 export function buildBattleNarrationFallback(event: BattleNarrationEvent) {
@@ -206,8 +278,9 @@ export function buildBattleNarrationPrompt(event: BattleNarrationEvent) {
 4. 必须保留并重点演绎原始出招句中的招式、动作方向、攻击部位、兵器和关键意象，围绕它具体描写起手、发力、路线、变招、拆解与落点；不得把特色招式淡化成泛泛的“一拳”“一掌”“一剑”，也不得换成双方没有使用的其他武功。
 5. 每个实际出招者至少写清起手、发力、行进路线或变招中的两项，并写出双方距离和攻防节奏；只加入有助于看清交锋的兵刃碰撞、内力或可观察伤势，不要逐项堆砌无关环境、衣袂、神态和呼吸。
 6. 非必要不加入对话；允许一声极短的喝声或闷哼，不能聊天，也不能凭空泄露隐秘设定。
-7. 演绎可以不重复数值；若重复，只能逐字使用该行原始事实中已有的阿拉伯数字，不能改数、把数字写成中文，也不能新增距离、次数、回合、层数或招数等数量。
-7a. 除非对应原始日志明确写出兵器脱手、折断、毁坏或掉落，否则不得描写任何一方兵器坠地、脱手或损毁；小说描写不能暗示游戏里没有发生的装备变化。
+7. 对应原始事实里出现的每一个阿拉伯数字都必须在该行演绎中逐字出现，不能遗漏、改数、重复、把数字写成中文，也不能新增距离、次数、回合、层数或招数等数量。
+7a. 对应原始事实里的招式名称（包括「」中的招名以及火风暴、连珠雷等绝招名）必须在该行演绎中原字保留，不能改名、省略或换成泛称。
+7b. 除非对应原始日志明确写出兵器脱手、折断、毁坏或掉落，否则不得描写任何一方兵器坠地、脱手或损毁；小说描写不能暗示游戏里没有发生的装备变化。
 8. 严格按本回合损失占最大气血的比例控制伤势：零伤害只能写卸力或未破防；不足一成只能是轻微疼痛、擦伤或气息波动；一至三成可以写明显疼痛、淤伤、踉跄，但事实未注明时不得写骨折、内伤或吐血；超过三成才可描写重创。只有结算明确落败或死亡时才能写失去战力或死亡。
 9. 采用经典金庸式武侠叙事所强调的清峻、明快和人招合一的效果，但不得照抄任何现成作品：既写招式，也写攻守双方一瞬间的判断、胆气和身份气度；以准确动词和攻防因果制造画面，不靠空泛成语与形容词堆砌。避免现代网络用语和游戏系统口吻。
 10. 只演绎本回合这批事实，不承接、复述或预告其他回合；避免重复介绍人物、场地或使用相同句式，结算事实已经清楚时宁可更短。`;
@@ -222,4 +295,18 @@ ${facts.map((line, index) => `【事实${index + 1}】${line}`).join("\n")}
 结算后：${actor.name}气血${actor.hp}/${actor.maxHp}；${battle.enemyName}气血${battle.enemyHp}/${battle.enemyMaxHp}。
 战斗结果：${battle.finished === "win" ? `${actor.name}获胜` : battle.finished === "lose" ? `${actor.name}落败` : "双方仍可继续战斗"}。
 请在完全遵守这些结果的前提下续写本回合正文。`;
+}
+
+export function buildBattleNarrationRepairPrompt(event: BattleNarrationEvent, indexes: number[]) {
+  const lines = indexes.map((index) => {
+    const fact = event.facts[index], numbers = numberTokens(fact), techniques = battleFactTechniqueNames(fact);
+    return `【事实${index + 1}】${fact}\n必须包含数字：${numbers.join("、") || "无"}；必须包含招式：${techniques.join("、") || "无"}`;
+  }).join("\n");
+  return `${WORLD_LORE}
+
+你是武侠战报的逐句补写者。上一次生成中，以下事实没有得到合格演绎。只补写列出的行，不要输出其他事实。
+每行格式严格为“【事实N】原始事实｜演绎”，N沿用给定编号；原始事实允许统一中英文标点，但文字和数字不能改变。
+演绎必须是45至90个汉字的完整武侠段落，只写这一条事实；必须逐字包含该条列出的全部阿拉伯数字和招式名称，不能增加任何新数值、招式、回血、耗能、伤害、控制、闪避、招架或下一步行动。
+
+${lines}`;
 }

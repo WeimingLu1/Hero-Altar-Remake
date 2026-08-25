@@ -2,12 +2,18 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import {
   battleEffectKind,
+  battleFactAnchorMatches,
   battleFactIsImpact,
+  battleFactTechniqueNames,
   battleNarrativeDisplaySections,
+  battleNarrativeInvalidFactIndexes,
   battleNarrativeProseIsGrounded,
+  battleNarrativeTextTokens,
   buildBattleNarrationFallback,
   buildBattleNarrationFacts,
   buildBattleNarrationPrompt,
+  buildBattleNarrationRepairPrompt,
+  mergeBattleNarrativeAnswers,
   parseBattleNarrativeSections,
   type BattleNarrationEvent,
 } from "../app/game-core/battle-narration";
@@ -61,7 +67,8 @@ test("battle narration prompt grounds wuxia prose in both fighters and exact res
   assert.match(prompt, /不足一成只能是轻微疼痛/);
   assert.match(prompt, /不得写骨折、内伤或吐血/);
   assert.match(prompt, /不得凭空加入回血、疗伤、消耗资源/);
-  assert.match(prompt, /不能改数、把数字写成中文/);
+  assert.match(prompt, /不能遗漏、改数、重复、把数字写成中文/);
+  assert.match(prompt, /招式名称.*必须在该行演绎中原字保留/);
 });
 
 test("battle narration strips old ownership labels and presents every line uniformly", () => {
@@ -98,14 +105,14 @@ test("battle display accepts only exact one-to-one fact anchors and colors real 
   const input = event();
   assert.deepEqual(battleNarrativeDisplaySections(
     `【事实1】${input.facts[0]}｜少侠沉肩递掌，掌势由虚转实，直取中宫。\n` +
-      `【事实2】${input.facts[1]}｜掌力落在肩头，潘小莲气血微滞，随即稳住身形。`,
+      `【事实2】${input.facts[1]}｜掌力落在肩头，潘小莲气血损去 16 点，随即稳住身形。`,
     input.facts,
   ), [
-    { speaker: "clash", text: "少侠沉肩递掌，掌势由虚转实，直取中宫。" },
-    { speaker: "impact", text: "掌力落在肩头，潘小莲气血微滞，随即稳住身形。" },
+    { factIndex: 0, speaker: "clash", text: "少侠沉肩递掌，掌势由虚转实，直取中宫。" },
+    { factIndex: 1, speaker: "impact", text: "掌力落在肩头，潘小莲气血损去 16 点，随即稳住身形。" },
   ]);
   assert.deepEqual(battleNarrativeDisplaySections(
-    `【事实1】${input.facts[0]}｜掌势直取中宫。\n【事实2】${input.facts[1]}｜潘小莲肩头一沉。`,
+    `【事实1】${input.facts[0]}｜掌势直取中宫。\n【事实2】${input.facts[1]}｜潘小莲肩头一沉，气血实损 16 点。`,
     input.facts,
   ).map((section) => section.speaker), ["clash", "impact"]);
   assert.equal(battleFactIsImpact("剑光掠过，却未能命中。"), false);
@@ -140,6 +147,48 @@ test("battle prose validator rejects changed numbers and facts borrowed from adj
     "连珠雷！",
     "雷火接连三次轰向对手。",
   ), false);
+  assert.equal(battleNarrativeProseIsGrounded(
+    "余鸿儒提气归元，恢复 11586 点气血，消耗 8913 点内力。",
+    "余鸿儒提气归元，经脉间恢复 11586 点气血，却只写了内力消耗。",
+  ), false);
+  assert.equal(battleNarrativeProseIsGrounded(
+    "余鸿儒提气归元，恢复 11586 点气血，消耗 8913 点内力。",
+    "余鸿儒提气归元，恢复 11586 点气血，同时消耗 8913 点内力，气机旋即归稳。",
+  ), true);
+});
+
+test("fact anchors tolerate punctuation and spacing while preserving exact content", () => {
+  const fact = "你身形一转,周围一片火海,烈焰熊熊,半空中一个巨大的火球砸向余鸿儒。";
+  assert.equal(battleFactAnchorMatches(
+    fact,
+    "你身形一转，周围一片火海，烈焰熊熊，半空中一个巨大的火球砸向余鸿儒！",
+  ), true);
+  assert.equal(battleFactAnchorMatches(fact, "你身形一转，火球砸向余鸿儒！"), false);
+});
+
+test("battle techniques and exact numbers are required and tokenized for highlighting", () => {
+  assert.deepEqual(battleFactTechniqueNames("火风暴！"), ["火风暴"]);
+  assert.deepEqual(
+    battleFactTechniqueNames("余鸿儒一招「弯弓射雕」，手中精钢杖脱手飞出。"),
+    ["弯弓射雕"],
+  );
+  assert.equal(battleNarrativeProseIsGrounded(
+    "火风暴！",
+    "烈焰随身法翻涌，巨大的火球自半空压下。",
+  ), false);
+  assert.equal(battleNarrativeProseIsGrounded(
+    "火风暴！",
+    "火风暴随身法翻涌，巨大的火球自半空压下。",
+  ), true);
+  assert.deepEqual(
+    battleNarrativeTextTokens("火风暴轰落，余鸿儒受到 3664 点法术伤害。", "火风暴！余鸿儒受到 3664 点法术伤害。"),
+    [
+      { kind: "technique", text: "火风暴" },
+      { kind: "text", text: "轰落，余鸿儒受到 " },
+      { kind: "number", text: "3664" },
+      { kind: "text", text: " 点法术伤害。" },
+    ],
+  );
 });
 
 test("reported spell chain remains one-to-one when model changes damage and invents later actions", () => {
@@ -152,7 +201,7 @@ test("reported spell chain remains one-to-one when model changes damage and inve
     "茅盈被雷光灼目，命中下降 8。",
   ];
   const model = [
-    `【事实1】${facts[0]}｜苍鹰破空落爪，茅盈肩头衣袍顿裂，身形微晃。`,
+    `【事实1】${facts[0]}｜苍鹰破空落爪，造成 50 点伤害，茅盈肩头衣袍顿裂，身形微晃。`,
     `【事实2】${facts[1]}｜幽蓝法火透体，茅盈受到 1477 点灼烧重创。`,
     `【事实3】${facts[2]}｜雷声骤起，电光在施法者指掌之间盘旋。`,
     `【事实4】${facts[3]}｜电光裹住雷火，循着指诀所引直逼茅盈。`,
@@ -165,7 +214,7 @@ test("reported spell chain remains one-to-one when model changes damage and inve
   assert.equal(sections.length, facts.length);
   assert.equal(sections[1].text, facts[1]);
   assert.equal(sections[5].text, facts[5]);
-  assert.equal(sections[0].text, "苍鹰破空落爪，茅盈肩头衣袍顿裂，身形微晃。");
+  assert.equal(sections[0].text, "苍鹰破空落爪，造成 50 点伤害，茅盈肩头衣袍顿裂，身形微晃。");
   assert.equal(sections[4].text, "雷火轰然炸开，茅盈受到 3180 点法术伤害。");
   assert.doesNotMatch(sections.map((section) => section.text).join(""), /1477|10192|9266|天堂无路/);
 });
@@ -179,8 +228,51 @@ test("missing, reordered and still-streaming fact lines never shift onto neighbo
   );
   const streaming = `【事实1】${facts[0]}｜甲沉肩发力。\n【事实2】${facts[1]}｜乙肩头一震。`;
   assert.deepEqual(battleNarrativeDisplaySections(streaming, facts, false), [
-    { speaker: "clash", text: "甲沉肩发力。" },
+    { factIndex: 0, speaker: "clash", text: "甲沉肩发力。" },
   ]);
+});
+
+test("火风暴缺失段落 can be repaired without replacing valid prose with raw facts", () => {
+  const input = event();
+  input.facts = [
+    "火风暴！",
+    "你身形一转,周围一片火海,烈焰熊熊,半空中一个巨大的火球砸向余鸿儒。",
+    "余鸿儒受到 3664 点法术伤害。",
+    "你身形一转,周围一片火海,烈焰熊熊,半空中一个巨大的火球砸向余鸿儒。",
+    "余鸿儒受到 2624 点法术伤害。",
+    "你身形一转,周围一片火海,烈焰熊熊,半空中一个巨大的火球砸向余鸿儒。",
+    "余鸿儒受到 4634 点法术伤害。",
+    "余鸿儒提气归元，恢复 11586 点气血，消耗 8913 点内力。",
+    "余鸿儒一招「弯弓射雕」，手中精钢杖脱手飞出，如箭矢般飞击你。",
+    "你侧身避开。",
+  ];
+  const primary = input.facts.map((fact, index) => {
+    const prose = [
+      "火风暴随韦铭指诀骤起，滚滚热浪在身周聚成烈焰洪流。",
+      "韦铭旋身引火，半空火球沿着炽热气浪直压余鸿儒面门。",
+      "火劲正面轰中，余鸿儒气血随之损去 3664 点，脚下仍强自站稳。",
+      "韦铭再转身形，火海翻卷，第二枚火球循着侧翼空门压落。",
+      "烈焰透过护体真气，余鸿儒受到法术伤害，气息顿时一滞。",
+      "韦铭第三度旋身聚火，半空巨球挟着熊熊烈焰直落余鸿儒身前。",
+      "火球轰然炸散，余鸿儒受到 4634 点法术伤害，身形向后震退。",
+      "余鸿儒提气归元，恢复 11586 点气血，同时消耗 8913 点内力，周身气机复稳。",
+      "余鸿儒施展弯弓射雕，精钢杖脱手如箭，裹着劲风直取韦铭。",
+      "韦铭看准杖势侧身避开，沉重杖影擦肩而过，未能沾身。",
+    ][index];
+    const anchor = index === 5 ? fact.replaceAll(",", "，") : fact;
+    return `【事实${index + 1}】${anchor}｜${prose}`;
+  }).join("\n");
+  assert.deepEqual(battleNarrativeInvalidFactIndexes(primary, input.facts), [4]);
+  const repairPrompt = buildBattleNarrationRepairPrompt(input, [4]);
+  assert.match(repairPrompt, /【事实5】余鸿儒受到 2624 点法术伤害/);
+  assert.match(repairPrompt, /必须包含数字：2624/);
+  const repair = `【事实5】${input.facts[4]}｜烈焰再度透体，余鸿儒受到 2624 点法术伤害，护体真气应声震荡。`;
+  const merged = mergeBattleNarrativeAnswers(primary, repair, input.facts);
+  const sections = battleNarrativeDisplaySections(merged, input.facts);
+  assert.equal(sections.length, input.facts.length);
+  assert.equal(sections[4].text, "烈焰再度透体，余鸿儒受到 2624 点法术伤害，护体真气应声震荡。");
+  assert.ok(sections.every((section, index) => section.text !== input.facts[index]));
+  assert.match(sections[8].text, /弯弓射雕/);
 });
 
 test("震字诀三条原始日志只按原顺序续写，不再判断攻守归属", () => {

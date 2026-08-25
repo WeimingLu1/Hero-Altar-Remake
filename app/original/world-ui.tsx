@@ -57,6 +57,7 @@ import {
 import {
   battleFactIsImpact,
   battleNarrativeDisplaySections,
+  battleNarrativeTextTokens,
   type BattleNarrative,
 } from "../game-core/battle-narration";
 import type {
@@ -727,8 +728,13 @@ export function BattleView({
             </header>
             <div className="battle-narrative-copy">
               {!playingThisEntry && battleNarrativeDisplaySections(item.text, item.facts, !item.loading).map((section, sectionIndex) => (
-                <p className={`narrative-${section.speaker}`} key={sectionIndex}>
-                  <span>{section.text}</span>
+                <p className={`narrative-${section.speaker}`} key={section.factIndex ?? sectionIndex}>
+                  <span>{battleNarrativeTextTokens(
+                    section.text,
+                    item.facts[section.factIndex ?? sectionIndex] || "",
+                  ).map((token, tokenIndex) => token.kind === "text" ? token.text : (
+                    <mark className={`battle-narrative-${token.kind}`} key={tokenIndex}>{token.text}</mark>
+                  ))}</span>
                 </p>
               ))}
               {playingThisEntry && <p className="narrative-loading">正在按真实结算顺序演出本回合……</p>}
