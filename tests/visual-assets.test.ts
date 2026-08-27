@@ -68,6 +68,33 @@ test("NPC art selection uses original gender age role and description", () => {
   assert.equal(npcCharacterSprite(59).portrait, 21);
 });
 
+test("distinctive named NPCs keep matching world sprites and portraits", () => {
+  assert.deepEqual(npcCharacterSprite(48), {
+    sheet: 7,
+    row: 0,
+    portraitAtlas: "notable",
+    portrait: 0,
+  });
+  assert.deepEqual(npcCharacterSprite(56), {
+    sheet: 8,
+    row: 2,
+    portraitAtlas: "notable",
+    portrait: 6,
+  });
+  assert.deepEqual(npcCharacterSprite(124), {
+    sheet: 11,
+    row: 0,
+    portraitAtlas: "roster",
+    portrait: 0,
+  });
+  assert.deepEqual(npcCharacterSprite(117), {
+    sheet: 1,
+    row: 3,
+    portraitAtlas: "roster",
+    portrait: 12,
+  });
+});
+
 test("generic map characters never render an undefined speaker name", () => {
   assert.match(source, /function npcDisplayName\(id: number, fallback = "江湖人物"\)/);
   assert.match(source, /String\(npcRecord\(id\)\.name \|\| fallback\)/);

@@ -10,21 +10,27 @@
         "/game-assets/generated/wuxia-characters-factions-v1.webp",
         "/game-assets/generated/wuxia-characters-women-v1.webp",
         "/game-assets/generated/wuxia-characters-faction-signatures-v1.webp",
-        "/game-assets/generated/wuxia-characters-flower-variants-v1.webp"
+        "/game-assets/generated/wuxia-characters-flower-variants-v1.webp",
+        "/game-assets/generated/wuxia-characters-notable-masters-v2.webp",
+        "/game-assets/generated/wuxia-characters-notable-women-v2.webp",
+        "/game-assets/generated/wuxia-characters-notable-wanderers-v2.webp",
+        "/game-assets/generated/wuxia-characters-underworld-v2.webp",
+        "/game-assets/generated/wuxia-characters-beast-school-v2.webp"
       ],
       "columns": 4,
       "rows": 4,
-      "directions": ["front", "left", "right", "back"],
-      "purpose": "player and NPC world sprites selected by gender, age, and role"
+      "directions": ["front", "right", "left", "back"],
+      "purpose": "48 player and NPC world silhouettes selected by stable named identity first, then gender, age, faction, and role"
     },
     "portraits": {
       "src": [
         "/game-assets/generated/wuxia-portrait-atlas-v1.webp",
-        "/game-assets/generated/wuxia-faction-portraits-v1.webp"
+        "/game-assets/generated/wuxia-faction-portraits-v1.webp",
+        "/game-assets/generated/wuxia-notable-portraits-v2.webp",
+        "/game-assets/generated/wuxia-roster-portraits-v2.webp"
       ],
-      "columns": 5,
-      "rows": 4,
-      "purpose": "dialogue, free-chat, status, and battle portraits including named and faction-specific characters"
+      "layouts": ["5x4", "4x4", "4x4", "4x4"],
+      "purpose": "68 dialogue, status, and battle portraits including named, faction-specific, role, animal, elderly, disabled, and underworld characters"
     },
     "furniture": {
       "src": "/game-assets/generated/wuxia-indoor-furniture-v1.webp",

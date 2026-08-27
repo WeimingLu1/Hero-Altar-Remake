@@ -26,6 +26,20 @@ OpenAI Image Generation and then prepared locally for use as sprite atlases:
   Flower School, Red Lotus, Wudang, Snow Mountain, and Ice-Fire portraits.
 - `public/game-assets/generated/wuxia-characters-flower-variants-v1.webp`: four
   distinct directional Flower School women matching named portraits.
+- `public/game-assets/generated/wuxia-characters-notable-masters-v2.webp`,
+  `wuxia-characters-notable-women-v2.webp`,
+  `wuxia-characters-notable-wanderers-v2.webp`, and
+  `wuxia-characters-underworld-v2.webp`: sixteen named-character direction sets
+  for masters, heroines, physically distinctive wanderers, underworld envoys,
+  judges, and bandit leaders.
+- `public/game-assets/generated/wuxia-characters-beast-school-v2.webp`: four
+  direction sets for the Snow Mountain leopard and three visually distinctive
+  Beast School figures.
+- `public/game-assets/generated/wuxia-notable-portraits-v2.webp` and
+  `wuxia-roster-portraits-v2.webp`: two 4 × 4 portrait grids containing 32
+  named, age-specific, disability-aware, animal, foreign-school, Taoist,
+  Buddhist, and underworld portraits. The first grid directly matches the
+  sixteen new named-character direction sets.
 - `public/game-assets/generated/wuxia-indoor-furniture-v1.webp`: 8 × 8 modular
   ancient Chinese furniture and interior-prop atlas.
 - `public/game-assets/redrawn/overlay-nature-v3.webp` and
@@ -34,9 +48,9 @@ OpenAI Image Generation and then prepared locally for use as sprite atlases:
   padding on every edge; nature and interior props are kept in separate images
   so no object crosses a crop boundary.
 
-Each character atlas is 4 × 4. Its flat chroma-key background was removed
-locally; the columns are front, screen-facing right, screen-facing left, and
-back.
+Each character atlas is 4 × 4. Its generated checker/chroma background was
+removed locally and the edge alpha was prepared for Canvas downscaling; the
+columns are front, screen-facing right, screen-facing left, and back.
 
 These files do not incorporate or use the original project's published bitmap
 files as image inputs or visual references.

@@ -38,7 +38,13 @@ type WuxiaArt = {
   natureOverlays: HTMLImageElement | null;
   interiorOverlays: HTMLImageElement | null;
 };
-export type CharacterSprite = { sheet: number; row: number; portrait?: number };
+type PortraitAtlas = "notable" | "roster";
+export type CharacterSprite = {
+  sheet: number;
+  row: number;
+  portrait?: number;
+  portraitAtlas?: PortraitAtlas;
+};
 
 export function characterDirectionColumn(direction: number) {
   // Generated profiles are named by their visible screen-facing direction.
@@ -46,11 +52,6 @@ export function characterDirectionColumn(direction: number) {
   return direction === 4 ? 2 : direction === 6 ? 1 : direction === 8 ? 3 : 0;
 }
 
-const wuxiaArt: WuxiaArt = {
-  characters: [null, null, null, null, null, null, null],
-  natureOverlays: null,
-  interiorOverlays: null,
-};
 const characterSheetNames = [
   "wuxia-characters-v1.webp",
   "wuxia-characters-ages-v1.webp",
@@ -59,7 +60,17 @@ const characterSheetNames = [
   "wuxia-characters-women-v1.webp",
   "wuxia-characters-faction-signatures-v1.webp",
   "wuxia-characters-flower-variants-v1.webp",
+  "wuxia-characters-notable-masters-v2.webp",
+  "wuxia-characters-notable-women-v2.webp",
+  "wuxia-characters-notable-wanderers-v2.webp",
+  "wuxia-characters-underworld-v2.webp",
+  "wuxia-characters-beast-school-v2.webp",
 ] as const;
+const wuxiaArt: WuxiaArt = {
+  characters: characterSheetNames.map(() => null),
+  natureOverlays: null,
+  interiorOverlays: null,
+};
 const loadingCharacterSheets = new Set<number>();
 let artRevision = 0;
 
@@ -99,6 +110,45 @@ export function loadWorldArt() {
 
 let ensureCharacterSheet: (index: number) => void = () => {};
 
+// Named records come before broad age and profession buckets. Each entry pairs
+// one directional sprite row with the same person's portrait cell, so a
+// distinctive description cannot be flattened into a generic elder, warrior,
+// worker, or faction template.
+const namedCharacterArt: Record<number, CharacterSprite> = {
+  41: { sheet: 8, row: 0, portraitAtlas: "notable", portrait: 4 },
+  47: { sheet: 9, row: 0, portraitAtlas: "notable", portrait: 8 },
+  48: { sheet: 7, row: 0, portraitAtlas: "notable", portrait: 0 },
+  54: { sheet: 8, row: 1, portraitAtlas: "notable", portrait: 5 },
+  56: { sheet: 8, row: 2, portraitAtlas: "notable", portrait: 6 },
+  81: { sheet: 7, row: 3, portraitAtlas: "notable", portrait: 3 },
+  82: { sheet: 3, row: 0, portraitAtlas: "roster", portrait: 4 },
+  88: { sheet: 4, row: 0, portraitAtlas: "roster", portrait: 5 },
+  91: { sheet: 3, row: 0, portraitAtlas: "roster", portrait: 6 },
+  94: { sheet: 2, row: 2, portraitAtlas: "roster", portrait: 7 },
+  95: { sheet: 7, row: 2, portraitAtlas: "notable", portrait: 2 },
+  102: { sheet: 7, row: 1, portraitAtlas: "notable", portrait: 1 },
+  117: { sheet: 1, row: 3, portraitAtlas: "roster", portrait: 12 },
+  124: { sheet: 11, row: 0, portraitAtlas: "roster", portrait: 0 },
+  125: { sheet: 1, row: 2, portraitAtlas: "roster", portrait: 15 },
+  126: { sheet: 2, row: 2, portraitAtlas: "roster", portrait: 14 },
+  127: { sheet: 11, row: 1, portraitAtlas: "roster", portrait: 1 },
+  128: { sheet: 11, row: 2, portraitAtlas: "roster", portrait: 2 },
+  129: { sheet: 9, row: 1, portraitAtlas: "notable", portrait: 9 },
+  132: { sheet: 9, row: 2, portraitAtlas: "notable", portrait: 10 },
+  134: { sheet: 11, row: 3, portraitAtlas: "roster", portrait: 3 },
+  138: { sheet: 3, row: 3, portraitAtlas: "roster", portrait: 8 },
+  141: { sheet: 1, row: 2, portraitAtlas: "roster", portrait: 9 },
+  144: { sheet: 1, row: 2, portraitAtlas: "roster", portrait: 10 },
+  147: { sheet: 1, row: 2, portraitAtlas: "roster", portrait: 11 },
+  148: { sheet: 9, row: 3, portraitAtlas: "notable", portrait: 11 },
+  149: { sheet: 8, row: 3, portraitAtlas: "notable", portrait: 7 },
+  150: { sheet: 10, row: 0, portraitAtlas: "notable", portrait: 12 },
+  151: { sheet: 10, row: 1, portraitAtlas: "notable", portrait: 13 },
+  161: { sheet: 10, row: 2, portraitAtlas: "notable", portrait: 14 },
+  162: { sheet: 10, row: 3, portraitAtlas: "notable", portrait: 15 },
+  171: { sheet: 1, row: 2, portraitAtlas: "roster", portrait: 13 },
+};
+
 export function npcCharacterSprite(id: number, fallbackName = ""): CharacterSprite {
   const npc = id > 0 ? npcRecord(id) : {},
     name = String(npc.name || fallbackName),
@@ -107,6 +157,8 @@ export function npcCharacterSprite(id: number, fallbackName = ""): CharacterSpri
     age = Number(npc.age || 30),
     female = Number(npc.gender || 0) === 1,
     merchant = Number(npc.type || 0) === -1 || /老板|掌柜|商人|店|贩|卖/.test(text);
+  const namedArt = namedCharacterArt[id];
+  if (namedArt) return namedArt;
   // Age is a physical identity constraint, not a styling hint. Keep children and
   // elders recognisable even when their descriptions also mention a faction.
   if (age < 18) return { sheet: 1, row: female ? 1 : 0 };
@@ -171,21 +223,28 @@ export function CharacterPortrait({
         ? npcCharacterSprite(npcId || 0, name)
         : { sheet: 0, row: playerGender ? 1 : 0 },
     index = sprite.portrait ?? sprite.sheet * 4 + sprite.row,
-    factionPortrait = index >= 20,
-    localIndex = factionPortrait ? index - 20 : index,
-    columns = factionPortrait ? 4 : 5,
+    generatedPortrait = "portraitAtlas" in sprite ? sprite.portraitAtlas : undefined,
+    factionPortrait = !generatedPortrait && index >= 20,
+    localIndex = generatedPortrait ? index : factionPortrait ? index - 20 : index,
+    columns = generatedPortrait || factionPortrait ? 4 : 5,
     column = localIndex % columns,
-    row = Math.floor(localIndex / columns);
+    row = Math.floor(localIndex / columns),
+    portraitImage =
+      generatedPortrait === "notable"
+        ? 'url("/game-assets/generated/wuxia-notable-portraits-v2.webp")'
+        : generatedPortrait === "roster"
+          ? 'url("/game-assets/generated/wuxia-roster-portraits-v2.webp")'
+          : factionPortrait
+            ? 'url("/game-assets/generated/wuxia-faction-portraits-v1.webp")'
+            : undefined;
   return (
     <div
       className={`character-portrait ${className}`.trim()}
       role="img"
       aria-label={`${name || "人物"}立绘`}
       style={{
-        backgroundImage: factionPortrait
-          ? 'url("/game-assets/generated/wuxia-faction-portraits-v1.webp")'
-          : undefined,
-        backgroundSize: factionPortrait ? "400% 400%" : undefined,
+        backgroundImage: portraitImage,
+        backgroundSize: generatedPortrait || factionPortrait ? "400% 400%" : undefined,
         backgroundPosition: `${(column / (columns - 1)) * 100}% ${(row / 3) * 100}%`,
       }}
     />
