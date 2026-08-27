@@ -32,7 +32,7 @@ export type AmbientNpc = {
   nextPair?: { a: string; b: string };
   /** 预取请求是否在途（区别于 generationPending 的"当前轮"）。 */
   nextPairPending?: boolean;
-  /** 排队中的接续台词：上一句展示到 at 后由 tick 提升上屏，形成一问一答的先后节奏。 */
+  /** 排队中的接续台词：上一句展示到 at 后由 tick 提升上屏，形成轮流接话的先后节奏。 */
   queuedLine?: { text: string; at: number };
   /** 对话自然结束后先走开的时间点；期间只朝远离最后搭档的方向走，不组对/不独白/不动作。 */
   departUntil: number;

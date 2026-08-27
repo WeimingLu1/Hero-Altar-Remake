@@ -4,6 +4,89 @@ export type ParsedNpcDialogue = {
   speech: string;
 };
 
+export type AmbientDialogueBeatKind =
+  | "opening"
+  | "answer"
+  | "respond"
+  | "detail"
+  | "stance"
+  | "question";
+
+export type AmbientDialogueBeat = {
+  kind: AmbientDialogueBeatKind;
+  allowQuestion: boolean;
+  instruction: string;
+};
+
+/**
+ * Give each ambient turn a distinct conversational job. Questions are only a
+ * periodic option; a real question always forces the next speaker to answer
+ * with a statement, preventing the model from turning every line into a
+ * question-shaped prompt.
+ */
+export function ambientDialogueBeat(
+  turnIndex: number,
+  previousLine = "",
+  opening = false,
+): AmbientDialogueBeat {
+  const previousWasQuestion = /[？?][”"’』】）)]*\s*$/.test(previousLine.trim());
+  if (opening) return {
+    kind: "opening",
+    allowQuestion: false,
+    instruction: "用一句具体陈述自然开题，可以说眼前见闻、判断、抱怨或打算；句末用句号或感叹号，不要提问。",
+  };
+  if (previousWasQuestion) return {
+    kind: "answer",
+    allowQuestion: false,
+    instruction: "上一句是问题，先给出明确回答，再补一条相关信息；不要反问，句末用句号或感叹号。",
+  };
+  const beat = ((turnIndex % 4) + 4) % 4;
+  if (beat === 1) return {
+    kind: "detail",
+    allowQuestion: false,
+    instruction: "承接上一句，补充一个具体见闻、细节或经历；不要提问，句末用句号或感叹号。",
+  };
+  if (beat === 2) return {
+    kind: "stance",
+    allowQuestion: false,
+    instruction: "对当前话题表达明确态度、判断、赞同或反驳，并说明一点缘由；不要提问。",
+  };
+  if (beat === 3) return {
+    kind: "question",
+    allowQuestion: true,
+    instruction: "只有话题确实需要对方补充时，才提出一个自然且具体的问题；最多一个问号，也可以改用陈述继续。",
+  };
+  return {
+    kind: "respond",
+    allowQuestion: false,
+    instruction: "先对上一句作出真实反应，再给出自己的信息或判断；不要用问题把回应推回对方。",
+  };
+}
+
+/**
+ * Keep useful declarative clauses when a small local model ignores the current
+ * beat and appends another question. A question beat may contain one question;
+ * statement beats contain none. Returning null lets the runtime cancel an
+ * unusable line instead of displaying forced or semantically altered prose.
+ */
+export function applyAmbientDialogueBeat(
+  text: string,
+  beat: AmbientDialogueBeat,
+): string | null {
+  const clauses = text
+    .match(/[^。！？!?；]+[。！？!?；]?/g)
+    ?.map((clause) => clause.trim())
+    .filter(Boolean) || [];
+  let questions = 0;
+  const kept = clauses.filter((clause) => {
+    if (!/[？?]/.test(clause)) return true;
+    questions += 1;
+    return beat.allowQuestion && questions === 1;
+  });
+  const result = kept.join("").trim();
+  return result || null;
+}
+
 export function parseNpcDialogue(raw: string): ParsedNpcDialogue {
   const pick = (label: string, next?: string) => {
     const tail = next ? `(?=\\n\\s*(?:${next})[：:]|$)` : "$";

@@ -208,7 +208,8 @@ export function drawWorld(ctx: CanvasRenderingContext2D, state: WorldSave, ambie
     generatedQuestNpc = state.tasks.generatedQuest
       ? generatedQuestCurrentNpc(state.tasks.generatedQuest)
       : null,
-    ambientBubbles: Array<{ x: number; y: number; text: string; kind: AmbientBubbleKind | "player"; shownAt: number }> = [];
+    ambientBubbles: Array<{ x: number; y: number; bottomY: number; text: string; kind: AmbientBubbleKind | "player"; shownAt: number }> = [],
+    ambientObstacles: Array<{ left: number; top: number; width: number; height: number }> = [];
   ctx.fillStyle = "#0c1410";
   ctx.fillRect(0, 0, W, H);
   const staticMap = staticMapCanvas(map);
@@ -222,10 +223,12 @@ export function drawWorld(ctx: CanvasRenderingContext2D, state: WorldSave, ambie
     if (eventX < sx || eventY < sy || eventX >= sx + 20 || eventY >= sy + 15) continue;
     const near = Math.abs(eventX - pos.x) + Math.abs(eventY - pos.y) <= 2;
     if (visual.kind === "npc") {
+      const screenX = (eventX - sx) * T + 16,
+        screenY = (eventY - sy) * T + 23;
       drawActor(
         ctx,
-        (eventX - sx) * T + 16,
-        (eventY - sy) * T + 23,
+        screenX,
+        screenY,
         hash(visual.label),
         false,
         npcCharacterSprite(visual.npcId || 0, visual.label),
@@ -233,8 +236,8 @@ export function drawWorld(ctx: CanvasRenderingContext2D, state: WorldSave, ambie
       );
       drawNpcMarker(
         ctx,
-        (eventX - sx) * T + 16,
-        (eventY - sy) * T + 23,
+        screenX,
+        screenY,
         visual.label,
         near,
         // 当前坛主与主任务杀人目标标记红色，让玩家一眼知道该杀谁。
@@ -248,11 +251,18 @@ export function drawWorld(ctx: CanvasRenderingContext2D, state: WorldSave, ambie
             generatedQuestNpc.eventId === e.id,
         ),
       );
-      // 环境会话严格串行，同一会话任一时刻只显示当前发言者头顶的一句。
+      ambientObstacles.push({
+        left: screenX - 15,
+        top: screenY - 38,
+        width: 30,
+        height: 44,
+      });
+      // 环境会话严格串行；布局层优先头顶，冲突时再侧移或放到脚下。
       if (roaming?.bubble) {
         ambientBubbles.push({
-          x: (eventX - sx) * T + 16,
-          y: (eventY - sy) * T - 13,
+          x: screenX,
+          y: screenY - 36,
+          bottomY: screenY + 6,
           text: roaming.bubble,
           kind: roaming.bubbleKind,
           shownAt: roaming.bubbleShownAt,
@@ -305,6 +315,7 @@ export function drawWorld(ctx: CanvasRenderingContext2D, state: WorldSave, ambie
       false,
       state.tasks.wantedGender ? { sheet: 4, row: 0 } : { sheet: 3, row: 1 },
     );
+    ambientObstacles.push({ left: wx - 15, top: wy - 38, width: 30, height: 44 });
     drawNpcMarker(ctx, wx, wy, "通缉犯", near, true);
   }
   drawActor(
@@ -316,11 +327,20 @@ export function drawWorld(ctx: CanvasRenderingContext2D, state: WorldSave, ambie
     { sheet: 0, row: state.actor.gender ? 1 : 0 },
     pos.direction,
   );
-  // 主角台词同样只在头顶显示，并最后绘制在最高图层。
+  const playerScreenX = (pos.x - sx) * T + 16,
+    playerScreenY = (pos.y - sy) * T + 23;
+  ambientObstacles.push({
+    left: playerScreenX - 15,
+    top: playerScreenY - 38,
+    width: 30,
+    height: 44,
+  });
+  // 主角台词使用同一避让规则，并最后绘制在最高图层。
   if (playerAmbient.bubble) {
     ambientBubbles.push({
-      x: (pos.x - sx) * T + 16,
-      y: (pos.y - sy) * T - 13,
+      x: playerScreenX,
+      y: playerScreenY - 36,
+      bottomY: playerScreenY + 6,
       text: playerAmbient.bubble,
       kind: "player",
       shownAt: playerAmbient.bubbleShownAt,
@@ -335,6 +355,15 @@ export function drawWorld(ctx: CanvasRenderingContext2D, state: WorldSave, ambie
           ? -1
           : first.shownAt - second.shownAt,
     ),
+    [
+      ...ambientObstacles,
+      {
+        left: 8,
+        top: 7,
+        width: Math.min(150, map.name.length * 18 + 24),
+        height: 25,
+      },
+    ],
   );
   placedBubbles.forEach((bubble) => drawAmbientBubble(ctx, bubble));
   let shade = shadeCache.get(ctx);

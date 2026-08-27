@@ -1,12 +1,23 @@
 export type BubbleKind = "speech" | "action" | "player";
 
 export type AmbientBubbleInput = {
+  /** Speaker center x in canvas pixels. */
   x: number;
+  /** Top of the speaker's head in canvas pixels. */
   y: number;
+  /** Bottom of the speaker sprite; defaults to y + 54 for older callers. */
+  bottomY?: number;
   text: string;
   kind: BubbleKind;
   shownAt: number;
 };
+
+export type AmbientBubblePlacement =
+  | "above"
+  | "left"
+  | "right"
+  | "below"
+  | "fallback";
 
 export type AmbientBubbleBox = {
   text: string;
@@ -17,9 +28,10 @@ export type AmbientBubbleBox = {
   width: number;
   height: number;
   lines: string[];
+  placement: AmbientBubblePlacement;
 };
 
-type LayoutObstacle = { left: number; top: number; width: number; height: number };
+export type LayoutObstacle = { left: number; top: number; width: number; height: number };
 
 const W = 640;
 const H = 480;
@@ -68,7 +80,23 @@ export function measureAmbientBubble(
   return { width, height: lines.length * BUBBLE_LINE_HEIGHT + 2, lines };
 }
 
-/** 把重叠的气泡自动错开：优先在头顶向上堆叠，其次移到角色下方，最后左右平移。 */
+type BubbleCandidate = {
+  left: number;
+  top: number;
+  placement: AmbientBubblePlacement;
+};
+
+const EDGE = 3;
+const HEAD_GAP = 4;
+const SIDE_GAP = 7;
+const SPEAKER_HALF_WIDTH = 15;
+
+/**
+ * Stable collision avoidance around the speaker. Candidate priority is:
+ * centered above the head → either side → below the feet → nearby fallback.
+ * The last fallback performs a bounded canvas scan, so a free remote position
+ * is preferred over allowing two lines to cover each other.
+ */
 export function resolveAmbientBubbleLayout(
   ctx: CanvasRenderingContext2D,
   bubbles: AmbientBubbleInput[],
@@ -79,9 +107,8 @@ export function resolveAmbientBubbleLayout(
     return {
       ...bubble,
       ...m,
-      left: Math.max(3, Math.min(W - m.width - 3, bubble.x - m.width / 2)),
-      top: bubble.y - m.height,
-      baseY: bubble.y,
+      headY: bubble.y,
+      bottomY: bubble.bottomY ?? bubble.y + 54,
     };
   });
   const placed: AmbientBubbleBox[] = [];
@@ -93,17 +120,21 @@ export function resolveAmbientBubbleLayout(
     b.left < a.left + a.width &&
     a.top < b.top + b.height &&
     b.top < a.top + a.height;
-  // 输入顺序也是绘制优先级；渲染层把玩家放在最后，确保其气泡在最上层。
+  const insideCanvas = (candidate: BubbleCandidate, width: number, height: number) =>
+    candidate.left >= EDGE &&
+    candidate.left + width <= W - EDGE &&
+    candidate.top >= EDGE &&
+    candidate.top + height <= H - EDGE;
+  const intersectionArea = (
+    a: { left: number; top: number; width: number; height: number },
+    b: { left: number; top: number; width: number; height: number },
+  ) => Math.max(0, Math.min(a.left + a.width, b.left + b.width) - Math.max(a.left, b.left)) *
+    Math.max(0, Math.min(a.top + a.height, b.top + b.height) - Math.max(a.top, b.top));
+
+  // 输入顺序决定谁先占首选位置；稳定顺序可避免每帧左右跳动。
   for (const box of measured) {
-    const fits = (candidate: { left: number; top: number }) => {
-      if (
-        candidate.left < 3 ||
-        candidate.left + box.width > W - 3 ||
-        candidate.top < 3 ||
-        candidate.top + box.height > H - 3
-      )
-        return false;
-      // 补上候选框的宽高再做重叠判定
+    const fits = (candidate: BubbleCandidate) => {
+      if (!insideCanvas(candidate, box.width, box.height)) return false;
       const sized = {
         left: candidate.left,
         top: candidate.top,
@@ -112,16 +143,89 @@ export function resolveAmbientBubbleLayout(
       };
       return !placed.some((p) => overlap(sized, p)) && !obstacles.some((p) => overlap(sized, p as AmbientBubbleBox));
     };
-    const candidates: Array<{ left: number; top: number }> = [];
-    for (let i = 0; i < 12; i++)
-      candidates.push({ left: box.left, top: box.top - i * (box.height + 4) });
-    for (let i = 0; i < 12; i++)
-      candidates.push({ left: box.left, top: box.baseY + 34 + i * (box.height + 4) });
-    for (let i = 1; i <= 6; i++) {
-      candidates.push({ left: box.left - i * (box.width + 8), top: box.top });
-      candidates.push({ left: box.left + i * (box.width + 8), top: box.top });
+    const centeredLeft = box.x - box.width / 2,
+      aboveTop = box.headY - box.height - HEAD_GAP,
+      sideTop = (box.headY + box.bottomY - box.height) / 2,
+      leftSide: BubbleCandidate = {
+        left: box.x - SPEAKER_HALF_WIDTH - SIDE_GAP - box.width,
+        top: sideTop,
+        placement: "left",
+      },
+      rightSide: BubbleCandidate = {
+        left: box.x + SPEAKER_HALF_WIDTH + SIDE_GAP,
+        top: sideTop,
+        placement: "right",
+      },
+      sides = box.x <= W / 2 ? [rightSide, leftSide] : [leftSide, rightSide],
+      primary: BubbleCandidate[] = [
+        { left: centeredLeft, top: aboveTop, placement: "above" },
+        ...sides,
+        { left: centeredLeft, top: box.bottomY + HEAD_GAP, placement: "below" },
+      ],
+      fallback: BubbleCandidate[] = [];
+    const horizontalSteps = [box.width / 2 + 18, box.width + 26];
+    for (const dx of horizontalSteps) {
+      fallback.push(
+        { left: centeredLeft - dx, top: aboveTop, placement: "fallback" },
+        { left: centeredLeft + dx, top: aboveTop, placement: "fallback" },
+        { left: centeredLeft - dx, top: box.bottomY + HEAD_GAP, placement: "fallback" },
+        { left: centeredLeft + dx, top: box.bottomY + HEAD_GAP, placement: "fallback" },
+      );
     }
-    const chosen = candidates.find(fits) || { left: box.left, top: box.top };
+    for (let ring = 1; ring <= 4; ring++) {
+      const dy = ring * (box.height + 8),
+        dx = ring * (box.width / 2 + 12);
+      fallback.push(
+        { left: centeredLeft, top: aboveTop - dy, placement: "fallback" },
+        { left: centeredLeft, top: box.bottomY + HEAD_GAP + dy, placement: "fallback" },
+        { left: centeredLeft - dx, top: sideTop - dy / 2, placement: "fallback" },
+        { left: centeredLeft + dx, top: sideTop - dy / 2, placement: "fallback" },
+        { left: centeredLeft - dx, top: sideTop + dy / 2, placement: "fallback" },
+        { left: centeredLeft + dx, top: sideTop + dy / 2, placement: "fallback" },
+      );
+    }
+    let chosen = [...primary, ...fallback].find(fits);
+    if (!chosen) {
+      // Rare dense-screen fallback: search a coarse grid for the nearest truly
+      // free coordinate instead of silently reusing the occupied head slot.
+      let best: BubbleCandidate | undefined,
+        bestScore = Number.POSITIVE_INFINITY;
+      for (let top = EDGE; top <= H - box.height - EDGE; top += 12) {
+        for (let left = EDGE; left <= W - box.width - EDGE; left += 12) {
+          const candidate = { left, top, placement: "fallback" as const };
+          if (!fits(candidate)) continue;
+          const score = Math.abs(left + box.width / 2 - box.x) +
+            Math.abs(top + box.height / 2 - box.headY) * 1.15 +
+            (top > box.bottomY ? 12 : 0);
+          if (score < bestScore) {
+            best = candidate;
+            bestScore = score;
+          }
+        }
+      }
+      chosen = best;
+    }
+    if (!chosen) {
+      // A completely saturated canvas is theoretically possible. Pick the
+      // bounded candidate with the least covered area as a deterministic last
+      // resort, still moving away from the original occupied coordinate.
+      chosen = [...primary, ...fallback]
+        .filter((candidate) => insideCanvas(candidate, box.width, box.height))
+        .sort((a, b) => {
+          const area = (candidate: BubbleCandidate) => {
+            const sized = { ...candidate, width: box.width, height: box.height };
+            return [...placed, ...obstacles].reduce(
+              (sum, item) => sum + intersectionArea(sized, item),
+              0,
+            );
+          };
+          return area(a) - area(b);
+        })[0] || {
+        left: Math.max(EDGE, Math.min(W - box.width - EDGE, centeredLeft)),
+        top: Math.max(EDGE, Math.min(H - box.height - EDGE, aboveTop)),
+        placement: "fallback",
+      };
+    }
     placed.push({
       text: box.text,
       kind: box.kind,
@@ -131,12 +235,13 @@ export function resolveAmbientBubbleLayout(
       width: box.width,
       height: box.height,
       lines: box.lines,
+      placement: chosen.placement,
     });
   }
   return placed;
 }
 
-/** 绘制头顶台词：无背景框，深色描边+阴影保证任何底色上可读；「to」显示为箭头，动作青色斜体、独白白色。 */
+/** 绘制环境台词：无背景框，深色描边+阴影保证任何底色上可读；「to」显示为箭头，动作青色斜体、独白白色。 */
 export function drawAmbientBubble(ctx: CanvasRenderingContext2D, box: AmbientBubbleBox) {
   const { left, top, width, kind, lines } = box,
     monologue = box.text.includes("自言自语"),

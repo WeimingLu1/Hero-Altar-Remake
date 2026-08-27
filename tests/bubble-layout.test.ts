@@ -89,6 +89,7 @@ test("drawAmbientBubble 整句描边+填充显示且把 to 显示为箭头", () 
     width: 120,
     height: 12,
     lines: ["甲 to 乙：“你好”"],
+    placement: "above" as const,
   };
   drawAmbientBubble(ctx, box);
   assert.deepEqual(stroked, ["甲 → 乙：“你好”"]);
@@ -106,6 +107,7 @@ test("独白用白色、动作用青色、玩家用蓝色", () => {
     width: 120,
     height: 12,
     lines: ["甲自言自语：“今天天真好”"],
+    placement: "above" as const,
   };
   drawAmbientBubble(ctx, mono);
   assert.equal(filled.at(-1)?.fillStyle, "#ffffff");
@@ -125,6 +127,39 @@ test("会话气泡默认都从各自头顶向上展开", () => {
   ]);
   assert.ok(placed.every((bubble) => bubble.top < 100));
   assert.deepEqual(placed.map((bubble) => bubble.text), ["甲说话", "乙说话"]);
+});
+
+test("头顶被占用时优先移到空间更充足的一侧", () => {
+  const placed = resolveAmbientBubbleLayout(mockCtx(), [
+    { x: 200, y: 120, bottomY: 170, text: "侧边显示", kind: "speech", shownAt: 1 },
+  ], [{ left: 0, top: 0, width: 640, height: 122 }]);
+  assert.equal(placed[0].placement, "right");
+  assert.ok(placed[0].left > 200);
+});
+
+test("头顶和两侧都被占用时移到人物脚下", () => {
+  const placed = resolveAmbientBubbleLayout(mockCtx(), [
+    { x: 200, y: 120, bottomY: 170, text: "下方显示", kind: "speech", shownAt: 1 },
+  ], [
+    { left: 0, top: 0, width: 640, height: 122 },
+    { left: 0, top: 122, width: 640, height: 48 },
+  ]);
+  assert.equal(placed[0].placement, "below");
+  assert.ok(placed[0].top >= 174);
+});
+
+test("四个首选方位都冲突时寻找不重叠的邻近坐标", () => {
+  const obstacles = [
+    { left: 175, top: 90, width: 50, height: 35 },
+    { left: 218, top: 125, width: 80, height: 50 },
+    { left: 95, top: 125, width: 88, height: 50 },
+    { left: 175, top: 170, width: 50, height: 35 },
+  ];
+  const placed = resolveAmbientBubbleLayout(mockCtx(), [
+    { x: 200, y: 120, bottomY: 170, text: "换个坐标", kind: "speech", shownAt: 1 },
+  ], obstacles);
+  assert.equal(placed[0].placement, "fallback");
+  assert.ok(obstacles.every((obstacle) => !overlaps(placed[0], obstacle)));
 });
 
 test("多人气泡都保持在画布内且两两不重叠", () => {

@@ -179,12 +179,14 @@ test("player ambient bubble is always on the highest layer", () => {
   assert.ok(source.indexOf("ambientBubbles.push") < source.indexOf("ambientBubbles.sort"));
 });
 
-test("历史台词不会在气泡存活期后复活显示，玩家气泡无条件最上层", () => {
-  // 每个 NPC 的气泡都在自己头顶、只在该台词存活期间显示；不再聚合历史会话卡。
+test("历史台词不会复活，玩家气泡参与统一避让并保持最高绘制层", () => {
+  // 每个 NPC 的当前气泡从人物锚点布局；不再聚合历史会话卡。
   assert.match(source, /if \(roaming\?\.bubble\)/);
   assert.match(source, /roaming\.bubbleShownAt/);
   assert.match(source, /if \(playerAmbient\.bubble\)/);
-  assert.match(source, /y: \(pos\.y - sy\) \* T - 13/);
+  assert.match(source, /y: playerScreenY - 36/);
+  assert.match(source, /bottomY: playerScreenY \+ 6/);
+  assert.match(source, /\.\.\.ambientObstacles/);
   assert.doesNotMatch(source, /preferBelow/);
   assert.doesNotMatch(source, /collectConversationCards/);
 });
@@ -220,7 +222,8 @@ test("战报生成不能锁住普通攻击绝招或退出操作", () => {
 
 test("ambient conversations open on a self-raised matter and demand depth", () => {
   assert.match(source, /isOpening = sessionContext\.length === 0/);
-  assert.match(source, /自然提起一件正关心、正困扰或刚撞见的具体闲事/);
+  assert.match(source, /自然陈述一件正关心、正困扰或刚撞见的具体闲事/);
+  assert.match(source, /连续两句绝不能都是问句/);
   assert.match(source, /空泛附和/);
 });
 
@@ -346,9 +349,10 @@ test("world canvas renders characters props bubbles and text at high resolution"
   assert.doesNotMatch(worldCss, /image-rendering:\s*pixelated/);
 });
 
-test("一对一台词只显示在当前发言者头顶的小气泡", () => {
+test("一对一台词从当前发言者锚点按上侧下顺序避让", () => {
   assert.match(source, /if \(roaming\?\.bubble\)/);
-  assert.match(source, /y: \(eventY - sy\) \* T - 13/);
+  assert.match(source, /y: screenY - 36/);
+  assert.match(source, /bottomY: screenY \+ 6/);
   assert.match(source, /resolveAmbientBubbleLayout/);
   assert.match(source, /drawAmbientBubble\(ctx, bubble\)/);
   assert.doesNotMatch(source, /conversationSessionKey/);

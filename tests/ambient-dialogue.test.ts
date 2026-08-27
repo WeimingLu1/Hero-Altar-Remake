@@ -1,6 +1,8 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import {
+  ambientDialogueBeat,
+  applyAmbientDialogueBeat,
   cleanActiveDialogue,
   cleanAmbientAction,
   cleanAmbientSpeech,
@@ -14,6 +16,37 @@ test("structured NPC dialogue keeps all three formal fields", () => {
     { state: "警惕", action: "抱拳", speech: "阁下请留步。" },
   );
   assert.equal(parseNpcDialogue("只是随口一问。 ").speech, "只是随口一问。");
+});
+
+test("ambient dialogue uses statements for opening and most follow-up turns", () => {
+  assert.deepEqual(
+    [0, 1, 2, 3].map((turn) =>
+      ambientDialogueBeat(turn, turn ? "前一句。" : "", turn === 0).kind
+    ),
+    ["opening", "detail", "stance", "question"],
+  );
+  assert.equal(ambientDialogueBeat(0, "前一句。", false).kind, "respond");
+});
+
+test("a real question forces the next ambient turn to answer without asking back", () => {
+  const beat = ambientDialogueBeat(4, "这条山路近来可还太平？");
+  assert.equal(beat.kind, "answer");
+  assert.equal(beat.allowQuestion, false);
+  assert.match(beat.instruction, /不要反问/);
+});
+
+test("ambient dialogue drops appended questions from statement beats", () => {
+  const statementBeat = ambientDialogueBeat(2, "前一句。"),
+    questionBeat = ambientDialogueBeat(3, "前一句。");
+  assert.equal(
+    applyAmbientDialogueBeat("山路昨夜塌了一段。你也要往北走吗？", statementBeat),
+    "山路昨夜塌了一段。",
+  );
+  assert.equal(
+    applyAmbientDialogueBeat("你从哪边来？还见过旁人吗？", questionBeat),
+    "你从哪边来？",
+  );
+  assert.equal(applyAmbientDialogueBeat("你也听说了吗？", statementBeat), null);
 });
 
 test("ambient speech removes routing and stage directions", () => {
