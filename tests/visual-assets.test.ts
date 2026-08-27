@@ -1,10 +1,13 @@
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import test from "node:test";
+import { fileURLToPath } from "node:url";
+import sharpModule from "sharp";
 import {
   characterDirectionColumn,
   mapTheme,
   npcCharacterSprite,
+  npcPaletteFilter,
 } from "../app/original/world-renderer";
 
 const worldSource = readFileSync(
@@ -52,6 +55,15 @@ const bubbleSource = readFileSync(
   new URL("../app/game-core/ambient-bubble-layout.ts", import.meta.url),
   "utf8",
 );
+type SharpImage = {
+  ensureAlpha(): SharpImage;
+  raw(): SharpImage;
+  toBuffer(options: { resolveWithObject: true }): Promise<{
+    data: Buffer;
+    info: { width: number; height: number };
+  }>;
+};
+const sharpImage = sharpModule as unknown as (input: string) => SharpImage;
 
 test("player left and right directions use screen-facing sprite columns", () => {
   assert.equal(characterDirectionColumn(2), 0);
@@ -93,6 +105,44 @@ test("distinctive named NPCs keep matching world sprites and portraits", () => {
     portraitAtlas: "roster",
     portrait: 12,
   });
+});
+
+test("generic NPC palette variation is stable while bespoke art keeps its colours", () => {
+  const generic = npcCharacterSprite(3);
+  assert.equal(npcPaletteFilter(3, generic), npcPaletteFilter(3, generic));
+  assert.notEqual(npcPaletteFilter(3, generic), "none");
+  assert.notEqual(npcPaletteFilter(3, generic), npcPaletteFilter(4, npcCharacterSprite(4)));
+  assert.equal(npcPaletteFilter(48, npcCharacterSprite(48)), "none");
+  assert.equal(npcPaletteFilter(117, npcCharacterSprite(117)), "none");
+  assert.equal(npcPaletteFilter(999, { sheet: 5, row: 0 }), "none");
+});
+
+test("beast-school atlas keeps every silhouette inside its exact grid cell", async () => {
+  const { data, info } = await sharpImage(
+    fileURLToPath(new URL(
+      "../public/game-assets/generated/wuxia-characters-beast-school-v3.webp",
+      import.meta.url,
+    )),
+  )
+    .ensureAlpha()
+    .raw()
+    .toBuffer({ resolveWithObject: true });
+  assert.equal(info.width, 1256);
+  assert.equal(info.height, 1256);
+  const cell = info.width / 4;
+  for (let row = 0; row < 4; row += 1) {
+    for (let column = 0; column < 4; column += 1) {
+      for (let localY = 0; localY < cell; localY += 1) {
+        for (let localX = 0; localX < cell; localX += 1) {
+          if (localX >= 15 && localX < cell - 15 && localY >= 15 && localY < cell - 15)
+            continue;
+          const x = column * cell + localX,
+            y = row * cell + localY;
+          assert.equal(data[(y * info.width + x) * 4 + 3], 0);
+        }
+      }
+    }
+  }
 });
 
 test("generic map characters never render an undefined speaker name", () => {

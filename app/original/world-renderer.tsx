@@ -64,7 +64,7 @@ const characterSheetNames = [
   "wuxia-characters-notable-women-v2.webp",
   "wuxia-characters-notable-wanderers-v2.webp",
   "wuxia-characters-underworld-v2.webp",
-  "wuxia-characters-beast-school-v2.webp",
+  "wuxia-characters-beast-school-v3.webp",
 ] as const;
 const wuxiaArt: WuxiaArt = {
   characters: characterSheetNames.map(() => null),
@@ -148,6 +148,20 @@ const namedCharacterArt: Record<number, CharacterSprite> = {
   162: { sheet: 10, row: 3, portraitAtlas: "notable", portrait: 15 },
   171: { sheet: 1, row: 2, portraitAtlas: "roster", portrait: 13 },
 };
+
+export function npcPaletteFilter(id: number, sprite: CharacterSprite) {
+  // Bespoke named and faction sheets carry intentional identity colours.
+  // Generic sheets receive a mild, deterministic tint so people sharing the
+  // same silhouette still remain visually distinct without flickering.
+  if (id <= 0 || namedCharacterArt[id] || sprite.sheet >= 5) return "none";
+  let seed = Math.imul(id ^ 0x9e37, 0x85ebca6b) >>> 0;
+  seed ^= seed >>> 16;
+  const hues = [-14, -9, -5, 0, 5, 9, 14] as const,
+    hue = hues[seed % hues.length],
+    saturation = 90 + ((seed >>> 7) % 26),
+    brightness = 94 + ((seed >>> 15) % 13);
+  return `hue-rotate(${hue}deg) saturate(${saturation}%) brightness(${brightness}%)`;
+}
 
 export function npcCharacterSprite(id: number, fallbackName = ""): CharacterSprite {
   const npc = id > 0 ? npcRecord(id) : {},
@@ -283,15 +297,17 @@ export function drawWorld(ctx: CanvasRenderingContext2D, state: WorldSave, ambie
     const near = Math.abs(eventX - pos.x) + Math.abs(eventY - pos.y) <= 2;
     if (visual.kind === "npc") {
       const screenX = (eventX - sx) * T + 16,
-        screenY = (eventY - sy) * T + 23;
+        screenY = (eventY - sy) * T + 23,
+        sprite = npcCharacterSprite(visual.npcId || 0, visual.label);
       drawActor(
         ctx,
         screenX,
         screenY,
         hash(visual.label),
         false,
-        npcCharacterSprite(visual.npcId || 0, visual.label),
+        sprite,
         roaming?.direction || 2,
+        npcPaletteFilter(visual.npcId || 0, sprite),
       );
       drawNpcMarker(
         ctx,
@@ -373,6 +389,11 @@ export function drawWorld(ctx: CanvasRenderingContext2D, state: WorldSave, ambie
       state.tasks.wantedGender ? "#e45d6d" : "#c44f45",
       false,
       state.tasks.wantedGender ? { sheet: 4, row: 0 } : { sheet: 3, row: 1 },
+      2,
+      npcPaletteFilter(
+        198,
+        state.tasks.wantedGender ? { sheet: 4, row: 0 } : { sheet: 3, row: 1 },
+      ),
     );
     ambientObstacles.push({ left: wx - 15, top: wy - 38, width: 30, height: 44 });
     drawNpcMarker(ctx, wx, wy, "通缉犯", near, true);
@@ -980,6 +1001,7 @@ function drawActor(
   hero: boolean,
   sprite: CharacterSprite = { sheet: 0, row: 0 },
   direction = 2,
+  paletteFilter = "none",
 ) {
   const atlas = wuxiaArt.characters[sprite.sheet];
   if (!atlas) ensureCharacterSheet(sprite.sheet);
@@ -993,6 +1015,8 @@ function drawActor(
     ctx.beginPath();
     ctx.ellipse(x, y + 9, 10, 4, 0, 0, Math.PI * 2);
     ctx.fill();
+    ctx.save();
+    ctx.filter = paletteFilter;
     ctx.drawImage(
       atlas,
       column * cellWidth,
@@ -1004,6 +1028,7 @@ function drawActor(
       width,
       height,
     );
+    ctx.restore();
     return;
   }
   ctx.fillStyle = "rgba(0,0,0,.5)";

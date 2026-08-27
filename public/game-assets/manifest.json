@@ -15,12 +15,12 @@
         "/game-assets/generated/wuxia-characters-notable-women-v2.webp",
         "/game-assets/generated/wuxia-characters-notable-wanderers-v2.webp",
         "/game-assets/generated/wuxia-characters-underworld-v2.webp",
-        "/game-assets/generated/wuxia-characters-beast-school-v2.webp"
+        "/game-assets/generated/wuxia-characters-beast-school-v3.webp"
       ],
       "columns": 4,
       "rows": 4,
       "directions": ["front", "right", "left", "back"],
-      "purpose": "48 player and NPC world silhouettes selected by stable named identity first, then gender, age, faction, and role"
+      "purpose": "48 player and NPC world silhouettes selected by stable named identity first, then gender, age, faction, and role; generic NPCs receive deterministic per-character palette variation"
     },
     "portraits": {
       "src": [

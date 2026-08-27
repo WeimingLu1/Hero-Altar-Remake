@@ -32,9 +32,10 @@ OpenAI Image Generation and then prepared locally for use as sprite atlases:
   `wuxia-characters-underworld-v2.webp`: sixteen named-character direction sets
   for masters, heroines, physically distinctive wanderers, underworld envoys,
   judges, and bandit leaders.
-- `public/game-assets/generated/wuxia-characters-beast-school-v2.webp`: four
+- `public/game-assets/generated/wuxia-characters-beast-school-v3.webp`: four
   direction sets for the Snow Mountain leopard and three visually distinctive
-  Beast School figures.
+  Beast School figures, repacked into strict equal cells so every head and
+  weapon remains inside its runtime crop.
 - `public/game-assets/generated/wuxia-notable-portraits-v2.webp` and
   `wuxia-roster-portraits-v2.webp`: two 4 × 4 portrait grids containing 32
   named, age-specific, disability-aware, animal, foreign-school, Taoist,
