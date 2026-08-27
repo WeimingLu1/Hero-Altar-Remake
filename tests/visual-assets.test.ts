@@ -115,6 +115,11 @@ test("generic NPC palette variation is stable while bespoke art keeps its colour
   assert.equal(npcPaletteFilter(48, npcCharacterSprite(48)), "none");
   assert.equal(npcPaletteFilter(117, npcCharacterSprite(117)), "none");
   assert.equal(npcPaletteFilter(999, { sheet: 5, row: 0 }), "none");
+  const genericFilters = Array.from({ length: 198 }, (_, index) => index + 1)
+    .map((id) => npcPaletteFilter(id, npcCharacterSprite(id)))
+    .filter((filter) => filter !== "none");
+  assert.equal(new Set(genericFilters).size, genericFilters.length);
+  assert.ok(genericFilters.every((filter) => !filter.includes("undefined")));
 });
 
 test("beast-school atlas keeps every silhouette inside its exact grid cell", async () => {

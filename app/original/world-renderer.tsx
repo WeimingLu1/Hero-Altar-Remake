@@ -154,12 +154,11 @@ export function npcPaletteFilter(id: number, sprite: CharacterSprite) {
   // Generic sheets receive a mild, deterministic tint so people sharing the
   // same silhouette still remain visually distinct without flickering.
   if (id <= 0 || namedCharacterArt[id] || sprite.sheet >= 5) return "none";
-  let seed = Math.imul(id ^ 0x9e37, 0x85ebca6b) >>> 0;
-  seed ^= seed >>> 16;
-  const hues = [-14, -9, -5, 0, 5, 9, 14] as const,
-    hue = hues[seed % hues.length],
-    saturation = 90 + ((seed >>> 7) % 26),
-    brightness = 94 + ((seed >>> 15) % 13);
+  // The three coprime cycles have a joint period far above the 1–198 NPC ID
+  // range, so every generic record receives a unique combination.
+  const hue = -16 + ((id * 37) % 33),
+    saturation = 90 + ((id * 17) % 27),
+    brightness = 94 + ((id * 11) % 13);
   return `hue-rotate(${hue}deg) saturate(${saturation}%) brightness(${brightness}%)`;
 }
 
