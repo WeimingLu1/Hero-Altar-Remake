@@ -28,10 +28,6 @@ export type AmbientNpc = {
   lastPartnerId: number;
   partnerCooldownUntil: number;
   waitingForPlayer: boolean;
-  groupId: number;
-  groupMembers: number[];
-  groupTurn: number;
-  groupNextAt: number;
   /** 预取缓冲的下一对台词，双方成员镜像持有（轮转时读取 A 一份为准）。 */
   nextPair?: { a: string; b: string };
   /** 预取请求是否在途（区别于 generationPending 的"当前轮"）。 */
@@ -120,37 +116,76 @@ export function ambientNpcInViewport(npc: Pick<AmbientNpc, "x" | "y">, viewport:
 }
 
 /**
- * 当前视野内纯 NPC 对话会话数（玩家参与的不计）。
- * 群会话 = 活跃非暂停 NPC 的去重 groupId 数；双人 = 每对计一次（eventId < partnerId）。
+ * 当前视野内纯 NPC 一对一会话数（玩家参与的不计）。
+ * 每对只由 eventId 较小的一方计数。
  */
 export function countActiveNpcConversations(
   world: AmbientWorld,
   viewport: AmbientViewport,
   pausedIds: ReadonlySet<number> = new Set(),
 ) {
-  let groups = 0, pairs = 0;
-  const seenGroups = new Set<number>();
+  let pairs = 0;
   for (const item of world.npcs) {
     if (!ambientNpcInViewport(item, viewport) || pausedIds.has(item.eventId)) continue;
-    if (item.groupId > 0) {
-      if (!seenGroups.has(item.groupId)) {
-        seenGroups.add(item.groupId);
-        groups += 1;
-      }
-    } else if (item.partnerId > 0 && item.eventId < item.partnerId) {
+    if (item.partnerId > 0 && item.eventId < item.partnerId) {
       pairs += 1;
     }
   }
-  return groups + pairs;
+  return pairs;
 }
 
 export function resetAmbientSessions(world: AmbientWorld, resumeAt: number) {
   for (const npc of world.npcs) {
-    npc.partnerId = 0; npc.groupId = 0; npc.groupMembers = []; npc.groupTurn = -1; npc.groupNextAt = 0;
+    npc.partnerId = 0;
     npc.conversationTurn = 0; npc.conversationRound = 0; npc.lastPartnerId = 0;
     npc.bubble = ""; npc.generationPending = false; npc.llmRequested = true;
     npc.speechTargetName = ""; npc.speechTargetEventId = 0; npc.conversationContext = []; npc.nextPair = undefined; npc.nextPairPending = false; npc.queuedLine = undefined; npc.departUntil = 0; npc.departFrom = undefined; npc.nextBehaviorAt = resumeAt;
   }
+}
+
+function resetAmbientConversationMember(npc: AmbientNpc, resumeAt: number) {
+  npc.partnerId = 0;
+  npc.conversationTurn = 0;
+  npc.conversationRound = 0;
+  npc.bubble = "";
+  npc.bubbleUntil = 0;
+  npc.generationPending = false;
+  npc.llmRequested = true;
+  npc.speechTargetName = "";
+  npc.speechTargetEventId = 0;
+  npc.conversationContext = [];
+  npc.nextPair = undefined;
+  npc.nextPairPending = false;
+  npc.queuedLine = undefined;
+  npc.departUntil = 0;
+  npc.departFrom = undefined;
+  npc.nextBehaviorAt = resumeAt;
+}
+
+/**
+ * 解除某个 NPC 当前的一对一会话。玩家接管、离屏、模型失败和主动中断都
+ * 走同一条清理边界，避免只清一方后留下幽灵搭档或旧气泡。
+ */
+export function clearAmbientNpcConversation(
+  world: AmbientWorld,
+  eventId: number,
+  resumeAt: number,
+  cooldownUntil = 0,
+) {
+  const npc = ambientNpcByEventId(world, eventId);
+  if (!npc) return [] as number[];
+  const partner = npc.partnerId ? ambientNpcByEventId(world, npc.partnerId) : undefined,
+    npcId = npc.eventId,
+    partnerId = partner?.eventId || 0;
+  resetAmbientConversationMember(npc, resumeAt);
+  if (partner && partner.partnerId === npcId) resetAmbientConversationMember(partner, resumeAt);
+  if (cooldownUntil > 0 && partner) {
+    npc.lastPartnerId = partnerId;
+    npc.partnerCooldownUntil = cooldownUntil;
+    partner.lastPartnerId = npcId;
+    partner.partnerCooldownUntil = cooldownUntil;
+  }
+  return partner ? [npcId, partnerId] : [npcId];
 }
 
 /** 双人会话前几轮不掷散场骰；此后每轮按 PAIR_END_PERCENT 概率成为最后一轮。 */
@@ -236,10 +271,6 @@ export function createAmbientWorld(
       lastPartnerId: 0,
       partnerCooldownUntil: 0,
       waitingForPlayer: false,
-      groupId: 0,
-      groupMembers: [],
-      groupTurn: -1,
-      groupNextAt: 0,
       nextPair: undefined,
       nextPairPending: false,
       queuedLine: undefined,
@@ -304,33 +335,22 @@ export function tickAmbientWorld(options: {
     faceToward(from, to);
     return false;
   };
-  const clearGroup = (member: AmbientNpc, resumeAt: number) => {
-    const memberIds = new Set([...member.groupMembers, member.eventId]);
-    for (const item of world.npcs.filter((candidate) => memberIds.has(candidate.eventId))) {
-      item.bubble = ""; item.generationPending = false; item.speechTargetName = ""; item.speechTargetEventId = 0; item.groupId = 0; item.groupMembers = [];
-      item.groupTurn = -1; item.groupNextAt = 0; item.nextBehaviorAt = resumeAt; item.conversationContext = [];
-      item.nextPair = undefined; item.nextPairPending = false; item.queuedLine = undefined; item.departUntil = 0; item.departFrom = undefined; item.partnerCooldownUntil = now + 30000;
-    }
-  };
   for (const npc of world.npcs.filter((item) => !isActive(item))) {
-    if (npc.groupId) clearGroup(npc, now + 700);
-    if (npc.partnerId) {
-      const partner = ambientNpcByEventId(world, npc.partnerId);
-      if (partner) {
-        partner.partnerId = 0; partner.conversationTurn = 0; partner.conversationRound = 0;
-        partner.conversationContext = []; partner.bubble = ""; partner.generationPending = false; partner.speechTargetName = ""; partner.speechTargetEventId = 0;
-        partner.nextPair = undefined; partner.nextPairPending = false; partner.queuedLine = undefined; partner.departUntil = 0; partner.departFrom = undefined; partner.nextBehaviorAt = now + 700;
-      }
-    }
-    npc.x = npc.homeX; npc.y = npc.homeY; npc.partnerId = 0; npc.conversationTurn = 0; npc.conversationRound = 0; npc.conversationContext = [];
-    npc.bubble = ""; npc.generationPending = false; npc.speechTargetName = ""; npc.speechTargetEventId = 0; npc.waitingForPlayer = false;
-    npc.nextPair = undefined; npc.nextPairPending = false; npc.queuedLine = undefined; npc.departUntil = 0; npc.departFrom = undefined; npc.nextBehaviorAt = now + 700;
+    clearAmbientNpcConversation(world, npc.eventId, now + 700);
+    npc.x = npc.homeX;
+    npc.y = npc.homeY;
+    npc.waitingForPlayer = false;
   }
   for (const npc of world.npcs) {
     if (!isActive(npc)) continue;
     // 逐句显示：上一句展示完毕，把排队的接续台词提升上屏。
     // bubbleUntil 覆盖整个回合窗口，轮转推进与预取调度不受影响。
     if (npc.queuedLine && now >= npc.queuedLine.at) {
+      const partner = npc.partnerId
+        ? ambientNpcByEventId(world, npc.partnerId)
+        : undefined;
+      // 严格轮次锁：乙句上屏前先撤掉甲句，任何时刻只留一个会话气泡。
+      if (partner) partner.bubble = "";
       npc.bubble = npc.queuedLine.text;
       npc.bubbleKind = "speech";
       npc.bubbleShownAt = now;
@@ -339,80 +359,12 @@ export function tickAmbientWorld(options: {
     const playerDistance = Math.abs(npc.x - playerX) + Math.abs(npc.y - playerY);
     if (playerDistance <= 2) {
       npc.waitingForPlayer = true;
-      if (!npc.groupId && !npc.partnerId && !npc.bubble) continue;
+      if (!npc.partnerId && !npc.bubble) continue;
     }
     if (playerDistance > 2 && npc.waitingForPlayer) {
       npc.waitingForPlayer = false;
       npc.bubble = "";
       npc.nextBehaviorAt = now + 450;
-    }
-    if (npc.groupId) {
-      const members = npc.groupMembers.map((id) => ambientNpcByEventId(world, id)).filter((item): item is AmbientNpc => Boolean(item)),
-        leader = members.reduce((first, item) => item.eventId < first.eventId ? item : first, members[0] || npc);
-      if (members.length < 2 || !members.some((item) => item.eventId === npc.eventId)) {
-        clearGroup(npc, now + 700);
-        continue;
-      }
-      // Every member freezes while the player owns this conversation. Previously
-      // only the leader paused, allowing other participants to walk out of range.
-      if (members.some((item) => pausedConversationNpcIds.has(item.eventId))) continue;
-      if (npc.eventId !== leader.eventId) {
-        if (!ambientCanHear(npc, leader)) stepToward(npc, leader);
-        else faceToward(npc, leader);
-        continue;
-      }
-      // The player has joined this circle: freeze the NPC turn cursor until the
-      // player's visible reply finishes, so nobody talks over the current turn.
-      if (members.some((item) => item.generationPending)) continue;
-      if (members.some((item) => item.eventId !== leader.eventId && !ambientCanHear(item, leader))) continue;
-      if (leader.groupTurn < 0) {
-        leader.groupTurn = 0;
-        const target = members.find((item) => item.eventId !== leader.eventId) || leader;
-        leader.bubble = ""; leader.speechTargetName = target.name; leader.speechTargetEventId = target.eventId; leader.generationPending = true; leader.queuedAt = now;
-        leader.conversationContext = [];
-        leader.bubbleKind = "speech"; leader.bubbleUntil = now + 12000; leader.groupNextAt = leader.bubbleUntil; leader.llmRequested = false;
-        faceToward(leader, target); faceToward(target, leader);
-        continue;
-      }
-      if (now >= leader.groupNextAt) {
-        const visibleBubble = members.find((item) => item.bubble)?.bubble;
-        if (visibleBubble && leader.conversationContext.at(-1) !== visibleBubble)
-          leader.conversationContext = [...leader.conversationContext, visibleBubble].slice(-6);
-        members.forEach((item) => { item.bubble = ""; });
-        const nextTurn = leader.groupTurn + 1,
-          // 群聊成员的气泡带「群聊 · 」显示前缀(use-ambient-runtime 写入 context 的
-          // 是完整装饰文本)，反解上一位发言人时必须先剥掉，否则永远匹配不到成员名。
-          previousSpeakerName = leader.conversationContext.at(-1)?.match(/^(?:群聊 · )?(.+?) to /)?.[1] || members[Math.min(nextTurn - 1, members.length - 1)].name,
-          previousSpeakerIsMember = members.some((item) => item.name === previousSpeakerName);
-        // If the player spoke after the nominal last NPC turn, answer once before closing.
-        if (nextTurn >= members.length && previousSpeakerIsMember) {
-          clearGroup(leader, now + 450);
-          // 群聊自然解散后成员也各自走开。
-          for (const member of members) {
-            member.departUntil = now + AMBIENT_DEPART_MS;
-            member.departFrom = { x: leader.x, y: leader.y };
-          }
-          continue;
-        }
-        // 上一位是玩家则继续回应玩家(让玩家留在讨论里)；NPC 之间不强制回上一位，
-        // 随机挑群里另一个人搭话，让讨论更自然
-        const speaker = nextTurn >= members.length ? leader : members[nextTurn],
-          others = members.filter((item) => item.eventId !== speaker.eventId),
-          target = previousSpeakerIsMember
-            ? others[Math.floor(Math.random() * others.length)] || members[0]
-            : undefined,
-          targetName = previousSpeakerIsMember ? target?.name || previousSpeakerName : previousSpeakerName;
-        if (target && !ambientCanHear(speaker, target)) {
-          stepToward(speaker, target);
-          leader.groupNextAt = now + 500;
-          continue;
-        }
-        speaker.bubble = ""; speaker.speechTargetName = targetName; speaker.speechTargetEventId = target?.eventId || 0; speaker.generationPending = true; speaker.queuedAt = now;
-        speaker.bubbleKind = "speech"; speaker.bubbleUntil = now + 12000; speaker.llmRequested = false;
-        if (target) { faceToward(speaker, target); faceToward(target, speaker); }
-        leader.groupTurn = nextTurn; leader.groupNextAt = speaker.bubbleUntil;
-      }
-      continue;
     }
     // 统一守卫：partnerId 指向已不存在的人物时立即清理，避免任何 turn 卡死。
     if (npc.partnerId && !ambientNpcByEventId(world, npc.partnerId)) {
@@ -431,21 +383,6 @@ export function tickAmbientWorld(options: {
       faceToward(npc, partner);
       faceToward(partner, npc);
       if (npc.eventId < partner.eventId) {
-        // 候选 = 发起者听觉圈内的活跃 NPC(含当前双人)。
-        // 只有所有候选彼此都在对方 3×3 听觉圈内才组成群聊；人数不设上限。
-        const candidates = world.npcs.filter((item) => isActive(item) && !item.groupId && (!item.partnerId || item.eventId === npc.eventId || item.eventId === partner.eventId) && ambientCanHear(npc, item));
-        const mutuallyHeard =
-          candidates.length >= 3 &&
-          candidates.every((a) => candidates.every((b) => ambientCanHear(a, b)));
-        if (mutuallyHeard) {
-          const members = candidates, ids = members.map((item) => item.eventId), groupId = Math.min(...ids);
-          for (const member of members) {
-            member.groupId = groupId; member.groupMembers = ids; member.groupTurn = -1; member.groupNextAt = 0;
-            member.partnerId = 0; member.conversationTurn = 0; member.bubble = ""; member.speechTargetName = ""; member.speechTargetEventId = 0;
-            member.nextPair = undefined; member.nextPairPending = false; member.queuedLine = undefined; member.departUntil = 0; member.departFrom = undefined; member.nextBehaviorAt = now + 300;
-          }
-          continue;
-        }
         npc.conversationTurn = 1;
         npc.conversationRound = partner.conversationRound = 1;
         npc.conversationContext = partner.conversationContext = [];
@@ -546,7 +483,8 @@ export function tickAmbientWorld(options: {
     // 偶遇：发现距离每步随机(8–12)，并在候选里随机挑人，而不是永远找最近者。
     const meetRadius = 8 + (seed >>> 5) % 5,
       nearbyCandidates = world.npcs.filter((other) =>
-        isActive(other) && other.eventId !== npc.eventId && !other.partnerId && !other.groupId && !other.bubble &&
+        isActive(other) && other.eventId !== npc.eventId && !other.partnerId && !other.bubble &&
+        !other.generationPending && !other.waitingForPlayer &&
         Math.abs(other.x - npc.x) + Math.abs(other.y - npc.y) <= meetRadius &&
         !(npc.lastPartnerId === other.eventId && npc.partnerCooldownUntil > now) &&
         Math.abs(other.x - playerX) + Math.abs(other.y - playerY) > 2,

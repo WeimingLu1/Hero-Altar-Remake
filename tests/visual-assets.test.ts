@@ -140,12 +140,13 @@ test("unified active talk has dual portraits and continuous automatic dialogue",
   assert.match(source, /advanceNpcConversation/);
 });
 
-test("a nearby player can be addressed and join ambient NPC conversations", () => {
-  assert.match(source, /now - lastPlayerMove\.current >= 450/);
-  assert.match(source, /const ids = nearby\.map\(\(npc\) => npc\.eventId\)/);
-  assert.match(source, /groupId = nearby\.length > 1/);
-  assert.match(source, /buildAutoPlayerPrompt\(target\.npcId/);
-  assert.match(source, /createAmbientPlayerState\(\)/);
+test("a nearby player starts a strict one-to-one ambient conversation", () => {
+  assert.match(source, /now - lastPlayerMove\.current < 450/);
+  assert.match(source, /\.filter\(\(npc\) => ambientCanHear\(npc, current\.position\)\)/);
+  assert.match(source, /startAmbientPlayerConversation\(\s*candidate\.eventId/);
+  assert.match(source, /playerStarts \? "player" : "npc"/);
+  assert.match(source, /clearAmbientNpcConversation\(/);
+  assert.doesNotMatch(source, /groupMembers|responderQueue|群聊/);
 });
 
 test("ambient dialogue lifecycle rejects stale requests and ghost NPCs", () => {
@@ -153,7 +154,8 @@ test("ambient dialogue lifecycle rejects stale requests and ghost NPCs", () => {
   assert.match(source, /ambientControllers\.current\.forEach\(\(_job, controller\) => controller\.abort\(\)\)/);
   assert.match(source, /Map<AbortController, \{ player: boolean; npcEventId\?: number \}>/);
   assert.match(source, /ambientPlayerEpoch/);
-  assert.match(source, /if \(item\.speechTargetName && !target\) return false/);
+  assert.match(source, /latest\.npcEventId !== npc\.eventId/);
+  assert.match(source, /!ambientCanHear\(npc, current\.position\)/);
   assert.match(source, /ambientShouldPause/);
   assert.match(source, /killList \|\| \[\]\)\.join/);
   assert.match(source, /if \(!passable\(map, x, y, direction\)\) return false/);
@@ -162,7 +164,7 @@ test("ambient dialogue lifecycle rejects stale requests and ghost NPCs", () => {
 
 test("ambient conversations keep bounded context and highlight the player", () => {
   assert.match(source, /conversationContext/);
-  assert.match(source, /slice\(-6\)/);
+  assert.match(source, /slice\(-8\)/);
   assert.match(source, /maxOutputTokens: partner \? 150 : 96/);
   // 玩家气泡样式与布局在独立的 ambient-bubble-layout 模块
   assert.match(bubbleSource, /kind === "player"/);
@@ -182,7 +184,8 @@ test("历史台词不会在气泡存活期后复活显示，玩家气泡无条�
   assert.match(source, /if \(roaming\?\.bubble\)/);
   assert.match(source, /roaming\.bubbleShownAt/);
   assert.match(source, /if \(playerAmbient\.bubble\)/);
-  assert.match(source, /preferBelow: playerInConversation/);
+  assert.match(source, /y: \(pos\.y - sy\) \* T - 13/);
+  assert.doesNotMatch(source, /preferBelow/);
   assert.doesNotMatch(source, /collectConversationCards/);
 });
 
@@ -217,73 +220,63 @@ test("战报生成不能锁住普通攻击绝招或退出操作", () => {
 
 test("ambient conversations open on a self-raised matter and demand depth", () => {
   assert.match(source, /isOpening = sessionContext\.length === 0/);
-  assert.match(source, /自然地提起一件具体的/);
+  assert.match(source, /自然提起一件正关心、正困扰或刚撞见的具体闲事/);
   assert.match(source, /空泛附和/);
 });
 
-test("group chats cycle through every member and mark the player bubble", () => {
-  assert.match(source, /responderQueue/);
-  assert.match(source, /participants\.length > 1 \? "群聊 · "/);
-  assert.match(source, /让群聊其余成员随后轮流回应/);
-  // 群成员回应时不强制对玩家：一半概率随机指向群里另一个人
-  assert.match(source, /Math\.random\(\) < 0\.5/);
-  assert.match(source, /responseTarget = peers\.length[\s\S]*peers\[Math\.floor\(Math\.random\(\) \* peers\.length\)\]/);
-  assert.match(source, /speechTargetName = responseTarget\?\.name \|\| playerName/);
-  assert.match(source, /speechTargetEventId = responseTarget\?\.eventId \|\| 0/);
+test("player and NPC turns use one lock and alternate one visible line", () => {
+  assert.match(source, /playerSession\.visibleSpeaker &&/);
+  assert.match(source, /“本句结束”只清当前气泡/);
+  assert.match(source, /latest\.nextSpeaker = speaker === "player" \? "npc" : "player"/);
+  assert.match(source, /latest\.visibleSpeaker = speaker/);
+  assert.match(source, /先清双方，再只写当前发言者/);
+  assert.doesNotMatch(ambientRuntimeSource, /Math\.random\(\)/);
 });
 
 test("self-talk and action bubbles carry an explicit speaker label", () => {
   assert.match(source, /npc\.name\}正在和环境交互：/);
   assert.match(source, /npc\.name\}自言自语：/);
-  assert.match(source, /\$\{address\}“/); // 定向对话保留 to 路由
+  assert.match(source, /npc\.name\} to \$\{partner\.name\}/);
 });
 
 test("every directed ambient turn requires one-tile hearing distance", () => {
-  assert.match(ambientSource, /target && !ambientCanHear\(speaker, target\)/);
   assert.match(source, /partner && !ambientCanHear\(npc, partner\)/);
-  assert.match(source, /namedTarget && !ambientCanHear\(npc, namedTarget\)/);
-  assert.match(source, /player moved out of hearing range/);
-  assert.match(source, /conversationIsClose/);
-  assert.match(source, /conversationIsClose\(item\)/);
+  assert.match(source, /!ambientCanHear\(npc, stateRef\.current\.position\)/);
+  assert.match(source, /ambientCanHear\(\s*npc,\s*ambientNpcByEventId/);
+  assert.match(ambientSource, /ambientCanHear\(npc, partner\)/);
 });
 
 test("ambient conversations strip narration and request spoken lines only", () => {
   assert.match(ambientDialogueSource, /function cleanAmbientSpeech/);
   assert.match(ambientDialogueSource, /function cleanAmbientAction/);
-  assert.match(source, /严禁描写天气、风景、地点、环境/);
-  assert.match(source, /只生成要求的口头台词，不补充任何背景描写/);
+  assert.match(source, /禁止状态、动作、神态、表情、姿态、旁白、环境描写/);
+  assert.match(source, /只生成要求的口头台词/);
   assert.match(ambientDialogueSource, /spokenClauses/);
-  assert.match(source, /禁止输出状态、动作、神态/);
-  assert.match(source, /严禁描写天气、风景、地点、环境、声音、衣物、身体、动作或神态/);
-  assert.match(source, /cleanAmbientSpeech\(line, \[npc\.name, (pairPartner|partner)\.name\]\)/);
-  assert.match(source, /不得再次出现任何参与者姓名/);
-  assert.match(source, /绝对不得输出或讨论 to、谁对谁/);
+  assert.match(source, /禁止状态、动作、神态/);
+  assert.match(source, /cleanAmbientSpeech\(line, \[npc\.name, partner!\.name\]\)/);
+  assert.match(source, /不得再次出现双方姓名/);
+  assert.match(source, /正文绝对不得输出或讨论 to、谁对谁/);
   assert.match(ambientDialogueSource, /\\s\+to\\s\+/);
 });
 
 test("ambient performance text is generated without canned fallback lines", () => {
-  assert.match(source, /item\.generationPending && !item\.llmRequested/);
+  assert.match(source, /npc\.generationPending &&/);
   assert.match(source, /LM Studio returned no usable ambient line/);
   assert.doesNotMatch(source, /const openers =/);
   assert.doesNotMatch(source, /retain the local fallback/);
-  assert.match(source, /必须由模型现场生成/);
-  assert.match(source, /npc\.bubbleKind === "action" \? cleanAmbientAction/);
+  assert.match(source, /npc\.bubbleKind === "action"[\s\S]*cleanAmbientAction/);
 });
 
-test("LLM sessions use a player-first bounded priority queue", () => {
-  assert.match(source, /activeNpcOnlySessions/);
-  assert.match(source, /ambientConcurrency\.current = loadLlmSettings\(\)\.concurrency/);
-  assert.match(source, /maxConcurrency - 1 - activeNpcOnlySessions/);
-  assert.match(source, /isPlayerWork\(item\) \? 0/);
-  assert.match(source, /sole dispatcher for ambient LLM work/);
-  assert.match(source, /now - lastPlayerMove\.current >= 450/);
-  assert.match(source, /world\.npcs\.filter\(\(npc\) => ambientCanHear\(npc, current\.position\)\)/);
-  assert.match(source, /ambientPlayerStarts\.current = playerStarts/);
-  assert.match(source, /npcIds: ids/);
+test("LLM sessions use fixed player-first internal lanes", () => {
+  assert.match(source, /AMBIENT_LLM_TOTAL_LANES = 2/);
+  assert.match(source, /AMBIENT_LLM_BACKGROUND_LANES = 1/);
+  assert.match(source, /void enrichAmbientPlayer\(\)/);
+  assert.match(source, /backgroundActive >= AMBIENT_LLM_BACKGROUND_LANES/);
+  assert.match(source, /now - lastPlayerMove\.current < 450/);
+  assert.match(source, /startAmbientPlayerConversation/);
   assert.match(source, /first\.queuedAt - second\.queuedAt/);
-  assert.match(source, /ambientViewportBounds\(map\.width, map\.height/);
-  assert.match(source, /ambientNpcInViewport\(item, viewport\)/);
-  assert.doesNotMatch(source, /generationPending && !item\.llmRequested && item\.bubbleUntil > Date\.now/);
+  assert.match(source, /ambientNpcInViewport\(npc, viewport\)/);
+  assert.doesNotMatch(source, /loadLlmSettings\(\)\.concurrency|ambientConcurrency/);
 });
 
 test("map entrances anchor coherent multi-tile buildings", () => {
@@ -353,10 +346,9 @@ test("world canvas renders characters props bubbles and text at high resolution"
   assert.doesNotMatch(worldCss, /image-rendering:\s*pixelated/);
 });
 
-test("双人和群聊台词各自显示在说话者头顶的小气泡", () => {
+test("一对一台词只显示在当前发言者头顶的小气泡", () => {
   assert.match(source, /if \(roaming\?\.bubble\)/);
-  assert.match(source, /roaming\.partnerId/);
-  assert.match(source, /preferBelow: below/);
+  assert.match(source, /y: \(eventY - sy\) \* T - 13/);
   assert.match(source, /resolveAmbientBubbleLayout/);
   assert.match(source, /drawAmbientBubble\(ctx, bubble\)/);
   assert.doesNotMatch(source, /conversationSessionKey/);

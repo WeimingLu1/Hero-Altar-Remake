@@ -268,18 +268,7 @@ export default function OriginalEntry() {
                 onChange={(event) => setLlmSettings({ ...llmSettings, timeoutMs: Number(event.target.value) })}
               />
             </label>
-            <label>
-              环境对话并发数（1–6）
-              <input
-                type="number"
-                min="1"
-                max="6"
-                step="1"
-                value={llmSettings.concurrency}
-                onChange={(event) => setLlmSettings({ ...llmSettings, concurrency: Number(event.target.value) })}
-              />
-            </label>
-            <p>部署站点访问本机服务时需要在 LM Studio 开启 CORS。模型不可用不会影响原作玩法。</p>
+            <p>环境对话采用内置限流：玩家会话优先，纯 NPC 演出一次只生成一组。部署站点访问本机服务时需要在 LM Studio 开启 CORS。模型不可用不会影响原作玩法。</p>
             {settingsError && <strong role="alert">{settingsError}</strong>}
             <span className={`llm-health ${llmHealth}`} aria-live="polite">
               {llmHealth === "checking"

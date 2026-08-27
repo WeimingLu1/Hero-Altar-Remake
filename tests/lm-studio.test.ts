@@ -86,7 +86,7 @@ test("editable save text cannot break out of a single prompt data field", () => 
   assert.equal(promptData("甲".repeat(50), 8), "甲".repeat(8));
 });
 
-test("LLM settings validate endpoint and clamp runtime limits", () => {
+test("LLM settings validate endpoint and runtime timeout while ignoring old tuning fields", () => {
   assert.deepEqual(normalizeLlmSettings({
     endpoint: "https://models.example.test/custom/",
     model: " qwen-custom ",
@@ -97,10 +97,9 @@ test("LLM settings validate endpoint and clamp runtime limits", () => {
     endpoint: "https://models.example.test/custom",
     model: "qwen-custom",
     timeoutMs: 60_000,
-    concurrency: 6,
   });
   assert.equal(normalizeLlmSettings({ endpoint: "javascript:alert(1)" }).endpoint, LM_STUDIO_ENDPOINT);
-  assert.equal(normalizeLlmSettings({ concurrency: 0 }).concurrency, 1);
+  assert.equal("concurrency" in normalizeLlmSettings({ concurrency: 0 }), false);
 });
 
 test("legacy provider settings are ignored and settings storage failures stay typed", () => {
@@ -118,11 +117,12 @@ test("legacy provider settings are ignored and settings storage failures stay ty
   assert.equal(saved.ok, true);
   if (saved.ok) {
     assert.equal("provider" in saved.value, false);
-    assert.equal(saved.value.concurrency, 2);
+    assert.equal("concurrency" in saved.value, false);
   }
   const serialized = storage.getItem(LLM_SETTINGS_KEY);
   assert.ok(serialized);
   assert.equal("provider" in JSON.parse(serialized), false);
+  assert.equal("concurrency" in JSON.parse(serialized), false);
   assert.deepEqual(loadLlmSettingsResult(storage), saved);
 
   storage.setItem(LLM_SETTINGS_KEY, "not-json");
@@ -225,6 +225,8 @@ test("health checks are explicit and honor cancellation", async (context) => {
   assert.ok(effects.length >= 1);
   assert.equal(effects.some((effect) => effect[1].includes("lm-studio")), false);
   assert.match(source, /本地模型尚未检测/);
+  assert.doesNotMatch(source, /环境对话并发数/);
+  assert.match(source, /环境对话采用内置限流/);
 
   const originalFetch = globalThis.fetch;
   context.after(() => { globalThis.fetch = originalFetch; });

@@ -100,7 +100,7 @@ test("ambient movement respects the supplied collision gate and home radius", ()
   assert.deepEqual([world.npcs[0].x, world.npcs[0].y], [4, 4]);
 });
 
-test("nearby pair conversation shows both speakers' bubbles in parallel", () => {
+test("a paired reply replaces the previous bubble instead of displaying in parallel", () => {
   const world = createAmbientWorld(2, 0, [
     { eventId: 1, npcId: 3, name: "甲", identity: "侠客", x: 4, y: 4 },
     { eventId: 2, npcId: 4, name: "乙", identity: "商人", x: 5, y: 4 },
@@ -110,10 +110,12 @@ test("nearby pair conversation shows both speakers' bubbles in parallel", () => 
   first.conversationTurn = 1; second.conversationTurn = 2;
   first.conversationRound = second.conversationRound = 1;
   first.bubble = "甲 to 乙：“近来可好？”"; first.bubbleUntil = 5000;
-  second.bubble = "乙 to 甲：“一切尚好。”"; second.bubbleUntil = 5000;
+  second.bubbleUntil = 5000;
+  second.queuedLine = { text: "乙 to 甲：“一切尚好。”", at: 100 };
   tickAmbientWorld({ world, now: 200, playerX: 10, playerY: 10, indoor: false, canEnter: () => true });
-  assert.equal(first.bubble, "甲 to 乙：“近来可好？”");
+  assert.equal(first.bubble, "");
   assert.equal(second.bubble, "乙 to 甲：“一切尚好。”");
+  assert.equal(world.npcs.filter((npc) => npc.bubble).length, 1);
 });
 
 test("paired NPCs continue the same session for a second exchange", () => {
@@ -176,52 +178,14 @@ test("leaving an NPC resumes roaming quickly", () => {
   assert.equal(world.npcs[0].nextBehaviorAt, 1950);
 });
 
-test("group conversation addresses participants and advances one speaker at a time", () => {
-  const world = createAmbientWorld(2, 0, [
-    { eventId: 1, npcId: 1, name: "甲", identity: "侠客", x: 4, y: 4 },
-    { eventId: 2, npcId: 2, name: "乙", identity: "商人", x: 5, y: 4 },
-    { eventId: 3, npcId: 3, name: "丙", identity: "书生", x: 4, y: 5 },
-  ]);
-  for (const npc of world.npcs) { npc.groupId = 1; npc.groupMembers = [1, 2, 3]; npc.groupTurn = -1; }
-  tickAmbientWorld({ world, now: 1000, playerX: 10, playerY: 10, indoor: false, canEnter: () => true });
-  assert.equal(world.npcs[0].bubble, "");
-  assert.equal(world.npcs[0].speechTargetName, "乙");
-  assert.equal(world.npcs[0].generationPending, true);
-  world.npcs[0].generationPending = false;
-  world.npcs[0].bubble = "甲 to 乙：“山下可有异动？”";
-  world.npcs[0].groupNextAt = 2000;
-  tickAmbientWorld({ world, now: 2001, playerX: 10, playerY: 10, indoor: false, canEnter: () => true });
-  assert.equal(world.npcs[1].bubble, "");
-  // 群聊不再强制回上一位：乙随机指向群里另一个人(甲或丙)，但不能指向自己
-  assert.ok(["甲", "丙"].includes(world.npcs[1].speechTargetName), `乙应指向甲或丙，实际 ${world.npcs[1].speechTargetName}`);
-  assert.equal(world.npcs[1].generationPending, true);
-  assert.equal(world.npcs.filter((npc) => npc.bubble).length, 0);
-});
-
-test("a player reply locks the current conversation turn", () => {
-  const world = createAmbientWorld(2, 0, [
-    { eventId: 1, npcId: 1, name: "甲", identity: "侠客", x: 4, y: 4 },
-    { eventId: 2, npcId: 2, name: "乙", identity: "商人", x: 5, y: 4 },
-    { eventId: 3, npcId: 3, name: "丙", identity: "书生", x: 4, y: 5 },
-  ]);
-  for (const npc of world.npcs) { npc.groupId = 1; npc.groupMembers = [1, 2, 3]; npc.groupTurn = 0; npc.groupNextAt = 100; }
-  world.npcs[0].bubble = "甲 to 乙：“先听我说。”";
-  tickAmbientWorld({
-    world, now: 1000, playerX: 5, playerY: 5, indoor: false,
-    pausedConversationNpcIds: [1, 2, 3], canEnter: () => true,
-  });
-  assert.equal(world.npcs[0].groupTurn, 0);
-  assert.equal(world.npcs[1].bubble, "");
-});
-
-test("all group members freeze while the player owns the conversation", () => {
+test("the one NPC owned by the player conversation stays frozen", () => {
   const world = createAmbientWorld(2, 0, [
     { eventId: 1, npcId: 1, name: "甲", identity: "侠客", x: 4, y: 4 },
     { eventId: 2, npcId: 2, name: "乙", identity: "商人", x: 7, y: 4 },
   ]);
-  for (const npc of world.npcs) { npc.groupId = 1; npc.groupMembers = [1, 2]; npc.groupTurn = 0; }
-  tickAmbientWorld({ world, now: 1000, playerX: 5, playerY: 5, indoor: false, pausedConversationNpcIds: [1, 2], canEnter: () => true });
-  assert.deepEqual(world.npcs.map((npc) => [npc.x, npc.y]), [[4, 4], [7, 4]]);
+  world.npcs[0].nextBehaviorAt = 0;
+  tickAmbientWorld({ world, now: 1000, playerX: 5, playerY: 5, indoor: false, pausedConversationNpcIds: [1], canEnter: () => true });
+  assert.deepEqual([world.npcs[0].x, world.npcs[0].y], [4, 4]);
 });
 
 test("a missing pair partner cannot leave an NPC stuck in conversation", () => {
@@ -232,16 +196,6 @@ test("a missing pair partner cannot leave an NPC stuck in conversation", () => {
   assert.equal(npc.partnerId, 0);
   assert.equal(npc.conversationTurn, 0);
   assert.equal(npc.generationPending, false);
-});
-
-test("a malformed group clears the member instead of creating self-talk", () => {
-  const world = createAmbientWorld(2, 0, [{ eventId: 1, npcId: 1, name: "甲", identity: "侠客", x: 4, y: 4 }]);
-  const npc = world.npcs[0];
-  npc.groupId = 99; npc.groupMembers = [99]; npc.groupTurn = -1;
-  tickAmbientWorld({ world, now: 200, playerX: 10, playerY: 10, indoor: false, canEnter: () => true });
-  assert.equal(npc.groupId, 0);
-  assert.equal(npc.generationPending, false);
-  assert.equal(npc.speechTargetName, "");
 });
 
 test("global pause resets every in-flight NPC session", () => {
@@ -259,41 +213,7 @@ test("global pause resets every in-flight NPC session", () => {
   }
 });
 
-test("group dialogue forms a directed reply chain without broadcasts", () => {
-  const world = createAmbientWorld(2, 0, [
-    { eventId: 1, npcId: 1, name: "甲", identity: "侠客", x: 4, y: 4 },
-    { eventId: 2, npcId: 2, name: "乙", identity: "商人", x: 5, y: 4 },
-    { eventId: 3, npcId: 3, name: "丙", identity: "书生", x: 4, y: 5 },
-  ]);
-  for (const npc of world.npcs) { npc.groupId = 1; npc.groupMembers = [1, 2, 3]; npc.groupTurn = 0; npc.groupNextAt = 100; }
-  world.npcs[0].bubble = "甲 to 乙：“你怎么看？”";
-  world.npcs[0].conversationContext = [world.npcs[0].bubble];
-  tickAmbientWorld({ world, now: 1000, playerX: 10, playerY: 10, indoor: false, canEnter: () => true });
-  assert.equal(world.npcs[1].bubble, "");
-  // 仍是有向接话(指向群里另一个成员)，但不再强制是上一位发言者
-  assert.ok(["甲", "丙"].includes(world.npcs[1].speechTargetName), `乙应指向甲或丙，实际 ${world.npcs[1].speechTargetName}`);
-  assert.equal(world.npcs[1].generationPending, true);
-});
-
-test("the discussion answers a player who joins after the last NPC turn", () => {
-  const world = createAmbientWorld(2, 0, [
-    { eventId: 1, npcId: 1, name: "甲", identity: "侠客", x: 4, y: 4 },
-    { eventId: 2, npcId: 2, name: "乙", identity: "商人", x: 5, y: 4 },
-    { eventId: 3, npcId: 3, name: "丙", identity: "书生", x: 4, y: 5 },
-  ]);
-  for (const npc of world.npcs) {
-    npc.groupId = 1; npc.groupMembers = [1, 2, 3]; npc.groupTurn = 2; npc.groupNextAt = 100;
-    npc.conversationContext = ["少侠 to 丙：“此事或许另有隐情。”"];
-  }
-  tickAmbientWorld({ world, now: 1000, playerX: 5, playerY: 5, indoor: false, canEnter: () => true });
-  assert.equal(world.npcs[0].bubble, "");
-  assert.equal(world.npcs[0].speechTargetName, "少侠");
-  assert.equal(world.npcs[0].generationPending, true);
-  assert.equal(world.npcs[0].groupId, 1);
-});
-
-test("mutually heard NPCs form a group with no member cap", () => {
-  // 三个人彼此都在 3×3 听觉圈内：eventId 1 发起、2 为伙伴、3 在旁边
+test("nearby third and fourth NPCs never join an established pair", () => {
   const world = createAmbientWorld(2, 0, [
     { eventId: 1, npcId: 3, name: "甲", identity: "路", x: 5, y: 5 },
     { eventId: 2, npcId: 4, name: "乙", identity: "路", x: 5, y: 6 },
@@ -305,27 +225,11 @@ test("mutually heard NPCs form a group with no member cap", () => {
   a.conversationTurn = 0; b.conversationTurn = 0;
   a.nextBehaviorAt = b.nextBehaviorAt = c.nextBehaviorAt = d.nextBehaviorAt = 1e9;
   tickAmbientWorld({ world, now: 1000, playerX: 8, playerY: 8, indoor: false, canEnter: () => true });
-  // 四人都彼此近身(互相听觉圈成立)，应全部加入同一群聊，无 4 人上限
-  const members = world.npcs.filter((n) => n.groupId > 0);
-  assert.equal(members.length, 4, `应 4 人全部入组，实际 ${members.length}`);
-  assert.ok(members.every((n) => n.groupMembers.length === 4), "组员应包含全部 4 人");
-});
-
-test("NPCs merely inside the initiator circle but not mutually heard stay a pair", () => {
-  const world = createAmbientWorld(2, 0, [
-    { eventId: 1, npcId: 3, name: "甲", identity: "路", x: 5, y: 5 },
-    { eventId: 2, npcId: 4, name: "乙", identity: "路", x: 5, y: 6 },
-    { eventId: 3, npcId: 5, name: "丙", identity: "路", x: 6, y: 4 }, // 在甲圈内但与乙相距 2
-  ]);
-  const [a, b, c] = world.npcs;
-  a.partnerId = 2; b.partnerId = 1;
-  a.conversationTurn = 0; b.conversationTurn = 0;
-  a.nextBehaviorAt = b.nextBehaviorAt = c.nextBehaviorAt = 1e9;
-  tickAmbientWorld({ world, now: 1000, playerX: 8, playerY: 8, indoor: false, canEnter: () => true });
-  // 丙虽在甲听觉圈内，但与乙不互相近身 → 不组群，回到双人
-  assert.equal(a.groupId, 0);
-  assert.equal(b.groupId, 0);
-  assert.equal(c.groupId, 0);
+  assert.deepEqual([a.partnerId, b.partnerId], [2, 1]);
+  assert.equal(a.conversationTurn, 1);
+  assert.equal(b.conversationTurn, 2);
+  assert.equal(c.partnerId, 0);
+  assert.equal(d.partnerId, 0);
 });
 
 test("pairConversationShouldEnd rolls deterministically from round four", () => {
@@ -455,7 +359,7 @@ test("a stalled prefetch times out and falls back to on-demand", () => {
   assert.equal(second.llmRequested, true);
 });
 
-test("countActiveNpcConversations counts pairs and groups, excluding player-paused NPCs", () => {
+test("countActiveNpcConversations counts only pairs and excludes the player-owned NPC", () => {
   const viewport = { left: 0, top: 0, right: 20, bottom: 15 };
   const world = createAmbientWorld(2, 0, [
     { eventId: 1, npcId: 1, name: "甲", identity: "侠客", x: 1, y: 1 },
@@ -469,12 +373,7 @@ test("countActiveNpcConversations counts pairs and groups, excluding player-paus
   assert.equal(countActiveNpcConversations(world, viewport), 1);
   world.npcs[2].partnerId = 4; world.npcs[3].partnerId = 3;
   assert.equal(countActiveNpcConversations(world, viewport), 2);
-  for (const npc of world.npcs.slice(0, 3)) { npc.groupId = 1; npc.groupMembers = [1, 2, 3]; npc.partnerId = 0; }
-  world.npcs[3].partnerId = 0; world.npcs[4].partnerId = 0;
-  assert.equal(countActiveNpcConversations(world, viewport), 1);
-  world.npcs[3].partnerId = 5; world.npcs[4].partnerId = 4;
-  assert.equal(countActiveNpcConversations(world, viewport), 2);
-  assert.equal(countActiveNpcConversations(world, viewport, new Set([1, 2, 3])), 1);
+  assert.equal(countActiveNpcConversations(world, viewport, new Set([1])), 1);
   assert.equal(countActiveNpcConversations(world, viewport, new Set([1, 2, 3, 4, 5])), 0);
 });
 

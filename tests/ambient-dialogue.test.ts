@@ -6,7 +6,7 @@ import {
   cleanAmbientSpeech,
   parseNpcDialogue,
 } from "../app/game-core/ambient-dialogue";
-import { createAmbientPlayerState } from "../app/game-core/ambient-player";
+import { createAmbientPlayerState, startAmbientPlayerConversation } from "../app/game-core/ambient-player";
 
 test("structured NPC dialogue keeps all three formal fields", () => {
   assert.deepEqual(
@@ -43,9 +43,20 @@ test("ambient action uses null instead of a visible fallback sentinel", () => {
 });
 
 test("ambient player teardown always starts from an isolated empty state", () => {
-  const first = createAmbientPlayerState({ npcIds: [3], llmRequested: false });
+  const first = createAmbientPlayerState({ npcEventId: 3, conversationContext: ["旧话"] });
   const second = createAmbientPlayerState();
-  first.npcIds.push(4);
-  assert.deepEqual(second.npcIds, []);
+  first.conversationContext.push("新话");
+  assert.equal(second.npcEventId, 0);
+  assert.deepEqual(second.conversationContext, []);
   assert.equal(second.llmRequested, true);
+});
+
+test("ambient player conversation starts with exactly one NPC and one speaker", () => {
+  const state = startAmbientPlayerConversation(7, "player", 1200);
+  assert.equal(state.npcEventId, 7);
+  assert.equal(state.nextSpeaker, "player");
+  assert.equal(state.visibleSpeaker, null);
+  assert.equal(state.generationPending, true);
+  assert.equal(state.llmRequested, false);
+  assert.equal(state.queuedAt, 1200);
 });

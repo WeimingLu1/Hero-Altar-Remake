@@ -20,21 +20,16 @@ export type LlmSettings = {
   endpoint: string;
   model: string;
   timeoutMs: number;
-  concurrency: number;
 };
 
 export const DEFAULT_LLM_SETTINGS: LlmSettings = {
   endpoint: LM_STUDIO_ENDPOINT,
   model: LM_STUDIO_MODEL,
   timeoutMs: LLM_REQUEST_TIMEOUT_MS,
-  // 实测(35B-A3B, 本地 MLX/GGUF)：并发 2 起吞吐即达 ~5 req/s 平台，
-  // 4 为延迟与吞吐甜点，>6 只增加排队延迟，故默认 4、上限 6。
-  concurrency: 4,
 };
 
 export function normalizeLlmSettings(value: unknown): LlmSettings {
   const source = value && typeof value === "object" ? value as Partial<LlmSettings> : {};
-  const requestedConcurrency = Number(source.concurrency);
   let endpoint = typeof source.endpoint === "string" ? source.endpoint.trim() : "";
   try {
     const url = new URL(endpoint || LM_STUDIO_ENDPOINT);
@@ -49,9 +44,6 @@ export function normalizeLlmSettings(value: unknown): LlmSettings {
       ? source.model.trim().slice(0, 160)
       : LM_STUDIO_MODEL,
     timeoutMs: Math.max(3_000, Math.min(60_000, Number(source.timeoutMs) || LLM_REQUEST_TIMEOUT_MS)),
-    concurrency: Number.isFinite(requestedConcurrency)
-      ? Math.max(1, Math.min(6, Math.trunc(requestedConcurrency)))
-      : DEFAULT_LLM_SETTINGS.concurrency,
   };
 }
 

@@ -117,16 +117,14 @@ test("独白用白色、动作用青色、玩家用蓝色", () => {
   assert.equal(filled.at(-1)?.fillStyle, "#8ecbff");
 });
 
-test("双人对话一方台词显示在脚下、一方在头顶", () => {
+test("会话气泡默认都从各自头顶向上展开", () => {
   const ctx = mockCtx();
   const placed = resolveAmbientBubbleLayout(ctx, [
-    { x: 100, y: 100, text: "甲说话", kind: "speech", shownAt: 1 },
-    { x: 108, y: 100, text: "乙说话", kind: "speech", shownAt: 2, preferBelow: true },
+    { x: 80, y: 100, text: "甲说话", kind: "speech", shownAt: 1 },
+    { x: 260, y: 100, text: "乙说话", kind: "speech", shownAt: 2 },
   ]);
-  const below = placed.find((b) => b.top > 100);
-  const above = placed.find((b) => b.top <= 100);
-  assert.ok(above, "一方台词应在头顶上方");
-  assert.ok(below, "另一方台词应在脚下下方");
+  assert.ok(placed.every((bubble) => bubble.top < 100));
+  assert.deepEqual(placed.map((bubble) => bubble.text), ["甲说话", "乙说话"]);
 });
 
 test("多人气泡都保持在画布内且两两不重叠", () => {

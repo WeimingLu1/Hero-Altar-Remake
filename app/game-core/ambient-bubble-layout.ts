@@ -6,8 +6,6 @@ export type AmbientBubbleInput = {
   text: string;
   kind: BubbleKind;
   shownAt: number;
-  /** 双人对话时一人台词显示在脚下(默认头顶)，与对方一上一下更清楚。 */
-  preferBelow?: boolean;
 };
 
 export type AmbientBubbleBox = {
@@ -82,8 +80,7 @@ export function resolveAmbientBubbleLayout(
       ...bubble,
       ...m,
       left: Math.max(3, Math.min(W - m.width - 3, bubble.x - m.width / 2)),
-      // 头顶优先；双人对话的「脚下」台词则让箱体顶边贴在基准点下方。
-      top: bubble.preferBelow ? bubble.y + 2 : bubble.y - m.height,
+      top: bubble.y - m.height,
       baseY: bubble.y,
     };
   });
@@ -96,8 +93,8 @@ export function resolveAmbientBubbleLayout(
     b.left < a.left + a.width &&
     a.top < b.top + b.height &&
     b.top < a.top + a.height;
-  const sorted = [...measured].sort((a, b) => a.top - b.top || a.left - b.left);
-  for (const box of sorted) {
+  // 输入顺序也是绘制优先级；渲染层把玩家放在最后，确保其气泡在最上层。
+  for (const box of measured) {
     const fits = (candidate: { left: number; top: number }) => {
       if (
         candidate.left < 3 ||

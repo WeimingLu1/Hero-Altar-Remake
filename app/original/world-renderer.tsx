@@ -208,7 +208,7 @@ export function drawWorld(ctx: CanvasRenderingContext2D, state: WorldSave, ambie
     generatedQuestNpc = state.tasks.generatedQuest
       ? generatedQuestCurrentNpc(state.tasks.generatedQuest)
       : null,
-    ambientBubbles: Array<{ x: number; y: number; text: string; kind: AmbientBubbleKind | "player"; shownAt: number; preferBelow?: boolean }> = [];
+    ambientBubbles: Array<{ x: number; y: number; text: string; kind: AmbientBubbleKind | "player"; shownAt: number }> = [];
   ctx.fillStyle = "#0c1410";
   ctx.fillRect(0, 0, W, H);
   const staticMap = staticMapCanvas(map);
@@ -248,17 +248,14 @@ export function drawWorld(ctx: CanvasRenderingContext2D, state: WorldSave, ambie
             generatedQuestNpc.eventId === e.id,
         ),
       );
-      // 每个 NPC 的台词显示在自己身上；双人成员一人在头顶、一人在脚下(按 eventId 奇偶分)，并错开 ±6px。
+      // 环境会话严格串行，同一会话任一时刻只显示当前发言者头顶的一句。
       if (roaming?.bubble) {
-        const pairMember = Boolean(roaming.partnerId),
-          below = pairMember && roaming.eventId % 2 !== 0;
         ambientBubbles.push({
-          x: (eventX - sx) * T + 16 + (pairMember ? (roaming.eventId % 2 === 0 ? 6 : -6) : 0),
-          y: below ? (eventY - sy) * T + 34 : (eventY - sy) * T - 13,
+          x: (eventX - sx) * T + 16,
+          y: (eventY - sy) * T - 13,
           text: roaming.bubble,
           kind: roaming.bubbleKind,
           shownAt: roaming.bubbleShownAt,
-          preferBelow: below,
         });
       }
     } else if (visual.kind === "door")
@@ -319,16 +316,14 @@ export function drawWorld(ctx: CanvasRenderingContext2D, state: WorldSave, ambie
     { sheet: 0, row: state.actor.gender ? 1 : 0 },
     pos.direction,
   );
-  // 玩家气泡无条件发射(蓝色)；玩家参与对话时气泡放脚下，与 NPC 的头顶台词一上一下分开；玩家最后绘制(最上层)。
+  // 主角台词同样只在头顶显示，并最后绘制在最高图层。
   if (playerAmbient.bubble) {
-    const playerInConversation = playerAmbient.npcIds.length > 0;
     ambientBubbles.push({
       x: (pos.x - sx) * T + 16,
-      y: (pos.y - sy) * T + (playerInConversation ? 34 : -13),
+      y: (pos.y - sy) * T - 13,
       text: playerAmbient.bubble,
       kind: "player",
       shownAt: playerAmbient.bubbleShownAt,
-      preferBelow: playerInConversation,
     });
   }
   const placedBubbles = resolveAmbientBubbleLayout(
