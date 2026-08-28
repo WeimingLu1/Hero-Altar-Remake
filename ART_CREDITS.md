@@ -8,34 +8,19 @@ RPG Maker XP project.
 The following assets were generated specifically for this Web adaptation with
 OpenAI Image Generation and then prepared locally for use as sprite atlases:
 
-- `public/game-assets/generated/wuxia-characters-v1.webp`: player and general
-  wandering-character directions.
-- `public/game-assets/generated/wuxia-characters-ages-v1.webp`: children and
-  elderly character directions.
-- `public/game-assets/generated/wuxia-characters-townsfolk-v1.webp`: official,
-  merchant, scholar, and worker directions.
-- `public/game-assets/generated/wuxia-characters-factions-v1.webp`: swordsman,
-  bandit, monk, and Taoist directions.
-- `public/game-assets/generated/wuxia-characters-women-v1.webp`: swordswoman,
-  merchant, Buddhist nun, and worker directions.
+- `public/game-assets/generated/wuxia-player-directions-v2.webp`: dedicated
+  male and female player designs, each with front/right/left/back views. The
+  female heroine was authored as an elegant red-white-gold wuxia lead rather
+  than a recoloured generic NPC.
+- `public/game-assets/generated/wuxia-npc-directions-001-008-v1.webp` through
+  `wuxia-npc-directions-193-198-v1.webp`: 26 transparent four-column atlases
+  containing a dedicated directional row for every database NPC ID 1–198.
+  Rows were generated from the matching dedicated portrait identities, then
+  segmented, scaled and padded locally into exact 128 × 128 cells.
 - `public/game-assets/generated/wuxia-portrait-atlas-v1.webp`: 5 × 4 matching
   character portraits used by the unified active-talk layer, status, and battle UI.
-- `public/game-assets/generated/wuxia-characters-faction-signatures-v1.webp`:
-  directional Flower School, Red Lotus, Wudang, and Snow Mountain sprites.
 - `public/game-assets/generated/wuxia-faction-portraits-v1.webp`: 4 × 4 named
   Flower School, Red Lotus, Wudang, Snow Mountain, and Ice-Fire portraits.
-- `public/game-assets/generated/wuxia-characters-flower-variants-v1.webp`: four
-  distinct directional Flower School women matching named portraits.
-- `public/game-assets/generated/wuxia-characters-notable-masters-v2.webp`,
-  `wuxia-characters-notable-women-v2.webp`,
-  `wuxia-characters-notable-wanderers-v2.webp`, and
-  `wuxia-characters-underworld-v2.webp`: sixteen named-character direction sets
-  for masters, heroines, physically distinctive wanderers, underworld envoys,
-  judges, and bandit leaders.
-- `public/game-assets/generated/wuxia-characters-beast-school-v3.webp`: four
-  direction sets for the Snow Mountain leopard and three visually distinctive
-  Beast School figures, repacked into strict equal cells so every head and
-  weapon remains inside its runtime crop.
 - `public/game-assets/generated/wuxia-notable-portraits-v2.webp` and
   `wuxia-roster-portraits-v2.webp`: two 4 × 4 portrait grids containing 32
   named, age-specific, disability-aware, animal, foreign-school, Taoist,
@@ -54,9 +39,9 @@ OpenAI Image Generation and then prepared locally for use as sprite atlases:
   padding on every edge; nature and interior props are kept in separate images
   so no object crosses a crop boundary.
 
-Each character atlas is 4 × 4. Its generated checker/chroma background was
-removed locally and the edge alpha was prepared for Canvas downscaling; the
-columns are front, screen-facing right, screen-facing left, and back.
+Every world-character atlas uses 128 × 128 transparent cells. Columns are
+front, screen-facing right, screen-facing left, and back; every cell retains
+transparent safety padding for Canvas downscaling.
 
 These files do not incorporate or use the original project's published bitmap
 files as image inputs or visual references.

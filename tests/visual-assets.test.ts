@@ -7,9 +7,9 @@ import {
   characterDirectionColumn,
   mapTheme,
   npcCharacterSprite,
-  npcCompositeIdentity,
-  npcPaletteFilter,
+  npcDirectionalSprite,
   npcPortraitCell,
+  playerDirectionalSprite,
 } from "../app/original/world-renderer";
 
 const worldSource = readFileSync(
@@ -109,19 +109,19 @@ test("distinctive named NPCs keep matching world sprites and portraits", () => {
   });
 });
 
-test("generic NPC palette variation is stable while bespoke art keeps its colours", () => {
-  const generic = npcCharacterSprite(3);
-  assert.equal(npcPaletteFilter(3, generic), npcPaletteFilter(3, generic));
-  assert.notEqual(npcPaletteFilter(3, generic), "none");
-  assert.notEqual(npcPaletteFilter(3, generic), npcPaletteFilter(4, npcCharacterSprite(4)));
-  assert.equal(npcPaletteFilter(48, npcCharacterSprite(48)), "none");
-  assert.equal(npcPaletteFilter(117, npcCharacterSprite(117)), "none");
-  assert.equal(npcPaletteFilter(999, { sheet: 5, row: 0 }), "none");
-  const genericFilters = Array.from({ length: 198 }, (_, index) => index + 1)
-    .map((id) => npcPaletteFilter(id, npcCharacterSprite(id)))
-    .filter((filter) => filter !== "none");
-  assert.equal(new Set(genericFilters).size, genericFilters.length);
-  assert.ok(genericFilters.every((filter) => !filter.includes("undefined")));
+test("all NPCs and both player genders have dedicated four-direction rows", () => {
+  const sprites = Array.from({ length: 198 }, (_, index) => npcDirectionalSprite(index + 1));
+  assert.ok(sprites.every(Boolean));
+  assert.equal(new Set(sprites.map((sprite) => `${sprite?.src}:${sprite?.row}`)).size, 198);
+  assert.equal(new Set(sprites.map((sprite) => sprite?.src)).size, 26);
+  assert.equal(npcDirectionalSprite(0), null);
+  assert.equal(npcDirectionalSprite(199), null);
+  assert.deepEqual(playerDirectionalSprite(0), {
+    src: "/game-assets/generated/wuxia-player-directions-v2.webp",
+    row: 0,
+    rows: 2,
+  });
+  assert.equal(playerDirectionalSprite(1).row, 1);
 });
 
 test("all 198 NPC records have a dedicated portrait cell", () => {
@@ -152,45 +152,30 @@ test("all 198 NPC records have a dedicated portrait cell", () => {
   assert.equal(new Set(cells.map((cell) => cell?.src)).size, 13);
 });
 
-test("generic world NPCs receive unique composite silhouettes", () => {
-  const identities = Array.from({ length: 198 }, (_, index) => index + 1)
-    .map((id) => ({ id, sprite: npcCharacterSprite(id) }))
-    .filter(({ sprite }) => sprite.sheet < 7)
-    .map(({ id, sprite }) => npcCompositeIdentity(id, sprite));
-  assert.ok(identities.length > 150);
-  assert.ok(identities.every(Boolean));
-  assert.equal(new Set(identities.map((identity) => identity?.signature)).size, identities.length);
-  assert.equal(npcCompositeIdentity(48, npcCharacterSprite(48)), null);
-  assert.match(rendererSource, /function drawNpcIdentityDetails/);
-  assert.match(rendererSource, /function drawNpcEquipment/);
-});
-
-test("beast-school atlas keeps every silhouette inside its exact grid cell", async () => {
-  const { data, info } = await sharpImage(
-    fileURLToPath(new URL(
-      "../public/game-assets/generated/wuxia-characters-beast-school-v3.webp",
-      import.meta.url,
-    )),
-  )
-    .ensureAlpha()
-    .raw()
-    .toBuffer({ resolveWithObject: true });
-  assert.equal(info.width, 1256);
-  assert.equal(info.height, 1256);
-  const cell = info.width / 4;
-  for (let row = 0; row < 4; row += 1) {
-    for (let column = 0; column < 4; column += 1) {
-      for (let localY = 0; localY < cell; localY += 1) {
-        for (let localX = 0; localX < cell; localX += 1) {
-          if (localX >= 15 && localX < cell - 15 && localY >= 15 && localY < cell - 15)
-            continue;
-          const x = column * cell + localX,
-            y = row * cell + localY;
-          assert.equal(data[(y * info.width + x) * 4 + 3], 0);
+test("directional atlases keep transparent safety padding in every exact cell", async () => {
+  const atlasRows = new Map<string, number>();
+  for (let id = 1; id <= 198; id += 1) {
+    const sprite = npcDirectionalSprite(id);
+    if (sprite) atlasRows.set(sprite.src, sprite.rows);
+  }
+  atlasRows.set(playerDirectionalSprite(0).src, 2);
+  for (const [src, rows] of atlasRows) {
+    const file = fileURLToPath(new URL(`../public${src}`, import.meta.url));
+    const { data, info } = await sharpImage(file).ensureAlpha().raw().toBuffer({ resolveWithObject: true });
+    assert.equal(info.width, 512);
+    assert.equal(info.height, rows * 128);
+    for (let row = 0; row < rows; row += 1) {
+      for (let column = 0; column < 4; column += 1) {
+        for (let offset = 0; offset < 128; offset += 1) {
+          const topAlphaIndex: number = ((row * 128) * info.width + column * 128 + offset) * 4 + 3;
+          const leftAlphaIndex: number = (((row * 128 + offset) * info.width) + column * 128) * 4 + 3;
+          assert.equal(data[topAlphaIndex], 0);
+          assert.equal(data[leftAlphaIndex], 0);
         }
       }
     }
   }
+  assert.doesNotMatch(rendererSource, /drawNpcIdentityDetails|drawNpcEquipment|npcPaletteFilter/);
 });
 
 test("generic map characters never render an undefined speaker name", () => {
@@ -418,7 +403,7 @@ test("named adult women remain distinct after strict child and elder guards", ()
   assert.match(source, /阿绣: 20/);
   assert.match(source, /李青照: 21/);
   assert.doesNotMatch(source, /age >= 35 \|\|/);
-  assert.match(source, /wuxia-characters-faction-signatures-v1\.webp/);
+  assert.notDeepEqual(npcDirectionalSprite(59), npcDirectionalSprite(110));
   assert.ok(source.indexOf("if (age >= 55)") < source.indexOf("if (/花间派"));
 });
 
@@ -430,7 +415,11 @@ test("major factions receive authored landmark compounds", () => {
 
 test("Flower School named women use distinct directional sprites", () => {
   assert.match(source, /阿绣: 0, 李青照: 1, 柳如是: 2, 聂隐娘: 3/);
-  assert.match(source, /wuxia-characters-flower-variants-v1\.webp/);
+  const ids = [59, 62, 110, 132];
+  assert.equal(new Set(ids.map((id) => {
+    const sprite = npcDirectionalSprite(id);
+    return `${sprite?.src}:${sprite?.row}`;
+  })).size, ids.length);
 });
 
 test("indoor rooms receive type-specific furniture away from events", () => {
