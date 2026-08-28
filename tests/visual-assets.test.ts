@@ -7,7 +7,6 @@ import {
   characterDirectionColumn,
   mapTheme,
   npcCharacterSprite,
-  npcCompositeIdentity,
   npcPaletteFilter,
   npcPortraitCell,
 } from "../app/original/world-renderer";
@@ -152,17 +151,15 @@ test("all 198 NPC records have a dedicated portrait cell", () => {
   assert.equal(new Set(cells.map((cell) => cell?.src)).size, 13);
 });
 
-test("generic world NPCs receive unique composite silhouettes", () => {
-  const identities = Array.from({ length: 198 }, (_, index) => index + 1)
-    .map((id) => ({ id, sprite: npcCharacterSprite(id) }))
-    .filter(({ sprite }) => sprite.sheet < 7)
-    .map(({ id, sprite }) => npcCompositeIdentity(id, sprite));
-  assert.ok(identities.length > 150);
-  assert.ok(identities.every(Boolean));
-  assert.equal(new Set(identities.map((identity) => identity?.signature)).size, identities.length);
-  assert.equal(npcCompositeIdentity(48, npcCharacterSprite(48)), null);
-  assert.match(rendererSource, /function drawNpcIdentityDetails/);
-  assert.match(rendererSource, /function drawNpcEquipment/);
+test("world NPCs do not receive coloured procedural identity overlays", () => {
+  const markerSource = rendererSource.slice(
+    rendererSource.indexOf("function drawNpcMarker"),
+    rendererSource.indexOf("function drawObjectMarker"),
+  );
+  assert.doesNotMatch(rendererSource, /NpcCompositeIdentity|npcCompositeIdentity/);
+  assert.doesNotMatch(rendererSource, /drawNpcIdentityDetails|drawNpcEquipment/);
+  assert.doesNotMatch(rendererSource, /bodyVariant|headwearVariant|equipment: NpcEquipment/);
+  assert.doesNotMatch(markerSource, /strokeRect|y \+ 8/);
 });
 
 test("beast-school atlas keeps every silhouette inside its exact grid cell", async () => {
