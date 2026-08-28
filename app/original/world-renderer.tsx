@@ -38,12 +38,13 @@ type WuxiaArt = {
   natureOverlays: HTMLImageElement | null;
   interiorOverlays: HTMLImageElement | null;
 };
-type PortraitAtlas = "notable" | "roster";
+type PortraitAtlas = "notable" | "roster" | "original";
 export type CharacterSprite = {
   sheet: number;
   row: number;
   portrait?: number;
   portraitAtlas?: PortraitAtlas;
+  sourceTopBleed?: number;
 };
 
 export function characterDirectionColumn(direction: number) {
@@ -65,6 +66,7 @@ const characterSheetNames = [
   "wuxia-characters-notable-wanderers-v2.webp",
   "wuxia-characters-underworld-v2.webp",
   "wuxia-characters-beast-school-v3.webp",
+  "wuxia-characters-red-lotus-ranks-v1.webp",
 ] as const;
 const wuxiaArt: WuxiaArt = {
   characters: characterSheetNames.map(() => null),
@@ -120,14 +122,32 @@ const namedCharacterArt: Record<number, CharacterSprite> = {
   48: { sheet: 7, row: 0, portraitAtlas: "notable", portrait: 0 },
   54: { sheet: 8, row: 1, portraitAtlas: "notable", portrait: 5 },
   56: { sheet: 8, row: 2, portraitAtlas: "notable", portrait: 6 },
+  71: { sheet: 12, row: 1, portraitAtlas: "original", portrait: 5 },
+  76: { sheet: 12, row: 2, portraitAtlas: "original", portrait: 6 },
+  77: { sheet: 12, row: 0, portraitAtlas: "original", portrait: 4 },
+  78: { sheet: 12, row: 3, portraitAtlas: "original", portrait: 7 },
   81: { sheet: 7, row: 3, portraitAtlas: "notable", portrait: 3 },
   82: { sheet: 3, row: 0, portraitAtlas: "roster", portrait: 4 },
   88: { sheet: 4, row: 0, portraitAtlas: "roster", portrait: 5 },
   91: { sheet: 3, row: 0, portraitAtlas: "roster", portrait: 6 },
   94: { sheet: 2, row: 2, portraitAtlas: "roster", portrait: 7 },
   95: { sheet: 7, row: 2, portraitAtlas: "notable", portrait: 2 },
+  99: { sheet: 5, row: 2, portraitAtlas: "original", portrait: 1 },
   102: { sheet: 7, row: 1, portraitAtlas: "notable", portrait: 1 },
-  117: { sheet: 1, row: 3, portraitAtlas: "roster", portrait: 12 },
+  104: { sheet: 5, row: 3, portraitAtlas: "original", portrait: 0 },
+  111: { sheet: 7, row: 1, portraitAtlas: "original", portrait: 3 },
+  112: { sheet: 7, row: 1, portraitAtlas: "original", portrait: 10 },
+  113: { sheet: 7, row: 1, portraitAtlas: "original", portrait: 8 },
+  114: { sheet: 7, row: 1, portraitAtlas: "original", portrait: 8 },
+  115: { sheet: 7, row: 1, portraitAtlas: "original", portrait: 8 },
+  116: { sheet: 5, row: 3, portraitAtlas: "original", portrait: 9 },
+  117: { sheet: 1, row: 3, portraitAtlas: "original", portrait: 11 },
+  118: { sheet: 7, row: 1, portraitAtlas: "original", portrait: 8 },
+  119: { sheet: 7, row: 1, portraitAtlas: "original", portrait: 8 },
+  120: { sheet: 7, row: 1, portraitAtlas: "original", portrait: 8 },
+  121: { sheet: 7, row: 1, portraitAtlas: "original", portrait: 8 },
+  122: { sheet: 7, row: 1, portraitAtlas: "original", portrait: 8 },
+  123: { sheet: 7, row: 1, portraitAtlas: "original", portrait: 10 },
   124: { sheet: 11, row: 0, portraitAtlas: "roster", portrait: 0 },
   125: { sheet: 1, row: 2, portraitAtlas: "roster", portrait: 15 },
   126: { sheet: 2, row: 2, portraitAtlas: "roster", portrait: 14 },
@@ -140,7 +160,7 @@ const namedCharacterArt: Record<number, CharacterSprite> = {
   141: { sheet: 1, row: 2, portraitAtlas: "roster", portrait: 9 },
   144: { sheet: 1, row: 2, portraitAtlas: "roster", portrait: 10 },
   147: { sheet: 1, row: 2, portraitAtlas: "roster", portrait: 11 },
-  148: { sheet: 9, row: 3, portraitAtlas: "notable", portrait: 11 },
+  148: { sheet: 9, row: 3, portraitAtlas: "notable", portrait: 11, sourceTopBleed: 18 },
   149: { sheet: 8, row: 3, portraitAtlas: "notable", portrait: 7 },
   150: { sheet: 10, row: 0, portraitAtlas: "notable", portrait: 12 },
   151: { sheet: 10, row: 1, portraitAtlas: "notable", portrait: 13 },
@@ -153,6 +173,7 @@ export function npcPaletteFilter(id: number, sprite: CharacterSprite) {
   // Bespoke named and faction sheets carry intentional identity colours.
   // Generic sheets receive a mild, deterministic tint so people sharing the
   // same silhouette still remain visually distinct without flickering.
+  if (id === 117) return "grayscale(65%) brightness(125%) contrast(92%)";
   if (id <= 0 || namedCharacterArt[id] || sprite.sheet >= 5) return "none";
   // The three coprime cycles have a joint period far above the 1–198 NPC ID
   // range, so every generic record receives a unique combination.
@@ -160,19 +181,6 @@ export function npcPaletteFilter(id: number, sprite: CharacterSprite) {
     saturation = 90 + ((id * 17) % 27),
     brightness = 94 + ((id * 11) % 13);
   return `hue-rotate(${hue}deg) saturate(${saturation}%) brightness(${brightness}%)`;
-}
-
-export function npcPortraitCell(id: number) {
-  if (!Number.isInteger(id) || id < 1 || id > 198) return null;
-  const start = Math.floor((id - 1) / 16) * 16 + 1,
-    end = Math.min(start + 15, 198),
-    index = (id - 1) % 16;
-  return {
-    src: `/game-assets/generated/wuxia-npc-portraits-${String(start).padStart(3, "0")}-${String(end).padStart(3, "0")}-v1.webp`,
-    index,
-    column: index % 4,
-    row: Math.floor(index / 4),
-  };
 }
 
 export function npcCharacterSprite(id: number, fallbackName = ""): CharacterSprite {
@@ -248,21 +256,20 @@ export function CharacterPortrait({
       playerGender === undefined
         ? npcCharacterSprite(npcId || 0, name)
         : { sheet: 0, row: playerGender ? 1 : 0 },
-    dedicatedPortrait = playerGender === undefined ? npcPortraitCell(npcId || 0) : null,
     index = sprite.portrait ?? sprite.sheet * 4 + sprite.row,
     generatedPortrait = "portraitAtlas" in sprite ? sprite.portraitAtlas : undefined,
     factionPortrait = !generatedPortrait && index >= 20,
     localIndex = generatedPortrait ? index : factionPortrait ? index - 20 : index,
     columns = generatedPortrait || factionPortrait ? 4 : 5,
-    column = dedicatedPortrait?.column ?? localIndex % columns,
-    row = dedicatedPortrait?.row ?? Math.floor(localIndex / columns),
+    column = localIndex % columns,
+    row = Math.floor(localIndex / columns),
     portraitImage =
-      dedicatedPortrait
-        ? `url("${dedicatedPortrait.src}")`
-        : generatedPortrait === "notable"
+      generatedPortrait === "notable"
         ? 'url("/game-assets/generated/wuxia-notable-portraits-v2.webp")'
         : generatedPortrait === "roster"
           ? 'url("/game-assets/generated/wuxia-roster-portraits-v2.webp")'
+          : generatedPortrait === "original"
+            ? 'url("/game-assets/generated/wuxia-original-key-portraits-v1.webp")'
           : factionPortrait
             ? 'url("/game-assets/generated/wuxia-faction-portraits-v1.webp")'
             : undefined;
@@ -273,7 +280,7 @@ export function CharacterPortrait({
       aria-label={`${name || "人物"}立绘`}
       style={{
         backgroundImage: portraitImage,
-        backgroundSize: dedicatedPortrait || generatedPortrait || factionPortrait ? "400% 400%" : undefined,
+        backgroundSize: generatedPortrait || factionPortrait ? "400% 400%" : undefined,
         backgroundPosition: `${(column / (columns - 1)) * 100}% ${(row / 3) * 100}%`,
       }}
     />
@@ -1024,8 +1031,10 @@ function drawActor(
     const cellWidth = atlas.naturalWidth / 4,
       cellHeight = atlas.naturalHeight / 4,
       column = characterDirectionColumn(direction),
+      sourceTopBleed = Math.min(sprite.sourceTopBleed ?? 0, (sprite.row % 4) * cellHeight),
+      sourceHeight = cellHeight + sourceTopBleed,
       width = 44,
-      height = 44;
+      height = 44 * (sourceHeight / cellHeight);
     ctx.fillStyle = "rgba(0,0,0,.35)";
     ctx.beginPath();
     ctx.ellipse(x, y + 9, 10, 4, 0, 0, Math.PI * 2);
@@ -1035,9 +1044,9 @@ function drawActor(
     ctx.drawImage(
       atlas,
       column * cellWidth,
-      (sprite.row % 4) * cellHeight,
+      (sprite.row % 4) * cellHeight - sourceTopBleed,
       cellWidth,
-      cellHeight,
+      sourceHeight,
       x - width / 2,
       y + 10 - height,
       width,

@@ -8,7 +8,6 @@ import {
   mapTheme,
   npcCharacterSprite,
   npcPaletteFilter,
-  npcPortraitCell,
 } from "../app/original/world-renderer";
 
 const worldSource = readFileSync(
@@ -56,6 +55,10 @@ const bubbleSource = readFileSync(
   new URL("../app/game-core/ambient-bubble-layout.ts", import.meta.url),
   "utf8",
 );
+const assetManifest = JSON.parse(readFileSync(
+  new URL("../public/game-assets/manifest.json", import.meta.url),
+  "utf8",
+)) as { assets: { portraits: { src: string[] }; characters: { src: string[] } } };
 type SharpImage = {
   ensureAlpha(): SharpImage;
   raw(): SharpImage;
@@ -103,8 +106,8 @@ test("distinctive named NPCs keep matching world sprites and portraits", () => {
   assert.deepEqual(npcCharacterSprite(117), {
     sheet: 1,
     row: 3,
-    portraitAtlas: "roster",
-    portrait: 12,
+    portraitAtlas: "original",
+    portrait: 11,
   });
 });
 
@@ -114,7 +117,7 @@ test("generic NPC palette variation is stable while bespoke art keeps its colour
   assert.notEqual(npcPaletteFilter(3, generic), "none");
   assert.notEqual(npcPaletteFilter(3, generic), npcPaletteFilter(4, npcCharacterSprite(4)));
   assert.equal(npcPaletteFilter(48, npcCharacterSprite(48)), "none");
-  assert.equal(npcPaletteFilter(117, npcCharacterSprite(117)), "none");
+  assert.equal(npcPaletteFilter(117, npcCharacterSprite(117)), "grayscale(65%) brightness(125%) contrast(92%)");
   assert.equal(npcPaletteFilter(999, { sheet: 5, row: 0 }), "none");
   const genericFilters = Array.from({ length: 198 }, (_, index) => index + 1)
     .map((id) => npcPaletteFilter(id, npcCharacterSprite(id)))
@@ -123,32 +126,48 @@ test("generic NPC palette variation is stable while bespoke art keeps its colour
   assert.ok(genericFilters.every((filter) => !filter.includes("undefined")));
 });
 
-test("all 198 NPC records have a dedicated portrait cell", () => {
-  assert.deepEqual(npcPortraitCell(1), {
-    src: "/game-assets/generated/wuxia-npc-portraits-001-016-v1.webp",
-    index: 0,
-    column: 0,
-    row: 0,
-  });
-  assert.deepEqual(npcPortraitCell(16), {
-    src: "/game-assets/generated/wuxia-npc-portraits-001-016-v1.webp",
-    index: 15,
-    column: 3,
+test("portraits follow curated identity and faction mappings instead of arbitrary ID grids", () => {
+  assert.doesNotMatch(rendererSource, /wuxia-npc-portraits-|npcPortraitCell/);
+  assert.deepEqual(npcCharacterSprite(104), {
+    sheet: 5,
     row: 3,
+    portraitAtlas: "original",
+    portrait: 0,
   });
-  assert.equal(npcPortraitCell(17)?.src, "/game-assets/generated/wuxia-npc-portraits-017-032-v1.webp");
-  assert.deepEqual(npcPortraitCell(198), {
-    src: "/game-assets/generated/wuxia-npc-portraits-193-198-v1.webp",
-    index: 5,
-    column: 1,
-    row: 1,
+  assert.deepEqual(npcCharacterSprite(99), {
+    sheet: 5,
+    row: 2,
+    portraitAtlas: "original",
+    portrait: 1,
   });
-  assert.equal(npcPortraitCell(0), null);
-  assert.equal(npcPortraitCell(199), null);
-  const cells = Array.from({ length: 198 }, (_, index) => npcPortraitCell(index + 1));
-  assert.ok(cells.every(Boolean));
-  assert.equal(new Set(cells.map((cell) => `${cell?.src}:${cell?.index}`)).size, 198);
-  assert.equal(new Set(cells.map((cell) => cell?.src)).size, 13);
+  assert.equal(npcCharacterSprite(148).portrait, 11);
+});
+
+test("Snow Mountain members wear white while Red Lotus ranks use described colours", () => {
+  const snowIds = [111, 112, 113, 114, 115, 116, 118, 119, 120, 121, 122, 123];
+  assert.ok(snowIds.every((id) => [5, 7].includes(npcCharacterSprite(id).sheet)));
+  assert.equal(npcPaletteFilter(117, npcCharacterSprite(117)), "grayscale(65%) brightness(125%) contrast(92%)");
+  assert.deepEqual([77, 71, 76, 78].map((id) => {
+    const sprite = npcCharacterSprite(id);
+    return [sprite.sheet, sprite.row];
+  }), [[12, 0], [12, 1], [12, 2], [12, 3]]);
+});
+
+test("drysmith draws source pixels above the old row boundary so his hair stays complete", () => {
+  assert.equal(npcCharacterSprite(148).sourceTopBleed, 18);
+  assert.match(rendererSource, /sourceHeight = cellHeight \+ sourceTopBleed/);
+});
+
+test("asset manifest contains only the curated portrait set", () => {
+  assert.ok(assetManifest.assets.portraits.src.includes(
+    "/game-assets/generated/wuxia-original-key-portraits-v1.webp",
+  ));
+  assert.ok(assetManifest.assets.portraits.src.every(
+    (src) => !src.includes("wuxia-npc-portraits-"),
+  ));
+  assert.ok(assetManifest.assets.characters.src.includes(
+    "/game-assets/generated/wuxia-characters-red-lotus-ranks-v1.webp",
+  ));
 });
 
 test("world NPCs do not receive coloured procedural identity overlays", () => {
@@ -166,6 +185,34 @@ test("beast-school atlas keeps every silhouette inside its exact grid cell", asy
   const { data, info } = await sharpImage(
     fileURLToPath(new URL(
       "../public/game-assets/generated/wuxia-characters-beast-school-v3.webp",
+      import.meta.url,
+    )),
+  )
+    .ensureAlpha()
+    .raw()
+    .toBuffer({ resolveWithObject: true });
+  assert.equal(info.width, 1256);
+  assert.equal(info.height, 1256);
+  const cell = info.width / 4;
+  for (let row = 0; row < 4; row += 1) {
+    for (let column = 0; column < 4; column += 1) {
+      for (let localY = 0; localY < cell; localY += 1) {
+        for (let localX = 0; localX < cell; localX += 1) {
+          if (localX >= 15 && localX < cell - 15 && localY >= 15 && localY < cell - 15)
+            continue;
+          const x = column * cell + localX,
+            y = row * cell + localY;
+          assert.equal(data[(y * info.width + x) * 4 + 3], 0);
+        }
+      }
+    }
+  }
+});
+
+test("Red Lotus rank atlas keeps all four directions inside exact grid cells", async () => {
+  const { data, info } = await sharpImage(
+    fileURLToPath(new URL(
+      "../public/game-assets/generated/wuxia-characters-red-lotus-ranks-v1.webp",
       import.meta.url,
     )),
   )

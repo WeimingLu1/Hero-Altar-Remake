@@ -15,12 +15,13 @@
         "/game-assets/generated/wuxia-characters-notable-women-v2.webp",
         "/game-assets/generated/wuxia-characters-notable-wanderers-v2.webp",
         "/game-assets/generated/wuxia-characters-underworld-v2.webp",
-        "/game-assets/generated/wuxia-characters-beast-school-v3.webp"
+        "/game-assets/generated/wuxia-characters-beast-school-v3.webp",
+        "/game-assets/generated/wuxia-characters-red-lotus-ranks-v1.webp"
       ],
       "columns": 4,
       "rows": 4,
       "directions": ["front", "right", "left", "back"],
-      "purpose": "48 player and NPC world silhouettes selected by stable named identity first, then gender, age, faction, and role; generic NPCs receive deterministic per-character palette variation"
+      "purpose": "52 player and NPC world silhouettes selected by stable named identity first, then gender, age, faction, and role; Red Lotus followers use explicit red, white, black and blue ranks"
     },
     "portraits": {
       "src": [
@@ -28,22 +29,10 @@
         "/game-assets/generated/wuxia-faction-portraits-v1.webp",
         "/game-assets/generated/wuxia-notable-portraits-v2.webp",
         "/game-assets/generated/wuxia-roster-portraits-v2.webp",
-        "/game-assets/generated/wuxia-npc-portraits-001-016-v1.webp",
-        "/game-assets/generated/wuxia-npc-portraits-017-032-v1.webp",
-        "/game-assets/generated/wuxia-npc-portraits-033-048-v1.webp",
-        "/game-assets/generated/wuxia-npc-portraits-049-064-v1.webp",
-        "/game-assets/generated/wuxia-npc-portraits-065-080-v1.webp",
-        "/game-assets/generated/wuxia-npc-portraits-081-096-v1.webp",
-        "/game-assets/generated/wuxia-npc-portraits-097-112-v1.webp",
-        "/game-assets/generated/wuxia-npc-portraits-113-128-v1.webp",
-        "/game-assets/generated/wuxia-npc-portraits-129-144-v1.webp",
-        "/game-assets/generated/wuxia-npc-portraits-145-160-v1.webp",
-        "/game-assets/generated/wuxia-npc-portraits-161-176-v1.webp",
-        "/game-assets/generated/wuxia-npc-portraits-177-192-v1.webp",
-        "/game-assets/generated/wuxia-npc-portraits-193-198-v1.webp"
+        "/game-assets/generated/wuxia-original-key-portraits-v1.webp"
       ],
-      "layouts": ["5x4", "4x4", "4x4", "4x4", "4x4", "4x4", "4x4", "4x4", "4x4", "4x4", "4x4", "4x4", "4x4", "4x4", "4x4", "4x4", "4x4"],
-      "purpose": "198 dedicated NPC portraits keyed one-to-one by database ID, plus 68 retained player and legacy fallback portraits"
+      "layouts": ["5x4", "4x4", "4x4", "4x4", "4x4"],
+      "purpose": "84 curated portraits selected by named identity, gender, age, faction and role; key Wudang, Snow Mountain and Red Lotus records use explicit matching cells"
     },
     "furniture": {
       "src": "/game-assets/generated/wuxia-indoor-furniture-v1.webp",
