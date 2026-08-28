@@ -16,12 +16,14 @@
         "/game-assets/generated/wuxia-characters-notable-wanderers-v2.webp",
         "/game-assets/generated/wuxia-characters-underworld-v2.webp",
         "/game-assets/generated/wuxia-characters-beast-school-v3.webp",
-        "/game-assets/generated/wuxia-characters-red-lotus-ranks-v1.webp"
+        "/game-assets/generated/wuxia-characters-red-lotus-ranks-v1.webp",
+        "/game-assets/generated/wuxia-characters-faction-leaders-v1.webp",
+        "/game-assets/generated/wuxia-characters-snow-hierarchy-v1.webp"
       ],
       "columns": 4,
       "rows": 4,
       "directions": ["front", "right", "left", "back"],
-      "purpose": "52 player and NPC world silhouettes selected by stable named identity first, then gender, age, faction, and role; Red Lotus followers use explicit red, white, black and blue ranks"
+      "purpose": "60 player and NPC world silhouettes selected by stable named identity first, then gender, age, faction, and role; sect leaders use unique authored outfits, Snow Mountain has six visible hierarchy silhouettes, and Red Lotus followers use explicit red, white, black and blue robes"
     },
     "portraits": {
       "src": [

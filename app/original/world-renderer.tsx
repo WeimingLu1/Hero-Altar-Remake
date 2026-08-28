@@ -67,6 +67,8 @@ const characterSheetNames = [
   "wuxia-characters-underworld-v2.webp",
   "wuxia-characters-beast-school-v3.webp",
   "wuxia-characters-red-lotus-ranks-v1.webp",
+  "wuxia-characters-faction-leaders-v1.webp",
+  "wuxia-characters-snow-hierarchy-v1.webp",
 ] as const;
 const wuxiaArt: WuxiaArt = {
   characters: characterSheetNames.map(() => null),
@@ -122,6 +124,7 @@ const namedCharacterArt: Record<number, CharacterSprite> = {
   48: { sheet: 7, row: 0, portraitAtlas: "notable", portrait: 0 },
   54: { sheet: 8, row: 1, portraitAtlas: "notable", portrait: 5 },
   56: { sheet: 8, row: 2, portraitAtlas: "notable", portrait: 6 },
+  59: { sheet: 13, row: 1, portrait: 21 },
   71: { sheet: 12, row: 1, portraitAtlas: "original", portrait: 5 },
   76: { sheet: 12, row: 2, portraitAtlas: "original", portrait: 6 },
   77: { sheet: 12, row: 0, portraitAtlas: "original", portrait: 4 },
@@ -135,19 +138,19 @@ const namedCharacterArt: Record<number, CharacterSprite> = {
   99: { sheet: 5, row: 2, portraitAtlas: "original", portrait: 1 },
   102: { sheet: 7, row: 1, portraitAtlas: "notable", portrait: 1 },
   104: { sheet: 5, row: 3, portraitAtlas: "original", portrait: 0 },
-  111: { sheet: 7, row: 1, portraitAtlas: "original", portrait: 3 },
-  112: { sheet: 7, row: 1, portraitAtlas: "original", portrait: 10 },
-  113: { sheet: 7, row: 1, portraitAtlas: "original", portrait: 8 },
-  114: { sheet: 7, row: 1, portraitAtlas: "original", portrait: 8 },
-  115: { sheet: 7, row: 1, portraitAtlas: "original", portrait: 8 },
-  116: { sheet: 5, row: 3, portraitAtlas: "original", portrait: 9 },
-  117: { sheet: 1, row: 3, portraitAtlas: "original", portrait: 11 },
-  118: { sheet: 7, row: 1, portraitAtlas: "original", portrait: 8 },
-  119: { sheet: 7, row: 1, portraitAtlas: "original", portrait: 8 },
-  120: { sheet: 7, row: 1, portraitAtlas: "original", portrait: 8 },
-  121: { sheet: 7, row: 1, portraitAtlas: "original", portrait: 8 },
-  122: { sheet: 7, row: 1, portraitAtlas: "original", portrait: 8 },
-  123: { sheet: 7, row: 1, portraitAtlas: "original", portrait: 10 },
+  111: { sheet: 13, row: 0, portraitAtlas: "original", portrait: 3 },
+  112: { sheet: 13, row: 3, portraitAtlas: "original", portrait: 10 },
+  113: { sheet: 14, row: 1, portraitAtlas: "original", portrait: 8 },
+  114: { sheet: 14, row: 1, portraitAtlas: "original", portrait: 8 },
+  115: { sheet: 14, row: 1, portraitAtlas: "original", portrait: 8 },
+  116: { sheet: 14, row: 2, portraitAtlas: "original", portrait: 9 },
+  117: { sheet: 14, row: 3, portraitAtlas: "original", portrait: 11 },
+  118: { sheet: 14, row: 1, portraitAtlas: "original", portrait: 8 },
+  119: { sheet: 14, row: 0, portraitAtlas: "original", portrait: 8 },
+  120: { sheet: 14, row: 0, portraitAtlas: "original", portrait: 8 },
+  121: { sheet: 14, row: 0, portraitAtlas: "original", portrait: 8 },
+  122: { sheet: 14, row: 0, portraitAtlas: "original", portrait: 8 },
+  123: { sheet: 13, row: 3, portraitAtlas: "original", portrait: 10 },
   124: { sheet: 11, row: 0, portraitAtlas: "roster", portrait: 0 },
   125: { sheet: 1, row: 2, portraitAtlas: "roster", portrait: 15 },
   126: { sheet: 2, row: 2, portraitAtlas: "roster", portrait: 14 },
@@ -158,7 +161,7 @@ const namedCharacterArt: Record<number, CharacterSprite> = {
   134: { sheet: 11, row: 3, portraitAtlas: "roster", portrait: 3 },
   138: { sheet: 3, row: 3, portraitAtlas: "roster", portrait: 8 },
   141: { sheet: 1, row: 2, portraitAtlas: "roster", portrait: 9 },
-  144: { sheet: 1, row: 2, portraitAtlas: "roster", portrait: 10 },
+  144: { sheet: 13, row: 2, portraitAtlas: "roster", portrait: 10 },
   147: { sheet: 1, row: 2, portraitAtlas: "roster", portrait: 11 },
   148: { sheet: 9, row: 3, portraitAtlas: "notable", portrait: 11, sourceTopBleed: 18 },
   149: { sheet: 8, row: 3, portraitAtlas: "notable", portrait: 7 },
@@ -173,7 +176,6 @@ export function npcPaletteFilter(id: number, sprite: CharacterSprite) {
   // Bespoke named and faction sheets carry intentional identity colours.
   // Generic sheets receive a mild, deterministic tint so people sharing the
   // same silhouette still remain visually distinct without flickering.
-  if (id === 117) return "grayscale(65%) brightness(125%) contrast(92%)";
   if (id <= 0 || namedCharacterArt[id] || sprite.sheet >= 5) return "none";
   // The three coprime cycles have a joint period far above the 1–198 NPC ID
   // range, so every generic record receives a unique combination.
