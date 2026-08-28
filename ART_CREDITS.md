@@ -41,6 +41,11 @@ OpenAI Image Generation and then prepared locally for use as sprite atlases:
   named, age-specific, disability-aware, animal, foreign-school, Taoist,
   Buddhist, and underworld portraits. The first grid directly matches the
   sixteen new named-character direction sets.
+- `public/game-assets/generated/wuxia-npc-portraits-001-016-v1.webp` through
+  `wuxia-npc-portraits-193-198-v1.webp`: thirteen 4 × 4 portrait grids generated
+  in strict database-ID order. Their 198 occupied cells give every NPC record a
+  dedicated face, age, clothing, profession/faction detail, body type, and
+  equipment treatment; the final grid leaves its ten unused cells empty.
 - `public/game-assets/generated/wuxia-indoor-furniture-v1.webp`: 8 × 8 modular
   ancient Chinese furniture and interior-prop atlas.
 - `public/game-assets/redrawn/overlay-nature-v3.webp` and

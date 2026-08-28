@@ -7,7 +7,9 @@ import {
   characterDirectionColumn,
   mapTheme,
   npcCharacterSprite,
+  npcCompositeIdentity,
   npcPaletteFilter,
+  npcPortraitCell,
 } from "../app/original/world-renderer";
 
 const worldSource = readFileSync(
@@ -120,6 +122,47 @@ test("generic NPC palette variation is stable while bespoke art keeps its colour
     .filter((filter) => filter !== "none");
   assert.equal(new Set(genericFilters).size, genericFilters.length);
   assert.ok(genericFilters.every((filter) => !filter.includes("undefined")));
+});
+
+test("all 198 NPC records have a dedicated portrait cell", () => {
+  assert.deepEqual(npcPortraitCell(1), {
+    src: "/game-assets/generated/wuxia-npc-portraits-001-016-v1.webp",
+    index: 0,
+    column: 0,
+    row: 0,
+  });
+  assert.deepEqual(npcPortraitCell(16), {
+    src: "/game-assets/generated/wuxia-npc-portraits-001-016-v1.webp",
+    index: 15,
+    column: 3,
+    row: 3,
+  });
+  assert.equal(npcPortraitCell(17)?.src, "/game-assets/generated/wuxia-npc-portraits-017-032-v1.webp");
+  assert.deepEqual(npcPortraitCell(198), {
+    src: "/game-assets/generated/wuxia-npc-portraits-193-198-v1.webp",
+    index: 5,
+    column: 1,
+    row: 1,
+  });
+  assert.equal(npcPortraitCell(0), null);
+  assert.equal(npcPortraitCell(199), null);
+  const cells = Array.from({ length: 198 }, (_, index) => npcPortraitCell(index + 1));
+  assert.ok(cells.every(Boolean));
+  assert.equal(new Set(cells.map((cell) => `${cell?.src}:${cell?.index}`)).size, 198);
+  assert.equal(new Set(cells.map((cell) => cell?.src)).size, 13);
+});
+
+test("generic world NPCs receive unique composite silhouettes", () => {
+  const identities = Array.from({ length: 198 }, (_, index) => index + 1)
+    .map((id) => ({ id, sprite: npcCharacterSprite(id) }))
+    .filter(({ sprite }) => sprite.sheet < 7)
+    .map(({ id, sprite }) => npcCompositeIdentity(id, sprite));
+  assert.ok(identities.length > 150);
+  assert.ok(identities.every(Boolean));
+  assert.equal(new Set(identities.map((identity) => identity?.signature)).size, identities.length);
+  assert.equal(npcCompositeIdentity(48, npcCharacterSprite(48)), null);
+  assert.match(rendererSource, /function drawNpcIdentityDetails/);
+  assert.match(rendererSource, /function drawNpcEquipment/);
 });
 
 test("beast-school atlas keeps every silhouette inside its exact grid cell", async () => {

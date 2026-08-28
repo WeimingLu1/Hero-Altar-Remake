@@ -45,6 +45,30 @@ export type CharacterSprite = {
   portrait?: number;
   portraitAtlas?: PortraitAtlas;
 };
+type NpcEquipment =
+  | "sword"
+  | "blade"
+  | "staff"
+  | "fan"
+  | "book"
+  | "hammer"
+  | "basket"
+  | "flower"
+  | "bow"
+  | "talisman"
+  | "ladle"
+  | "rope"
+  | "shield";
+export type NpcCompositeIdentity = {
+  signature: string;
+  bodyVariant: number;
+  hairVariant: number;
+  headwearVariant: number;
+  bodyScaleX: number;
+  bodyScaleY: number;
+  accent: string;
+  equipment: NpcEquipment;
+};
 
 export function characterDirectionColumn(direction: number) {
   // Generated profiles are named by their visible screen-facing direction.
@@ -162,6 +186,75 @@ export function npcPaletteFilter(id: number, sprite: CharacterSprite) {
   return `hue-rotate(${hue}deg) saturate(${saturation}%) brightness(${brightness}%)`;
 }
 
+export function npcPortraitCell(id: number) {
+  if (!Number.isInteger(id) || id < 1 || id > 198) return null;
+  const start = Math.floor((id - 1) / 16) * 16 + 1,
+    end = Math.min(start + 15, 198),
+    index = (id - 1) % 16;
+  return {
+    src: `/game-assets/generated/wuxia-npc-portraits-${String(start).padStart(3, "0")}-${String(end).padStart(3, "0")}-v1.webp`,
+    index,
+    column: index % 4,
+    row: Math.floor(index / 4),
+  };
+}
+
+const compositeIdentityCache = new Map<number, NpcCompositeIdentity | null>();
+
+export function npcCompositeIdentity(id: number, sprite: CharacterSprite) {
+  if (compositeIdentityCache.has(id)) return compositeIdentityCache.get(id) ?? null;
+  // Sheets 7–11 already contain a complete one-person directional design.
+  if (id <= 0 || sprite.sheet >= 7) {
+    compositeIdentityCache.set(id, null);
+    return null;
+  }
+  const npc = npcRecord(id),
+    text = `${String(npc.name || "")}${((npc.des_text as string[]) || []).join("")}`,
+    serial = id - 1,
+    bodyVariant = serial % 5,
+    hairVariant = Math.floor(serial / 5) % 8,
+    headwearVariant = Math.floor(serial / 40) % 5,
+    equipment: NpcEquipment = /厨|屠户|饭/.test(text)
+      ? "ladle"
+      : /裁缝|针线/.test(text)
+        ? "rope"
+        : /铁匠|铸剑|工地|石料/.test(text)
+          ? "hammer"
+          : /花|侍女/.test(text)
+            ? "flower"
+            : /猎户|弓|鹰/.test(text)
+              ? "bow"
+              : /书|诗|词|先生|村长|管家/.test(text)
+                ? "book"
+                : /道|法术|真人|天师/.test(text)
+                  ? "talisman"
+                  : /和尚|僧|婆婆|老人/.test(text)
+                    ? "staff"
+                    : /商|贩|店|花妞/.test(text)
+                      ? "basket"
+                      : /扇|公子/.test(text)
+                        ? "fan"
+                        : /盾|官兵|捕快/.test(text)
+                          ? "shield"
+                          : /刀|匪|盗|坛/.test(text)
+                            ? "blade"
+                            : /鞭|绳/.test(text)
+                              ? "rope"
+                              : "sword",
+    identity: NpcCompositeIdentity = {
+      signature: `${bodyVariant}-${hairVariant}-${headwearVariant}`,
+      bodyVariant,
+      hairVariant,
+      headwearVariant,
+      bodyScaleX: [0.91, 0.96, 1, 1.05, 1.1][bodyVariant],
+      bodyScaleY: [0.97, 1.02, 1.06, 0.94, 1][hairVariant % 5],
+      accent: `hsl(${(id * 137.508) % 360} 68% 62%)`,
+      equipment,
+    };
+  compositeIdentityCache.set(id, identity);
+  return identity;
+}
+
 export function npcCharacterSprite(id: number, fallbackName = ""): CharacterSprite {
   const npc = id > 0 ? npcRecord(id) : {},
     name = String(npc.name || fallbackName),
@@ -235,15 +328,18 @@ export function CharacterPortrait({
       playerGender === undefined
         ? npcCharacterSprite(npcId || 0, name)
         : { sheet: 0, row: playerGender ? 1 : 0 },
+    dedicatedPortrait = playerGender === undefined ? npcPortraitCell(npcId || 0) : null,
     index = sprite.portrait ?? sprite.sheet * 4 + sprite.row,
     generatedPortrait = "portraitAtlas" in sprite ? sprite.portraitAtlas : undefined,
     factionPortrait = !generatedPortrait && index >= 20,
     localIndex = generatedPortrait ? index : factionPortrait ? index - 20 : index,
     columns = generatedPortrait || factionPortrait ? 4 : 5,
-    column = localIndex % columns,
-    row = Math.floor(localIndex / columns),
+    column = dedicatedPortrait?.column ?? localIndex % columns,
+    row = dedicatedPortrait?.row ?? Math.floor(localIndex / columns),
     portraitImage =
-      generatedPortrait === "notable"
+      dedicatedPortrait
+        ? `url("${dedicatedPortrait.src}")`
+        : generatedPortrait === "notable"
         ? 'url("/game-assets/generated/wuxia-notable-portraits-v2.webp")'
         : generatedPortrait === "roster"
           ? 'url("/game-assets/generated/wuxia-roster-portraits-v2.webp")'
@@ -257,7 +353,7 @@ export function CharacterPortrait({
       aria-label={`${name || "人物"}立绘`}
       style={{
         backgroundImage: portraitImage,
-        backgroundSize: generatedPortrait || factionPortrait ? "400% 400%" : undefined,
+        backgroundSize: dedicatedPortrait || generatedPortrait || factionPortrait ? "400% 400%" : undefined,
         backgroundPosition: `${(column / (columns - 1)) * 100}% ${(row / 3) * 100}%`,
       }}
     />
@@ -307,6 +403,7 @@ export function drawWorld(ctx: CanvasRenderingContext2D, state: WorldSave, ambie
         sprite,
         roaming?.direction || 2,
         npcPaletteFilter(visual.npcId || 0, sprite),
+        npcCompositeIdentity(visual.npcId || 0, sprite),
       );
       drawNpcMarker(
         ctx,
@@ -390,6 +487,10 @@ export function drawWorld(ctx: CanvasRenderingContext2D, state: WorldSave, ambie
       state.tasks.wantedGender ? { sheet: 4, row: 0 } : { sheet: 3, row: 1 },
       2,
       npcPaletteFilter(
+        198,
+        state.tasks.wantedGender ? { sheet: 4, row: 0 } : { sheet: 3, row: 1 },
+      ),
+      npcCompositeIdentity(
         198,
         state.tasks.wantedGender ? { sheet: 4, row: 0 } : { sheet: 3, row: 1 },
       ),
@@ -1001,6 +1102,7 @@ function drawActor(
   sprite: CharacterSprite = { sheet: 0, row: 0 },
   direction = 2,
   paletteFilter = "none",
+  identity: NpcCompositeIdentity | null = null,
 ) {
   const atlas = wuxiaArt.characters[sprite.sheet];
   if (!atlas) ensureCharacterSheet(sprite.sheet);
@@ -1008,8 +1110,8 @@ function drawActor(
     const cellWidth = atlas.naturalWidth / 4,
       cellHeight = atlas.naturalHeight / 4,
       column = characterDirectionColumn(direction),
-      width = 44,
-      height = 44;
+      width = 44 * (identity?.bodyScaleX ?? 1),
+      height = 44 * (identity?.bodyScaleY ?? 1);
     ctx.fillStyle = "rgba(0,0,0,.35)";
     ctx.beginPath();
     ctx.ellipse(x, y + 9, 10, 4, 0, 0, Math.PI * 2);
@@ -1023,11 +1125,12 @@ function drawActor(
       cellWidth,
       cellHeight,
       x - width / 2,
-      y - 34,
+      y + 10 - height,
       width,
       height,
     );
     ctx.restore();
+    if (identity) drawNpcIdentityDetails(ctx, x, y, identity, direction);
     return;
   }
   ctx.fillStyle = "rgba(0,0,0,.5)";
@@ -1044,6 +1147,195 @@ function drawActor(
   ctx.fillStyle = hero ? "#657f97" : "#40362e";
   ctx.fillRect(x - 8, y + 7, 6, 7);
   ctx.fillRect(x + 2, y + 7, 6, 7);
+  if (identity) drawNpcIdentityDetails(ctx, x, y, identity, direction);
+}
+
+const npcHairColors = [
+  "#1d1715",
+  "#30221c",
+  "#4a3427",
+  "#171c24",
+  "#5a5148",
+  "#6d5842",
+  "#25231f",
+  "#3b2829",
+] as const;
+
+function drawNpcIdentityDetails(
+  ctx: CanvasRenderingContext2D,
+  x: number,
+  y: number,
+  identity: NpcCompositeIdentity,
+  direction: number,
+) {
+  const side = direction === 4 ? -1 : direction === 6 ? 1 : identity.hairVariant % 2 ? 1 : -1,
+    hair = npcHairColors[identity.hairVariant],
+    headY = y - 24;
+  ctx.save();
+  ctx.imageSmoothingEnabled = false;
+  ctx.lineCap = "square";
+  ctx.lineJoin = "miter";
+
+  // Eight silhouettes remain readable at 32 px: tied, loose, cropped, braided,
+  // swept, twin-lock, shaved-front and high-knot variants.
+  ctx.fillStyle = hair;
+  switch (identity.hairVariant) {
+    case 0:
+      ctx.fillRect(x - 7, headY - 8, 14, 3);
+      ctx.fillRect(x + side * 6 - (side < 0 ? 2 : 0), headY - 5, 3, 7);
+      break;
+    case 1:
+      ctx.fillRect(x - 8, headY - 7, 16, 4);
+      ctx.fillRect(x - 9, headY - 4, 3, 11);
+      ctx.fillRect(x + 6, headY - 4, 3, 11);
+      break;
+    case 2:
+      ctx.fillRect(x - 7, headY - 7, 14, 3);
+      ctx.fillRect(x - 8, headY - 4, 3, 5);
+      break;
+    case 3:
+      ctx.fillRect(x - 7, headY - 8, 14, 4);
+      ctx.fillRect(x + side * 7 - (side < 0 ? 2 : 0), headY - 4, 3, 14);
+      ctx.fillRect(x + side * 9 - (side < 0 ? 2 : 0), headY + 7, 3, 5);
+      break;
+    case 4:
+      ctx.fillRect(x - 8, headY - 7, 16, 3);
+      ctx.fillRect(x - 7, headY - 4, 5, 4);
+      break;
+    case 5:
+      ctx.fillRect(x - 7, headY - 8, 14, 3);
+      ctx.fillRect(x - 10, headY - 3, 4, 9);
+      ctx.fillRect(x + 6, headY - 3, 4, 9);
+      break;
+    case 6:
+      ctx.fillRect(x - 7, headY - 8, 14, 2);
+      ctx.fillRect(x - 2, headY - 10, 4, 3);
+      break;
+    default:
+      ctx.fillRect(x - 7, headY - 8, 14, 3);
+      ctx.fillRect(x - 3, headY - 12, 6, 5);
+      ctx.fillRect(x - 1, headY - 15, 2, 4);
+  }
+
+  ctx.fillStyle = identity.accent;
+  ctx.strokeStyle = identity.accent;
+  ctx.lineWidth = 2;
+  switch (identity.headwearVariant) {
+    case 0:
+      ctx.fillRect(x - 8, headY - 3, 16, 2);
+      break;
+    case 1:
+      ctx.fillRect(x - 5, headY - 11, 10, 2);
+      ctx.fillRect(x - 2, headY - 14, 4, 3);
+      break;
+    case 2:
+      ctx.beginPath();
+      ctx.moveTo(x - 10, headY - 7);
+      ctx.lineTo(x + 10, headY - 7);
+      ctx.lineTo(x + 6, headY - 12);
+      ctx.lineTo(x - 6, headY - 12);
+      ctx.closePath();
+      ctx.fill();
+      break;
+    case 3:
+      ctx.beginPath();
+      ctx.moveTo(x - side * 8, headY - 10);
+      ctx.lineTo(x + side * 9, headY - 13);
+      ctx.stroke();
+      ctx.fillRect(x + side * 8 - 1, headY - 15, 3, 5);
+      break;
+    default:
+      ctx.strokeRect(x - 9, headY - 8, 18, 15);
+  }
+
+  // Body marks supply a second identity channel that survives similar clothes.
+  ctx.globalAlpha = 0.88;
+  if (identity.bodyVariant === 0) ctx.fillRect(x - 9, y - 8, 18, 3);
+  else if (identity.bodyVariant === 1) {
+    ctx.fillRect(x - 7, y - 11, 3, 16);
+    ctx.fillRect(x + 4, y - 11, 3, 16);
+  } else if (identity.bodyVariant === 2) {
+    ctx.beginPath();
+    ctx.moveTo(x - 8, y - 11);
+    ctx.lineTo(x + 7, y + 4);
+    ctx.stroke();
+  } else if (identity.bodyVariant === 3) {
+    ctx.fillRect(x - 2, y - 12, 4, 17);
+    ctx.fillRect(x - 7, y - 2, 14, 2);
+  } else {
+    ctx.strokeRect(x - 7, y - 10, 14, 14);
+  }
+  ctx.globalAlpha = 1;
+
+  drawNpcEquipment(ctx, x + side * 13, y - 5, side, identity.equipment, identity.accent);
+  ctx.restore();
+}
+
+function drawNpcEquipment(
+  ctx: CanvasRenderingContext2D,
+  x: number,
+  y: number,
+  side: number,
+  equipment: NpcEquipment,
+  accent: string,
+) {
+  ctx.strokeStyle = "rgba(30,24,20,.95)";
+  ctx.fillStyle = accent;
+  ctx.lineWidth = 2;
+  ctx.beginPath();
+  if (equipment === "sword" || equipment === "blade") {
+    ctx.moveTo(x - side * 3, y + 12);
+    ctx.lineTo(x + side * (equipment === "sword" ? 5 : 7), y - 15);
+    ctx.stroke();
+    ctx.fillRect(x - side * 4 - 2, y + 8, 8, 2);
+  } else if (equipment === "staff" || equipment === "rope") {
+    ctx.moveTo(x, y - 17);
+    ctx.lineTo(x + side * (equipment === "rope" ? 4 : 1), y + 15);
+    ctx.stroke();
+    if (equipment === "rope") ctx.strokeRect(x - 3, y + 10, 7, 5);
+  } else if (equipment === "fan") {
+    ctx.moveTo(x, y + 7);
+    ctx.lineTo(x - 7, y - 3);
+    ctx.lineTo(x + 6, y - 4);
+    ctx.closePath();
+    ctx.fill();
+  } else if (equipment === "book") {
+    ctx.fillRect(x - 6, y - 2, 12, 10);
+    ctx.strokeRect(x - 6, y - 2, 12, 10);
+  } else if (equipment === "hammer" || equipment === "ladle") {
+    ctx.moveTo(x, y + 13);
+    ctx.lineTo(x, y - 7);
+    ctx.stroke();
+    if (equipment === "hammer") ctx.fillRect(x - 6, y - 10, 12, 5);
+    else {
+      ctx.beginPath();
+      ctx.arc(x, y - 10, 4, 0, Math.PI * 2);
+      ctx.fill();
+    }
+  } else if (equipment === "basket" || equipment === "shield") {
+    ctx.fillRect(x - 7, y, 14, 11);
+    ctx.strokeRect(x - 7, y, 14, 11);
+    if (equipment === "basket") ctx.strokeRect(x - 4, y - 5, 8, 7);
+  } else if (equipment === "flower") {
+    ctx.moveTo(x, y + 9);
+    ctx.lineTo(x, y - 4);
+    ctx.stroke();
+    ctx.beginPath();
+    ctx.arc(x - 3, y - 6, 3, 0, Math.PI * 2);
+    ctx.arc(x + 3, y - 6, 3, 0, Math.PI * 2);
+    ctx.fill();
+  } else if (equipment === "bow") {
+    ctx.arc(x - side * 3, y, 8, -Math.PI / 2, Math.PI / 2);
+    ctx.stroke();
+    ctx.beginPath();
+    ctx.moveTo(x - side * 3, y - 8);
+    ctx.lineTo(x - side * 3, y + 8);
+    ctx.stroke();
+  } else {
+    ctx.fillRect(x - 5, y - 4, 10, 12);
+    ctx.fillStyle = "rgba(245,230,180,.92)";
+    ctx.fillRect(x - 2, y - 1, 4, 6);
+  }
 }
 function drawNpcMarker(
   ctx: CanvasRenderingContext2D,
