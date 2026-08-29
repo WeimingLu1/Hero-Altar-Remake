@@ -612,3 +612,19 @@
 .battle-inner-list {
   grid-auto-rows: max-content;
 }
+
+/* 演绎锚点：模型漏写必显招式/数字时，从原始事实引用原句补在段尾；
+   引用整体弱化，但其中的招式名与数字仍走同一套高亮 mark。 */
+.battle-narrative-anchor {
+  display: block;
+  margin-top: 5px;
+  color: #b9ad8d;
+  font-size: 13px;
+  font-style: normal;
+  line-height: 1.7;
+  opacity: 0.92;
+}
+
+.battle-narrative-anchor mark {
+  font-weight: 700;
+}

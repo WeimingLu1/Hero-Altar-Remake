@@ -741,6 +741,14 @@ export function BattleView({
                   ).map((token, tokenIndex) => token.kind === "text" ? token.text : (
                     <mark className={`battle-narrative-${token.kind}`} key={tokenIndex}>{token.text}</mark>
                   ))}</span>
+                  {section.anchor && (
+                    <em className="battle-narrative-anchor">{battleNarrativeTextTokens(
+                      `（${section.anchor}）`,
+                      item.facts[section.factIndex ?? sectionIndex] || "",
+                    ).map((token, tokenIndex) => token.kind === "text" ? token.text : (
+                      <mark className={`battle-narrative-${token.kind}`} key={tokenIndex}>{token.text}</mark>
+                    ))}</em>
+                  )}
                 </p>
               ))}
               {playingThisEntry && <p className="narrative-loading">正在按真实结算顺序演出本回合……</p>}

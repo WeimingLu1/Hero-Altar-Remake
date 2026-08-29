@@ -657,6 +657,10 @@ test("任务交谈预先锁定同一委托背景，战斗舞台按招式演出�
   assert.match(worldSource, /迫切风险与为何需要玩家相助/);
   assert.match(uiSource, /battleNarrativeDisplaySections/);
   assert.match(uiSource, /battleNarrativeTextTokens/);
+  // 演绎漏写必显招式/数字时，必须以原始事实锚点（battle-narrative-anchor）兜底高亮。
+  assert.match(uiSource, /section\.anchor && \(/);
+  assert.match(uiSource, /battle-narrative-anchor/);
+  assert.match(battleCss, /battle-narrative-anchor/);
   assert.match(battleCss, /battle-narrative-number/);
   assert.match(battleCss, /battle-narrative-technique/);
   for (const effect of ["fist", "sword", "blade", "staff", "whip", "spell", "special", "item"])

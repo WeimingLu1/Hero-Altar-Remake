@@ -4,6 +4,7 @@ import {
   battleEffectKind,
   battleFactIsImpact,
   battleFactTechniqueNames,
+  battleNarrativeAnchor,
   battleNarrativeDisplaySections,
   battleNarrationRequiredTokens,
   battleNarrativeTextTokens,
@@ -283,4 +284,54 @@ test("battle narration fallback preserves every original line without adding lab
   const fallback = buildBattleNarrationFallback(input);
   assert.equal(fallback, input.facts.join("\n"));
   assert.doesNotMatch(fallback, /【|】/);
+});
+
+test("演绎漏写的必显招式与数字由原始事实锚点兜底高亮", () => {
+  // 全部写入时无锚点。
+  assert.equal(battleNarrativeAnchor(
+    "一招「劈雷坠地」捶出，余鸿儒受到 488 点伤害。",
+    "你一招「劈雷坠地」捶向余鸿儒，余鸿儒受到 488 点伤害。",
+  ), undefined);
+  // 漏写招式：引用包含该招式的最小原始事实短句（逐字，不改写模型正文）。
+  assert.equal(
+    battleNarrativeAnchor("韦铭俯身发力，双拳直取余鸿儒下盘。", "你大喝一声，一招「劈雷坠地」捶向余鸿儒双腿。"),
+    "一招「劈雷坠地」捶向余鸿儒双腿",
+  );
+  // 漏写数字：引用包含该数字的原始事实短句。
+  assert.equal(
+    battleNarrativeAnchor("这一击震得余鸿儒双腿发麻，身形微晃。", "余鸿儒受到 488 点伤害。"),
+    "余鸿儒受到 488 点伤害",
+  );
+  // 多个缺失词可能落在不同短句，逐句引用并保持原序。
+  assert.equal(
+    battleNarrativeAnchor("雷光炸开。", "连珠雷！茅盈受到 3180 点法术伤害。"),
+    "连珠雷；茅盈受到 3180 点法术伤害",
+  );
+});
+
+test("展示段落保留模型正文原文，缺失词通过 anchor 字段补充", () => {
+  const facts = [
+    "你大喝一声，一招「劈雷坠地」捶向余鸿儒。",
+    "余鸿儒受到 488 点伤害。",
+  ];
+  const model = [
+    `【事实1】${facts[0]}｜韦铭俯身发力，双拳直取余鸿儒下盘。`,
+    `【事实2】${facts[1]}｜这一击震得余鸿儒双腿发麻，身形微晃。`,
+  ].join("\n");
+  const sections = battleNarrativeDisplaySections(model, facts);
+  // 模型正文保持逐字不变（不审计、不改写）。
+  assert.equal(sections[0].text, "韦铭俯身发力，双拳直取余鸿儒下盘。");
+  assert.equal(sections[1].text, "这一击震得余鸿儒双腿发麻，身形微晃。");
+  // 缺失的招式与数字由事实原句锚点兜底。
+  assert.equal(sections[0].anchor, "一招「劈雷坠地」捶向余鸿儒");
+  assert.equal(sections[1].anchor, "余鸿儒受到 488 点伤害");
+  // 锚点文本走同一套 token 化：招式名与数字都会高亮。
+  assert.deepEqual(
+    battleNarrativeTextTokens(`（${sections[0].anchor}）`, facts[0]).filter((t) => t.kind !== "text"),
+    [{ kind: "technique", text: "劈雷坠地" }],
+  );
+  assert.deepEqual(
+    battleNarrativeTextTokens(`（${sections[1].anchor}）`, facts[1]).filter((t) => t.kind !== "text"),
+    [{ kind: "number", text: "488" }],
+  );
 });

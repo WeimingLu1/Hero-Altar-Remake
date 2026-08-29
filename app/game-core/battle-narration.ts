@@ -29,6 +29,8 @@ export type BattleEffectKind =
 export type BattleNarrativeSection = {
   speaker: "clash" | "impact";
   text: string;
+  /** 演绎漏写必显招式/数字时，从原始事实提取的原句引用（用于兜底高亮）。 */
+  anchor?: string;
   factIndex?: number;
 };
 
@@ -169,13 +171,36 @@ export function battleNarrativeDisplaySections(
   const prose = numberedBattleNarrativeProse(text, facts, !complete),
     indexes = complete ? facts.map((_, index) => index) : [...prose.keys()].sort((a, b) => a - b);
   return indexes.map((index) => {
-    const fact = facts[index], content = prose.get(index) || fact;
+    const fact = facts[index], content = prose.get(index) || fact,
+      anchor = battleNarrativeAnchor(content, fact);
     return {
       factIndex: index,
       speaker: battleFactIsImpact(fact) ? "impact" as const : "clash" as const,
       text: content,
+      ...(anchor ? { anchor } : {}),
     };
   });
+}
+
+/**
+ * 模型演绎漏掉必显招式或数字时（提示词约束是软性的），把原始事实中
+ * 包含缺失词的原句提取出来作为引用锚点；界面会把这些词连同锚点一起
+ * 高亮，保证每回合所有招式名与数字在演绎中可见。锚点只引用引擎原文，
+ * 不改写模型正文。
+ */
+export function battleNarrativeAnchor(prose: string, fact: string): string | undefined {
+  const missing = [
+    ...battleFactTechniqueNames(fact),
+    ...numberTokens(fact),
+  ].filter((token) => !prose.includes(token));
+  if (!missing.length) return undefined;
+  const clauses = [...new Set(
+    fact
+      .split(/[，。；！？、]+/)
+      .map((clause) => clause.trim())
+      .filter((clause) => clause && missing.some((token) => clause.includes(token))),
+  )];
+  return clauses.join("；") || undefined;
 }
 
 export function buildBattleNarrationFallback(event: BattleNarrationEvent) {
