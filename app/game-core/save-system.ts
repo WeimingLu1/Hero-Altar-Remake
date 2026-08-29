@@ -14,6 +14,11 @@ import {
   originalStart,
   type WorldPosition,
 } from "./original-world";
+import {
+  normalizeTriangleStoneList,
+  resizeTriangleStoneList,
+  TRIANGLE_STONE_ITEM_ID,
+} from "./triangle-stone";
 
 export { LOCAL_SAVE_KEY, SAVE_FORMAT, SAVE_VERSION } from "./save-constants";
 
@@ -110,6 +115,7 @@ export const newActor = (): SceneActorState => ({
   xue6: false,
   donateTimes: 0,
   killList: [],
+  stoneList: [],
   badmanKill: 0,
   taskKill: 0,
   killNum: 0,
@@ -153,6 +159,8 @@ export function normalize(value: unknown): WorldSave {
   const oldTasks = (source.tasks || {}) as Partial<TaskState>;
   const swords = [...(oldActor.swords || [])];
   const inventory = { ...(oldActor.inventory || {}) };
+  const legacyTriangleStoneCount = inventory[`1:${TRIANGLE_STONE_ITEM_ID}`];
+  delete inventory[`1:${TRIANGLE_STONE_ITEM_ID}`];
 
   if (
     swords.length === 0 &&
@@ -202,6 +210,14 @@ export function normalize(value: unknown): WorldSave {
 
   const skills = normalizeSkillTable((oldActor as Partial<SceneActorState>).skills);
   const base = { ...newActor(), ...(oldActor as Partial<SceneActorState>), skills };
+  const validTriangleStoneList = normalizeTriangleStoneList(base.stoneList);
+  const stoneList = resizeTriangleStoneList(
+    validTriangleStoneList,
+    Math.max(
+      validTriangleStoneList.length,
+      finiteInt(legacyTriangleStoneCount),
+    ),
+  );
   const baseStr = clampField(base.baseStr, 1, 30, 20);
   const baseAgi = clampField(base.baseAgi, 1, 30, 20);
   const baseInt = clampField(base.baseInt, 1, 30, 20);
@@ -295,6 +311,7 @@ export function normalize(value: unknown): WorldSave {
             .filter((id) => Number.isInteger(id) && id > 0),
         ),
       ),
+      stoneList,
       badmanKill: clampField(base.badmanKill, 0, 65_535),
       taskKill: clampField(base.taskKill, 0, 65_535),
       killNum: clampField(base.killNum, 0, 10),

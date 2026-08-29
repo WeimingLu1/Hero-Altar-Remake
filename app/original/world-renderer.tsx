@@ -26,6 +26,7 @@ import { generatedQuestCurrentNpc } from "../game-core/generated-task-system";
 import { npcVisibleWithInventory } from "../game-core/hidden-npc";
 import type { AmbientPlayerState } from "../game-core/ambient-player";
 import type { WorldSave } from "../game-core/save-system";
+import { triangleStoneCount } from "../game-core/triangle-stone";
 
 export const WORLD_WIDTH = 640;
 export const WORLD_HEIGHT = 480;
@@ -568,6 +569,7 @@ function computeEventVisual(
     result = executeMapCommands(page.commands),
     scene = selectSceneEvent(result.source, {
       inventory: state.actor.inventory,
+      stoneCount: triangleStoneCount(state.actor),
       tanId: state.actor.tanId,
       freeWork: state.tasks.freeWork,
       canGetItem: true,

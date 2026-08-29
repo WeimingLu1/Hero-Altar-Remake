@@ -7,6 +7,7 @@ import {
   ensureForgedWeaponInventory,
   swordTypes,
 } from "./life-system";
+import { triangleStoneCount } from "./triangle-stone";
 
 export type BagEntry = {
   key: string;
@@ -99,7 +100,7 @@ export function bagEntries(actor: SceneActorState): BagEntry[] {
       },
     ];
   });
-  const stoneCount = actor.stoneList?.length || 0;
+  const stoneCount = triangleStoneCount(actor);
   if (stoneCount > 0) {
     const stone = originalTables.items[19] || {};
     entries.push({
@@ -238,7 +239,7 @@ export function activateEntry(actor: SceneActorState, entry: BagEntry) {
   if (entry.key === "stone:19")
     return {
       ok: false,
-      text: `六芒星阵的收集物，已集齐 ${(actor.stoneList?.length || 0)}/6，无法使用。`,
+      text: `六芒星阵的收集物，已集齐 ${triangleStoneCount(actor)}/6，无法使用。`,
     };
   return activateItemEntry(actor, entry, false);
 }

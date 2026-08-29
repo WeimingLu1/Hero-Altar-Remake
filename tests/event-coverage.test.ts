@@ -128,14 +128,33 @@ test("parseSceneGate 解析被物品门槛锁住的坛入口，与条件是否�
 });
 
 test("parseSceneGate 解析时空尽头石板门(需六块三角石板)", () => {
-  const gate = parseSceneGate(
-    "if $game_actor.item_number(1,19)==6\n $scene=Scene_Event.new(8)\nend",
-  );
+  const source =
+    "if $game_actor.item_number(1,19)==6\n $scene=Scene_Event.new(8)\nend";
+  const gate = parseSceneGate(source);
   assert.deepEqual(gate?.scene, { type: 8, id: undefined, extra: undefined });
   assert.equal(gate?.scene?.type, 8);
   assert.equal(gate?.itemId, 19);
   assert.equal(gate?.itemOp, "==");
   assert.equal(gate?.itemCount, 6);
+  assert.equal(
+    selectSceneEvent(source, {
+      inventory: { "1:19": 7 },
+      stoneCount: 3,
+      tanId: 0,
+      freeWork: 0,
+    }),
+    undefined,
+    "普通背包中的旧版错误石板数量不得覆盖真实收集进度",
+  );
+  assert.deepEqual(
+    selectSceneEvent(source, {
+      inventory: {},
+      stoneCount: 6,
+      tanId: 0,
+      freeWork: 0,
+    }),
+    { type: 8, id: undefined, extra: undefined },
+  );
 });
 
 test("parseSceneGate 对无场景脚本与无条件入口都能正确处理", () => {

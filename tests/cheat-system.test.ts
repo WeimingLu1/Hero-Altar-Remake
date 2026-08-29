@@ -132,6 +132,21 @@ test("修改器可添加移除物品并自动卸下装备", () => {
   assert.equal(a.inventory["2:1"], undefined);
 });
 
+test("三角石板在秘技中直接修改真实收集数量并限制为六块", () => {
+  const a = actor();
+  a.stoneList = [102, 111, 102, 999];
+  a.inventory["1:19"] = 7;
+  assert.match(setCheatInventory(a, 1, 19, 4), /调整为 4/);
+  assert.deepEqual(a.stoneList, [102, 111, 48, 59]);
+  assert.equal(a.inventory["1:19"], undefined);
+  setCheatInventory(a, 1, 19, 99);
+  assert.deepEqual(a.stoneList, [102, 111, 48, 59, 81, 95]);
+  setCheatInventory(a, 1, 19, 2);
+  assert.deepEqual(a.stoneList, [102, 111]);
+  setCheatInventory(a, 1, 19, 0);
+  assert.deepEqual(a.stoneList, []);
+});
+
 test("修改器的获得数量会累加而不是覆盖现有库存", () => {
   const a = actor();
   a.inventory["1:8"] = 2;

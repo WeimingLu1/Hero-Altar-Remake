@@ -3,6 +3,12 @@ import { fullHp } from "./inventory-system";
 import { originalSystem, originalTables } from "./original-data";
 import { effectiveLevel } from "./skill-system";
 import { MAX_PLAYER_EXP } from "./progression-limits";
+import {
+  resizeTriangleStoneList,
+  TRIANGLE_STONE_ITEM_ID,
+  TRIANGLE_STONE_SOURCE_IDS,
+  triangleStoneCount,
+} from "./triangle-stone";
 
 // 玩家可通过物品(如王蛇胆 add_mfp)无上限堆内力上限到 65535、气血随之到 ~16783；
 // 修改器上限与规则一致，允许玩家设置到可达极限。
@@ -273,9 +279,21 @@ export function cheatInventoryCatalog(kind: CheatInventoryKind) {
   return table.flatMap((record, id) => record ? [{ id, name: String(record.name || id) }] : []);
 }
 
+export function setCheatTriangleStoneCount(
+  actor: SceneActorState,
+  raw: number,
+) {
+  actor.stoneList = resizeTriangleStoneList(actor.stoneList, raw);
+  // 旧版秘技曾把石板误写进普通背包；石板进度只允许保存在来源列表。
+  delete actor.inventory[`1:${TRIANGLE_STONE_ITEM_ID}`];
+  return `三角石板数量调整为 ${actor.stoneList.length}（允许范围 0–${TRIANGLE_STONE_SOURCE_IDS.length}）。`;
+}
+
 export function setCheatInventory(actor: SceneActorState, kind: CheatInventoryKind, id: number, raw: number) {
   const table = kind === 1 ? originalTables.items : kind === 2 ? originalTables.weapons : originalTables.armors;
   if (!table[id]) return "没有这个物品。";
+  if (kind === 1 && id === TRIANGLE_STONE_ITEM_ID)
+    return setCheatTriangleStoneCount(actor, raw);
   const key = `${kind}:${id}`, amount = cap(raw, kind === 1 ? 255 : 1);
   if (amount === 0) {
     delete actor.inventory[key];
@@ -289,7 +307,10 @@ export function setCheatInventory(actor: SceneActorState, kind: CheatInventoryKi
 
 export function addCheatInventory(actor: SceneActorState, kind: CheatInventoryKind, id: number, raw: number) {
   const amount = cap(raw, kind === 1 ? 255 : 1, 1),
-    current = actor.inventory[`${kind}:${id}`] || 0;
+    current =
+      kind === 1 && id === TRIANGLE_STONE_ITEM_ID
+        ? triangleStoneCount(actor)
+        : actor.inventory[`${kind}:${id}`] || 0;
   return setCheatInventory(actor, kind, id, kind === 1 ? current + amount : 1);
 }
 

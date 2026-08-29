@@ -34,7 +34,6 @@ import {
   swordTypes,
 } from "../game-core/life-system";
 import {
-  addCheatInventory,
   cheatQuickOptions,
   cheatSchools,
   cheatStats,
@@ -49,6 +48,11 @@ import {
   type CheatInventoryKind,
   type CheatQuickAction,
 } from "../game-core/cheat-system";
+import {
+  TRIANGLE_STONE_ITEM_ID,
+  TRIANGLE_STONE_SOURCE_IDS,
+  triangleStoneCount,
+} from "../game-core/triangle-stone";
 import {
   actorStatusProfile,
   levelTier,
@@ -144,7 +148,9 @@ const cheatCatalogGroups = (
           : record.type === 1
             ? "丹药"
             : "杂物";
-      if (record.is_book) {
+      if (id === TRIANGLE_STONE_ITEM_ID) {
+        bonus = `关键物品 · 六芒星阵进度 · 上限 ${TRIANGLE_STONE_SOURCE_IDS.length}`;
+      } else if (record.is_book) {
         const teaches = ((record.skill_list as number[][]) || []).map(
           ([sid, lv]) => `${originalTables.kungfus[sid]?.name || sid}${lv}`,
         );
@@ -1658,12 +1664,47 @@ export function CheatInner({
   maxSkill: (index: number) => void;
   mutate: (mutation: (draft: WorldSave) => string) => void;
 }) {
-  const tabs = ["快捷", "人物数值", "物品装备", "全部武功", "身份师承", "世界进度"],
-    [inventoryTab, setInventoryTab] = useState<
-      "food" | "medicine" | "book" | "misc" | "weapon" | "armor" | "owned"
-    >("food"),
-    [amounts, setAmounts] = useState<Record<string, number>>({}),
-    killed = (actor.killList || []).filter((id) => originalTables.enemies[id]);
+  const tabs = ["快捷", "人物数值", "物品装备", "全部武功", "身份师承", "世界进度"];
+  const [inventoryTab, setInventoryTab] = useState<
+    "food" | "medicine" | "book" | "misc" | "weapon" | "armor" | "owned"
+  >("food");
+  const [amounts, setAmounts] = useState<Record<string, number>>({});
+  const killed = (actor.killList || []).filter(
+    (id) => originalTables.enemies[id],
+  );
+  const stoneCount = triangleStoneCount(actor);
+  const ownedInventoryRows: Array<{
+    key: string;
+    kind: CheatInventoryKind;
+    id: number;
+    amount: number;
+    special: boolean;
+  }> = Object.entries(actor.inventory).flatMap(([key, amount]) => {
+    const [kind, id] = key.split(":").map(Number);
+    if (
+      amount <= 0 ||
+      (kind === 1 && id === TRIANGLE_STONE_ITEM_ID) ||
+      ![1, 2, 3].includes(kind)
+    )
+      return [];
+    return [
+      {
+        key,
+        kind: kind as CheatInventoryKind,
+        id,
+        amount,
+        special: false,
+      },
+    ];
+  });
+  if (stoneCount > 0)
+    ownedInventoryRows.push({
+      key: "stone:19",
+      kind: 1,
+      id: TRIANGLE_STONE_ITEM_ID,
+      amount: stoneCount,
+      special: true,
+    });
   const commitNumber = (valueIndex: number, value: string) =>
     mutate((draft) => setCheatStat(draft.actor, valueIndex, Number(value)));
   return (
@@ -1753,25 +1794,24 @@ export function CheatInner({
             {inventoryTab === "owned" ? (
               <div className="cheat-owned-list">
                 <p className="cheat-capacity">
-                  当前持有 {Object.keys(actor.inventory).length} 种物品。移除已装备的武器或防具时会自动卸下。
+                  当前持有 {ownedInventoryRows.length} 种物品。移除已装备的武器或防具时会自动卸下。
                 </p>
-                {Object.entries(actor.inventory)
-                  .filter(([, amount]) => amount > 0)
-                  .map(([key, amount]) => {
-                    const [kind, id] = key.split(":").map(Number),
-                      table =
-                        kind === 1
-                          ? originalTables.items
-                          : kind === 2
-                            ? originalTables.weapons
-                            : originalTables.armors;
+                {ownedInventoryRows.map(
+                  ({ key, kind, id, amount, special }) => {
+                    const table =
+                      kind === 1
+                        ? originalTables.items
+                        : kind === 2
+                          ? originalTables.weapons
+                          : originalTables.armors;
                     return (
                       <div className="cheat-owned-row" key={key}>
                         <span>
                           <b>{table[id]?.name || key}</b>
                           <small>
-                            {kind === 1 ? "物品" : kind === 2 ? "武器" : "防具"} · ID{" "}
-                            {id}
+                            {special
+                              ? `关键物品 · 六芒星阵进度 ${amount}/${TRIANGLE_STONE_SOURCE_IDS.length}`
+                              : `${kind === 1 ? "物品" : kind === 2 ? "武器" : "防具"} · ID ${id}`}
                           </small>
                         </span>
                         <strong>× {amount}</strong>
@@ -1780,7 +1820,7 @@ export function CheatInner({
                             mutate((draft) =>
                               setCheatInventory(
                                 draft.actor,
-                                kind as CheatInventoryKind,
+                                kind,
                                 id,
                                 0,
                               ),
@@ -1791,8 +1831,9 @@ export function CheatInner({
                         </button>
                       </div>
                     );
-                  })}
-                {!Object.values(actor.inventory).some((amount) => amount > 0) && (
+                  },
+                )}
+                {ownedInventoryRows.length === 0 && (
                   <p className="cheat-empty">当前没有物品。</p>
                 )}
               </div>
@@ -1834,9 +1875,19 @@ export function CheatInner({
                       </small>
                     </header>
                     {group.items.map((entry) => {
-                      const amountKey = `${inventoryKind}:${entry.id}`,
-                        value = amounts[amountKey] ?? 1,
-                        owned = actor.inventory[amountKey] || 0;
+                      const amountKey = `${inventoryKind}:${entry.id}`;
+                      const isTriangleStone =
+                        inventoryKind === 1 &&
+                        entry.id === TRIANGLE_STONE_ITEM_ID;
+                      const owned = isTriangleStone
+                        ? stoneCount
+                        : actor.inventory[amountKey] || 0;
+                      const maximum = isTriangleStone
+                        ? TRIANGLE_STONE_SOURCE_IDS.length
+                        : inventoryKind === 1
+                          ? 255
+                          : 1;
+                      const value = amounts[amountKey] ?? owned;
                       return (
                         <div
                           key={entry.id}
@@ -1858,23 +1909,20 @@ export function CheatInner({
                           <strong className="cheat-owned-count">已有 × {owned}</strong>
                           <div className="cheat-acquire-controls">
                             <label>
-                              <span>数量</span>
+                              <span>持有数量</span>
                               <input
                                 className="cheat-number cheat-amount"
-                                aria-label={`${entry.name}获得数量`}
+                                aria-label={`${entry.name}持有数量`}
                                 type="number"
-                                min={1}
-                                max={inventoryKind === 1 ? 255 : 1}
+                                min={0}
+                                max={maximum}
                                 value={value}
                                 onChange={(event) =>
                                   setAmounts({
                                     ...amounts,
                                     [amountKey]: Math.max(
-                                      1,
-                                      Math.min(
-                                        inventoryKind === 1 ? 255 : 1,
-                                        Number(event.target.value) || 1,
-                                      ),
+                                      0,
+                                      Math.min(maximum, Number(event.target.value) || 0),
                                     ),
                                   })
                                 }
@@ -1884,7 +1932,7 @@ export function CheatInner({
                               className="cheat-obtain"
                               onClick={() =>
                                 mutate((draft) =>
-                                  addCheatInventory(
+                                  setCheatInventory(
                                     draft.actor,
                                     inventoryKind,
                                     entry.id,
@@ -1893,7 +1941,7 @@ export function CheatInner({
                                 )
                               }
                             >
-                              获得
+                              设定
                             </button>
                           </div>
                         </div>

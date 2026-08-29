@@ -62,6 +62,15 @@ test("读档会修复旧版流星飞掷误删的自制武器行囊入口", () =>
   assert.equal(repaired.actor.swords?.[2].times, 2);
 });
 
+test("读档把旧版误写进普通背包的三角石板迁移到六位掌门来源列表", () => {
+  const damaged = fresh();
+  damaged.actor.stoneList = [102, 102, 999];
+  damaged.actor.inventory["1:19"] = 7;
+  const repaired = normalize(damaged);
+  assert.deepEqual(repaired.actor.stoneList, [102, 48, 59, 81, 95, 111]);
+  assert.equal(repaired.actor.inventory["1:19"], undefined);
+});
+
 test("imports reject unknown maps and clamp coordinates on valid maps", () => {
   const invalid = fresh();
   invalid.position.mapId = 9999;

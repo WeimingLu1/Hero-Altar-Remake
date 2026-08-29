@@ -1,3 +1,5 @@
+import { TRIANGLE_STONE_ITEM_ID } from "./triangle-stone";
+
 export type RmxpCommand = { code: number; indent: number; parameters: unknown[] };
 export type EventResult = {
   transfer?: { mapId: number; x: number; y: number; direction: number; fade: number };
@@ -7,12 +9,19 @@ export type EventResult = {
 type SceneCall = { type: number; id?: number; extra?: number };
 
 export const supportedEventCodes = new Set([0, 201, 250, 355, 655]);
-export type EventContext = { inventory:Record<string,number>;tanId:number;freeWork:number;canGetItem?:boolean;canGetCaihua?:boolean };
+export type EventContext = {
+  inventory: Record<string, number>;
+  stoneCount?: number;
+  tanId: number;
+  freeWork: number;
+  canGetItem?: boolean;
+  canGetCaihua?: boolean;
+};
 
 const parseCall=(line:string):SceneCall|undefined=>{const m=line.match(/Scene_Event\.new\(\s*(-?\d+)(?:\s*,\s*(-?\d+))?(?:\s*,\s*(-?\d+))?/);return m?{type:Number(m[1]),id:m[2]===undefined?undefined:Number(m[2]),extra:m[3]===undefined?undefined:Number(m[3])}:undefined;};
 function evaluateCondition(source:string,context:EventContext){
   return source.split(/\s+or\s+/).some(part=>{
-    const item=part.match(/item_number\(\s*(\d+)\s*,\s*(\d+)\s*\)\s*(>|==)\s*(\d+)/);if(item){const count=context.inventory[`${item[1]}:${item[2]}`]||0;return item[3]===">"?count>Number(item[4]):count===Number(item[4]);}
+    const item=part.match(/item_number\(\s*(\d+)\s*,\s*(\d+)\s*\)\s*(>|==)\s*(\d+)/);if(item){const kind=Number(item[1]),id=Number(item[2]),count=kind===1&&id===TRIANGLE_STONE_ITEM_ID&&context.stoneCount!==undefined?context.stoneCount:context.inventory[`${kind}:${id}`]||0;return item[3]===">"?count>Number(item[4]):count===Number(item[4]);}
     const tan=part.match(/tan_id\s*>\s*(\d+)/);if(tan)return context.tanId>Number(tan[1]);
     const work=part.match(/free_work\s*==\s*(\d+)/);if(work)return context.freeWork===Number(work[1]);
     if(part.includes("can_get_item?"))return context.canGetItem!==false;

@@ -134,6 +134,7 @@ import {
   type CheatQuickAction,
 } from "../game-core/cheat-system";
 import { actorStatusProfile } from "../game-core/status-system";
+import { triangleStoneCount } from "../game-core/triangle-stone";
 import { buildNpcSystemPrompt, npcLore } from "../game-core/npc-lore";
 import {
   battleEffectKind,
@@ -583,6 +584,7 @@ export default function OriginalWorld({
       }
       const sceneCall = selectSceneEvent(result.source, {
         inventory: s.actor.inventory,
+        stoneCount: triangleStoneCount(s.actor),
         tanId: s.actor.tanId,
         freeWork: s.tasks.freeWork,
         canGetItem: true,
@@ -682,7 +684,7 @@ export default function OriginalWorld({
           );
           const stoneProgress =
             gate.itemId === 19
-              ? `，当前 ${s.actor.stoneList?.length || 0}/${gate.itemCount ?? 6}`
+              ? `，当前 ${triangleStoneCount(s.actor)}/${gate.itemCount ?? 6}`
               : "";
           setNotice(`需要「${itemName}」才能进入${stoneProgress}`);
         } else setNotice("尚未满足该事件的原版触发条件");
