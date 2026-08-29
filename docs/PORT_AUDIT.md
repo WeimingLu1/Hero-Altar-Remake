@@ -1,6 +1,6 @@
 # RMXP-Hero browser port completion audit
 
-> Updated 2026-08-23 for Sites v86. This audit covers deterministic RMXP parity; the newer
+> Updated 2026-08-29 for Sites v113. This audit covers deterministic RMXP parity; the newer
 > LLM-driven ambient simulation is an additive browser-remake layer and cannot
 > alter the deterministic task, inventory, combat, or save state directly.
 
