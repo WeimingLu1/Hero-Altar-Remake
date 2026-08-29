@@ -11,7 +11,16 @@ import { LOCAL_SAVE_KEY } from "../game-core/save-constants";
 import type { LlmSettings } from "../game-core/lm-studio";
 import type { WorldSave } from "../game-core/save-system";
 import { KEYBOARD_HELP } from "./keybindings";
-import "./world.css";
+// 全部样式在入口静态引入：懒加载 CSS 追加到 <head> 后不会随组件卸载，
+// 曾导致“从游戏返回标题后界面不一致”。顺序即层叠优先级，不得调整。
+import "./ui/tokens.css";
+import "./ui/base.css";
+import "./ui/components.css";
+import "./ui/screen-title.css";
+import "./ui/screen-world.css";
+import "./ui/screen-battle.css";
+import "./ui/screen-menu.css";
+import "./ui/screen-choice.css";
 
 const OriginalWorld = lazy(() => import("./original-world"));
 
@@ -43,6 +52,7 @@ export default function OriginalEntry() {
   const healthController = useRef<AbortController | null>(null);
   const file = useRef<HTMLInputElement>(null);
   const serviceInput = useRef<HTMLInputElement>(null);
+  const titleCard = useRef<HTMLElement>(null);
 
   useEffect(() => {
     const timer = window.setTimeout(() => {
@@ -61,6 +71,11 @@ export default function OriginalEntry() {
       controller?.abort();
     };
   }, []);
+
+  // 标题页出现（含从游戏返回）时把焦点放回标题卡，键盘流不丢失。
+  useEffect(() => {
+    if (!start) titleCard.current?.focus({ preventScroll: true });
+  }, [start]);
 
   const resume = async () => {
     setError("");
@@ -206,8 +221,13 @@ export default function OriginalEntry() {
           initialSave={start.save}
           restoreLocalSave={false}
           exitToTitle={() => {
-            // 从游戏内主菜单返回时刷新存档标记，使“继续游戏”文案与本地存档一致。
+            // 从游戏内主菜单返回时刷新存档标记，使“继续游戏”文案与本地存档一致；
+            // 同时清空上一局的残留状态，保证返回后的标题与首次进入完全一致。
             setHasSave(readStorageItem(LOCAL_SAVE_KEY).ok);
+            setError("");
+            setStorageWarningAccepted(false);
+            setHelp(false);
+            setSettingsOpen(false);
             setStart(null);
           }}
         />
@@ -303,7 +323,7 @@ export default function OriginalEntry() {
   return (
     <main className="launch-screen title-screen">
       <div className="title-mountains" aria-hidden="true" />
-      <section className="title-card">
+      <section className="title-card" ref={titleCard} tabIndex={-1}>
         <h1>英雄坛说</h1>
         <nav aria-label="开始游戏">
           <button onClick={() => void resume()}>

@@ -211,11 +211,7 @@ import {
   buildAutoPlayerPrompt,
   useAmbientRuntime,
 } from "./use-ambient-runtime";
-import "./world.css";
-import "./choice.css";
-import "./battle.css";
-import "./special.css";
-import "./menu.css";
+import { ToastHost, useToasts } from "./ui/toast";
 
 // 原作 $data_system.boss3_choice：道德和尚(197)对白后的「回去/开战」选择。
 const BOSS_EXIT_CHOICES = ["回去", "少废话，这次你会死的很难看的"];
@@ -376,6 +372,30 @@ export default function OriginalWorld({
   // 战斗内调息子菜单：0=吸气 1=疗伤 2=加力；情报面板为布尔开关。
   const [battleInner, setBattleInner] = useState<number | null>(null);
   const [battleInfo, setBattleInfo] = useState(false);
+  // 五个子面板共用同一绝对定位壳，必须互斥渲染：openBattlePanel 是唯一
+  // "打开一个、收起其余"的入口，activeBattlePanel 决定当前渲染哪一个。
+  type BattlePanelKind = "special" | "item" | "skill" | "inner" | "info";
+  const openBattlePanel = useCallback((kind: BattlePanelKind) => {
+    setSpecialMenu(kind === "special" ? 0 : null);
+    setBattleItem(kind === "item" ? 0 : null);
+    setBattleSkill(kind === "skill" ? 0 : null);
+    setBattleInner(kind === "inner" ? 0 : null);
+    setBattleInfo(kind === "info");
+  }, []);
+  const activeBattlePanel: BattlePanelKind | null =
+    battleInfo
+      ? "info"
+      : battleInner !== null
+        ? "inner"
+        : battleItem !== null
+          ? "item"
+          : specialMenu !== null
+            ? "special"
+            : battleSkill !== null
+              ? "skill"
+              : null;
+  // 保存/自动保存/导入等操作走 toast：右侧栏在窄屏会整体隐藏，toast 固定定位始终可见。
+  const { toasts, pushToast, dismissToast } = useToasts();
   // 主菜单：tab 0=行囊 1=状态 2=功夫 3=秘技；sub 为秘技子页签(0-5)。
   const [menu, setMenu] = useState<{
     tab: number;
@@ -495,30 +515,30 @@ export default function OriginalWorld({
       const stored = readJsonStorage(LOCAL_SAVE_KEY);
       if (!stored.ok) {
         if (stored.reason === "invalid")
-          setNotice("本地存档 JSON 已损坏，原数据未删除；请读取备份或开始新游戏。");
+          pushToast("本地存档 JSON 已损坏，原数据未删除；请读取备份或开始新游戏。", "danger", true);
         else if (stored.reason === "unavailable")
-          setNotice("浏览器无法读取本地存档；仍可游玩，请及时导出 JSON 备份。");
+          pushToast("浏览器无法读取本地存档；仍可游玩，请及时导出 JSON 备份。", "warn", true);
         return;
       }
       const parsed = parseSave(stored.value);
       if (!parsed.ok) {
-        setNotice("本地存档格式无效，原数据未删除；请读取备份或开始新游戏。");
+        pushToast("本地存档格式无效，原数据未删除；请读取备份或开始新游戏。", "danger", true);
         return;
       }
       sync(parsed.value);
     }, 0);
     return () => window.clearTimeout(id);
-  }, [restoreLocalSave, sync]);
+  }, [restoreLocalSave, sync, pushToast]);
   const save = useCallback(() => {
     const next = { ...stateRef.current, savedAt: new Date().toISOString() };
     const written = writeJsonStorage(LOCAL_SAVE_KEY, next);
     if (written.ok) {
       sync(next);
-      setNotice("原版世界进度已保存");
+      pushToast("原版世界进度已保存", "success");
     } else {
-      setNotice(`保存失败：${storageFailureNotice(written.reason)}`);
+      pushToast(`保存失败：${storageFailureNotice(written.reason)}`, "danger", true);
     }
-  }, [sync]);
+  }, [sync, pushToast]);
   // 铸剑挑战：未通过则先打四轮墨邪(149)；已通过则打开铸剑界面。
   const startSwordChallenge = useCallback(() => {
     const s = stateRef.current;
@@ -1549,10 +1569,10 @@ export default function OriginalWorld({
       written = writeJsonStorage(LOCAL_SAVE_KEY, persisted);
     sync(written.ok ? persisted : next);
     openOriginalNpcConversation(npcChat.id, result.text);
-    setNotice(written.ok
+    pushToast(written.ok
       ? "奇遇任务完成并已自动保存；完整任务对话已清除，摘要已写入日志。"
-      : `奇遇任务完成，但自动保存失败：${storageFailureNotice(written.reason)}`);
-  }, [npcChat, openOriginalNpcConversation, sync]);
+      : `奇遇任务完成，但自动保存失败：${storageFailureNotice(written.reason)}`, written.ok ? "success" : "danger");
+  }, [npcChat, openOriginalNpcConversation, sync, pushToast]);
   const confirmAbandonGeneratedQuest = useCallback(() => {
     const next = structuredClone(stateRef.current), title = next.tasks.generatedQuest?.title;
     if (!abandonGeneratedQuest(next.tasks)) return;
@@ -1769,7 +1789,11 @@ export default function OriginalWorld({
             const reopenInner = battlePlaybackReopenInner.current;
             battlePlaybackReopenInner.current = null;
             if (reopenInner !== null)
-              window.setTimeout(() => setBattleInner(reopenInner), 0);
+              window.setTimeout(() => {
+                // 调息面板重开前先收起情报：两个壳同坐标，必须互斥。
+                setBattleInfo(false);
+                setBattleInner(reopenInner);
+              }, 0);
             return null;
           }
           const next = { ...active, index: active.index + 1 };
@@ -3151,11 +3175,11 @@ export default function OriginalWorld({
             else if (cancel || k === "m") setBattleSkill(null);
             return;
           }
-          if (k === "q" || k === "c") setSpecialMenu(0);
-          else if (k === "i") setBattleItem(0);
-          else if (k === "m") setBattleSkill(0);
-          else if (k === "o") setBattleInner(0);
-          else if (k === "v") setBattleInfo(true);
+          if (k === "q" || k === "c") openBattlePanel("special");
+          else if (k === "i") openBattlePanel("item");
+          else if (k === "m") openBattlePanel("skill");
+          else if (k === "o") openBattlePanel("inner");
+          else if (k === "v") openBattlePanel("info");
           else if (k === "g") fleeBattle();
           else if (confirm) {
             if (battle.finished) leaveBattle();
@@ -3497,6 +3521,7 @@ export default function OriginalWorld({
     exitToTitle,
     battleInner,
     battleInfo,
+    openBattlePanel,
     fightInnerAction,
     changeBattleForce,
     adjustForcePower,
@@ -3742,10 +3767,11 @@ export default function OriginalWorld({
     sync(parsed.value);
     const written = writeJsonStorage(LOCAL_SAVE_KEY, parsed.value);
     setScreen("play");
-    setNotice(
+    pushToast(
       written.ok
         ? "JSON 读取成功"
         : `JSON 已载入，但本地保存失败：${storageFailureNotice(written.reason)}`,
+      written.ok ? "success" : "danger",
     );
   };
   const map = getOriginalMap(state.position.mapId),
@@ -3895,6 +3921,7 @@ export default function OriginalWorld({
   }
   return (
     <main className="world-shell">
+      <ToastHost toasts={toasts} onDismiss={dismissToast} />
       <header>
         <strong>英雄坛说</strong>
         <div className="header-actions">
@@ -4217,24 +4244,24 @@ export default function OriginalWorld({
             maxHp={state.actor.maxHp}
             fight={fight}
             leave={leaveBattle}
-            openSpecial={() => setSpecialMenu(0)}
-            openItem={() => setBattleItem(0)}
-            openSkill={() => setBattleSkill(0)}
-            openInner={() => setBattleInner(0)}
-            openInfo={() => setBattleInfo(true)}
+            openSpecial={() => openBattlePanel("special")}
+            openItem={() => openBattlePanel("item")}
+            openSkill={() => openBattlePanel("skill")}
+            openInner={() => openBattlePanel("inner")}
+            openInfo={() => openBattlePanel("info")}
             flee={fleeBattle}
           />
         )}{" "}
-        {battle && battleInner !== null && (
+        {battle && activeBattlePanel === "inner" && (
           <BattleInnerPicker
             actor={state.actor}
-            index={battleInner}
+            index={battleInner ?? 0}
             onHover={setBattleInner}
             activate={fightInnerAction}
             changeForce={changeBattleForce}
           />
         )}{" "}
-        {battle && battleInfo && (
+        {battle && activeBattlePanel === "info" && (
           <BattleInfoPanel
             battle={battle}
             presentation={
@@ -4251,26 +4278,26 @@ export default function OriginalWorld({
             choose={(index) => settleBattle(index === 1)}
           />
         )}{" "}
-        {battle && battleItem !== null && (
+        {battle && activeBattlePanel === "item" && (
           <BattleBagPicker
             actor={state.actor}
-            index={battleItem}
+            index={battleItem ?? 0}
             onHover={setBattleItem}
             activate={openBattleBagEntry}
           />
         )}{" "}
-        {battle && specialMenu !== null && (
+        {battle && activeBattlePanel === "special" && (
           <SpecialPicker
             actor={state.actor}
             battle={battle}
-            index={specialMenu}
+            index={specialMenu ?? 0}
             choose={fightSpecial}
           />
         )}{" "}
-        {battle && battleSkill !== null && (
+        {battle && activeBattlePanel === "skill" && (
           <BattleSkillPicker
             actor={state.actor}
-            index={battleSkill}
+            index={battleSkill ?? 0}
             onHover={setBattleSkill}
             activate={activateSkill}
           />

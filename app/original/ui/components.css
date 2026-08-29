@@ -1,0 +1,83 @@
+/*
+ * 通用组件原语。目前只有 Toast 通知条；后续共用原语放这里。
+ * backdrop-filter 预算：Toast 是全站允许的 3 处之一。
+ */
+
+/* Toast 通知条：固定定位、窄屏可见。 */
+.wx-toast-stack {
+  position: fixed;
+  right: 18px;
+  bottom: 52px;
+  z-index: 40;
+  display: grid;
+  gap: 8px;
+  justify-items: end;
+  max-width: min(420px, calc(100vw - 36px));
+}
+
+.wx-toast {
+  display: flex;
+  align-items: baseline;
+  gap: 12px;
+  padding: 11px 16px;
+  border: 1px solid var(--wx-gold);
+  border-left-width: 3px;
+  background: linear-gradient(120deg, rgba(9, 16, 15, 0.94), rgba(6, 11, 11, 0.9));
+  backdrop-filter: blur(10px) saturate(0.9);
+  box-shadow: var(--wx-elev-3);
+  color: #eadfb8;
+  font-size: var(--wx-fs-md);
+  line-height: 1.55;
+  text-shadow: 0 1px 3px rgba(0, 0, 0, 0.8);
+  animation: wx-toast-in var(--wx-dur-slow) var(--wx-ease-out) both;
+}
+
+@keyframes wx-toast-in {
+  from {
+    opacity: 0;
+    transform: translateY(10px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+.wx-toast.success {
+  border-color: var(--wx-jade);
+  color: #d3e7da;
+}
+
+.wx-toast.warn {
+  border-color: var(--wx-ember);
+  color: #f3ddb0;
+}
+
+.wx-toast.danger {
+  border-color: var(--wx-red);
+  color: #f0c3b8;
+}
+
+.wx-toast button {
+  padding: 0 2px;
+  border: 0;
+  background: transparent;
+  color: inherit;
+  font-size: var(--wx-fs-xl);
+  line-height: 1;
+  opacity: 0.6;
+  transition: opacity var(--wx-dur-fast) var(--wx-ease-out);
+}
+
+.wx-toast button:hover {
+  opacity: 1;
+}
+
+@media (max-width: 820px) {
+  .wx-toast-stack {
+    right: 12px;
+    left: 12px;
+    bottom: 52px;
+    justify-items: stretch;
+  }
+}

@@ -50,6 +50,15 @@
       "columns": 4,
       "rows": 4,
       "purpose": "two small, integer-aligned atlases with one complete prop and verified transparent padding in every cell"
+    },
+    "interfaceBackgrounds": {
+      "src": [
+        "/game-assets/generated/wuxia-ui-title-mountains-v2.webp",
+        "/game-assets/generated/wuxia-ui-archive-v2.webp",
+        "/game-assets/generated/wuxia-ui-battle-courtyard-v2.webp"
+      ],
+      "layouts": ["16:9", "16:9", "16:9"],
+      "purpose": "original title mountains, archive menu, and rain-soaked courtyard battle plates drawn for the cinematic wuxia interface"
     }
   }
 }

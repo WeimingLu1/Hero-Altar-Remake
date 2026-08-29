@@ -48,6 +48,12 @@ OpenAI Image Generation and then prepared locally for use as sprite atlases:
   equipment treatment; the final grid leaves its ten unused cells empty.
 - `public/game-assets/generated/wuxia-indoor-furniture-v1.webp`: 8 × 8 modular
   ancient Chinese furniture and interior-prop atlas.
+- `public/game-assets/generated/wuxia-ui-title-mountains-v2.webp`,
+  `wuxia-ui-archive-v2.webp`, and `wuxia-ui-battle-courtyard-v2.webp`: three
+  original 16:9 cinematic interface plates depicting a misty mountain gate,
+  a night archive pavilion, and a rain-soaked temple courtyard. They are used
+  behind the title, character-preparation, and battle interfaces respectively;
+  all typography, focus states, and interaction controls remain live HTML/CSS.
 - `public/game-assets/redrawn/overlay-nature-v3.webp` and
   `public/game-assets/redrawn/overlay-interior-v3.webp`: two 4 × 4 transparent
   prop atlases. Each cell contains one complete object with verified transparent

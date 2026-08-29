@@ -27,22 +27,23 @@ const ambientRuntimeSource = readFileSync(
   "utf8",
 );
 const source = `${worldSource}\n${rendererSource}\n${uiSource}\n${ambientRuntimeSource}`;
-const worldCss = readFileSync(
-  new URL("../app/original/world.css", import.meta.url),
-  "utf8",
-);
-const battleCss = readFileSync(
-  new URL("../app/original/battle.css", import.meta.url),
-  "utf8",
-);
-const specialCss = readFileSync(
-  new URL("../app/original/special.css", import.meta.url),
-  "utf8",
-);
-const menuCss = readFileSync(
-  new URL("../app/original/menu.css", import.meta.url),
-  "utf8",
-);
+const uiCssDir = "../app/original/ui/";
+const css = (name: string) =>
+  readFileSync(new URL(`${uiCssDir}${name}`, import.meta.url), "utf8");
+const allCss = [
+  "tokens.css",
+  "base.css",
+  "components.css",
+  "screen-title.css",
+  "screen-world.css",
+  "screen-battle.css",
+  "screen-menu.css",
+  "screen-choice.css",
+].map(css).join("\n");
+const worldCss = css("screen-world.css");
+const battleCss = css("screen-battle.css");
+const specialCss = css("screen-battle.css");
+const menuCss = css("screen-menu.css");
 const ambientSource = readFileSync(
   new URL("../app/game-core/ambient-npc.ts", import.meta.url),
   "utf8",
@@ -417,7 +418,7 @@ test("历史台词不会复活，玩家气泡参与统一避让并保持最高�
 });
 
 test("战报生成期间仍可打开战斗药品且中止战报不会永久锁定", () => {
-  assert.match(source, /if \(k === "i"\) setBattleItem\(0\)/);
+  assert.match(source, /else if \(k === "i"\) openBattlePanel\("item"\)/);
   assert.match(source, /if \(controller\.signal\.aborted\)[\s\S]*battleNarrationAbort\.current[\s\S]*loading: false/);
   assert.match(source, /text: item\.text \|\| buildBattleNarrationFallback\(event\),\s*loading: false/);
   assert.match(source, /openItem} disabled=\{Boolean\(battle\.finished\)\}/);
@@ -700,8 +701,8 @@ test("战斗界面提供完整行囊与临阵武学切换入口", () => {
   assert.match(uiSource, /情报 <kbd>V<\/kbd>/);
   assert.match(uiSource, /export function BattleInnerPicker/);
   assert.match(uiSource, /export function BattleInfoPanel/);
-  assert.match(worldSource, /setBattleInner\(0\)/);
-  assert.match(worldSource, /setBattleInfo\(true\)/);
+  assert.match(worldSource, /openBattlePanel\("inner"\)/);
+  assert.match(worldSource, /openBattlePanel\("info"\)/);
   // 生死战胜利处置：手下留情为默认第一项，杀死为第二项。
   assert.match(worldSource, /title="如何处置对手？"/);
   assert.match(worldSource, /items=\{\["手下留情", "杀死"\]\}/);
@@ -781,4 +782,58 @@ test("任务簿当前奇遇卡片按阶段徽章/目标/奖励分区展示且对
   assert.match(worldCss, /\.task-journal-generated\s*\{[\s\S]*flex-direction:\s*column/);
   assert.match(worldCss, /\.task-transcript\s*\{[\s\S]*overflow:\s*auto/);
   assert.match(worldCss, /\.task-quest-stage\s*\{/);
+});
+
+const entrySource = readFileSync(
+  new URL("../app/original/original-entry.tsx", import.meta.url),
+  "utf8",
+);
+
+function selectorCount(pattern: RegExp, cssText: string) {
+  return (cssText.match(pattern) ?? []).length;
+}
+
+test("界面样式统一在入口静态引入且受保护选择器全局唯一定义", () => {
+  // 回归锁：懒加载 CSS 追加 <head> 后不卸载，曾导致从游戏返回标题后样式被覆盖。
+  assert.doesNotMatch(worldSource, /import "\.\/[\w-]+\.css"/);
+  for (const name of [
+    "tokens.css",
+    "base.css",
+    "components.css",
+    "screen-title.css",
+    "screen-world.css",
+    "screen-battle.css",
+    "screen-menu.css",
+    "screen-choice.css",
+  ])
+    assert.match(entrySource, new RegExp(`import "\\./ui/${name.replace(".", "\\.")}"`));
+  // 标题卡与标题字号只允许定义一次（Bug #1：两份不同数值的标题规则曾互相覆盖）。
+  assert.equal(selectorCount(/^\.title-screen \.title-card \{/gm, allCss), 1);
+  assert.equal(selectorCount(/^\.title-screen \.title-card h1 \{/gm, allCss), 1);
+});
+
+test("战斗子面板通过 openBattlePanel 互斥打开且只渲染一个", () => {
+  // Bug #2：五个子面板共用同一绝对定位壳，独立布尔曾允许两套列表叠加渲染。
+  assert.match(worldSource, /const openBattlePanel = useCallback/);
+  assert.match(worldSource, /const activeBattlePanel: BattlePanelKind \| null/);
+  for (const kind of ["special", "item", "skill", "inner", "info"])
+    assert.match(worldSource, new RegExp(`openBattlePanel\\("${kind}"\\)`));
+  assert.doesNotMatch(worldSource, /battle && battleInner !== null && \(/);
+  assert.doesNotMatch(worldSource, /battle && battleInfo && \(/);
+  assert.doesNotMatch(worldSource, /battle && battleItem !== null && \(/);
+  assert.doesNotMatch(worldSource, /battle && specialMenu !== null && \(/);
+  assert.doesNotMatch(worldSource, /battle && battleSkill !== null && \(/);
+});
+
+test("保存与自动保存反馈走 toast，窄屏也可见", () => {
+  // Bug #3：保存提示曾只出现在窄屏会隐藏的右侧栏。
+  const toastSource = readFileSync(
+    new URL("../app/original/ui/toast.tsx", import.meta.url),
+    "utf8",
+  );
+  assert.match(worldSource, /<ToastHost toasts=\{toasts\} onDismiss=\{dismissToast\} \/>/);
+  assert.match(worldSource, /pushToast\("原版世界进度已保存", "success"\)/);
+  assert.match(toastSource, /aria-live=\{urgent \? "assertive" : "polite"\}/);
+  assert.match(toastSource, /info: 3200/);
+  assert.doesNotMatch(worldSource, /setNotice\("原版世界进度已保存"\)/);
 });

@@ -126,6 +126,96 @@ test("JSON 存档可导入并进入完整世界", async ({ page }) => {
   ).toBe(true);
 });
 
+test("满行囊与全武学菜单保持纵向导航并且内容不被裁切", async ({ page }) => {
+  const inventory = Object.fromEntries([
+    ...Array.from({ length: 33 }, (_, index) => [`1:${index + 1}`, 3]),
+    ...Array.from({ length: 32 }, (_, index) => [`2:${index + 1}`, 1]),
+    ...Array.from({ length: 34 }, (_, index) => [`3:${index + 1}`, 1]),
+  ]);
+  const skills = Object.fromEntries(
+    Array.from({ length: 60 }, (_, index) => [
+      String(index + 1),
+      { level: 255, points: 1200 },
+    ]),
+  );
+
+  await page.goto("/");
+  await page.locator('input[type="file"]').setInputFiles({
+    name: "full-menu-save.json",
+    mimeType: "application/json",
+    buffer: Buffer.from(JSON.stringify({
+      format: "rmxp-hero-original-world-save",
+      version: 4,
+      savedAt: "",
+      position: { mapId: 1, x: 9, y: 7, direction: 2 },
+      actor: {
+        inventory,
+        skills,
+        skillUse: [0, 0, 0, 1, 10, 0, 0],
+      },
+      tasks: {},
+      flags: {},
+      variables: {},
+    })),
+  });
+  await expect(page.getByRole("img", { name: /地图，主角位于/ })).toBeVisible();
+  await page.keyboard.press("c");
+
+  const menu = page.getByRole("dialog", { name: "主菜单" });
+  await expect(menu).toBeVisible();
+  const menuStructure = await menu.evaluate((element) => {
+    const nav = element.querySelector<HTMLElement>(":scope > nav")!,
+      content = element.querySelector<HTMLElement>(":scope > section")!,
+      navRect = nav.getBoundingClientRect(),
+      contentRect = content.getBoundingClientRect();
+    return {
+      navRight: navRect.right,
+      contentLeft: contentRect.left,
+      navHeight: navRect.height,
+      contentHeight: contentRect.height,
+      contentOverflowY: getComputedStyle(content).overflowY,
+    };
+  });
+  expect(menuStructure.navRight).toBeLessThanOrEqual(menuStructure.contentLeft + 1);
+  expect(Math.abs(menuStructure.navHeight - menuStructure.contentHeight)).toBeLessThan(40);
+  expect(menuStructure.contentOverflowY).toBe("auto");
+
+  const bagRows = menu.locator(".bag-row");
+  await expect(bagRows.first()).toBeVisible();
+  expect(await bagRows.count()).toBeGreaterThan(60);
+  const bagClipping = await bagRows.evaluateAll((rows) =>
+    rows.map((row) => {
+      const element = row as HTMLElement;
+      return {
+        clientHeight: element.clientHeight,
+        scrollHeight: element.scrollHeight,
+        overflow: getComputedStyle(element).overflow,
+      };
+    }),
+  );
+  expect(bagClipping.every((row) =>
+    row.scrollHeight <= row.clientHeight + 1 && row.overflow === "visible",
+  )).toBe(true);
+
+  await menu.locator(":scope > nav button").nth(2).click();
+  const skillRows = menu.locator(".kungfu-list button");
+  await expect(skillRows.first()).toBeVisible();
+  expect(await skillRows.count()).toBeGreaterThanOrEqual(55);
+  const skillClipping = await skillRows.evaluateAll((rows) =>
+    rows.slice(0, 12).map((row) => {
+      const element = row as HTMLElement;
+      return {
+        clientHeight: element.clientHeight,
+        scrollHeight: element.scrollHeight,
+        overflow: getComputedStyle(element).overflow,
+      };
+    }),
+  );
+  expect(skillClipping.every((row) =>
+    row.scrollHeight <= row.clientHeight + 1 && row.overflow === "visible",
+  )).toBe(true);
+});
+
 test("战斗中可打开完整行囊并临阵切换攻防武学", async ({ page }) => {
   await page.goto("/");
   await page.locator('input[type="file"]').setInputFiles({
@@ -186,6 +276,16 @@ test("战斗中可打开完整行囊并临阵切换攻防武学", async ({ page 
   expect(specialMetrics.overflow).toBe("hidden");
   expect(specialMetrics.listOverflowY).toBe("auto");
   expect(specialMetrics.listScrollHeight).toBeGreaterThan(specialMetrics.listClientHeight);
+  // 绝招卡片必须按自然高度排列：任两张卡片矩形不得相交（回归锁：
+  // 网格 stretch 会把行高压到 min-height，内容溢出叠到下一行）。
+  const overlapping = await specialList.evaluate((element) => {
+    const cards = [...element.querySelectorAll<HTMLElement>("button")]
+      .map((button) => button.getBoundingClientRect());
+    return cards.filter((a, i) => cards.some((b, j) =>
+      j > i && a.left < b.right && b.left < a.right && a.top < b.bottom && b.top < a.bottom,
+    )).length;
+  });
+  expect(overlapping).toBe(0);
   await page.keyboard.press("w");
   await expect.poll(() => specialList.evaluate((element) => element.scrollTop)).toBeGreaterThan(0);
   await page.keyboard.press("x");
@@ -331,4 +431,113 @@ test("NPC 菜单只保留统一交谈，并支持双立绘与自由发展", asyn
   }
   await expect(dialogue.locator(".npc-talk-offer")).toBeVisible();
   await expect(dialogue).toContainText("是否接受");
+});
+
+test("保存反馈以 toast 呈现并在窄视口可见且自动消失", async ({ page }) => {
+  await page.setViewportSize({ width: 420, height: 820 });
+  await page.goto("/");
+  await page.locator('input[type="file"]').setInputFiles({
+    name: "toast-save.json",
+    mimeType: "application/json",
+    buffer: Buffer.from(JSON.stringify({
+      format: "rmxp-hero-original-world-save",
+      version: 4,
+      savedAt: "",
+      position: { mapId: 1, x: 9, y: 7, direction: 2 },
+      actor: {},
+      tasks: {},
+      flags: {},
+      variables: {},
+    })),
+  });
+  await expect(page.getByRole("img", { name: /地图，主角位于/ })).toBeVisible();
+  await page.getByRole("button", { name: "保存", exact: true }).click();
+  const toast = page.getByText("原版世界进度已保存");
+  await expect(toast).toBeVisible();
+  const box = await toast.boundingBox();
+  expect(box).not.toBeNull();
+  expect(box!.y).toBeGreaterThanOrEqual(0);
+  expect(box!.y + box!.height).toBeLessThanOrEqual(820);
+  await expect(toast).toBeHidden({ timeout: 6000 });
+});
+
+test("战斗子面板互斥：底层命令栏点击只切换不叠加", async ({ page }) => {
+  await page.goto("/");
+  await page.locator('input[type="file"]').setInputFiles({
+    name: "exclusive-save.json",
+    mimeType: "application/json",
+    buffer: Buffer.from(JSON.stringify({
+      format: "rmxp-hero-original-world-save",
+      version: 4,
+      savedAt: "",
+      position: { mapId: 3, x: 9, y: 10, direction: 8 },
+      actor: { hp: 2000, maxHp: 2000, fp: 2000, maxFp: 2000, mp: 2000, maxMp: 2000 },
+      tasks: {},
+      flags: {},
+      variables: {},
+    })),
+  });
+  await expect(page.getByRole("img", { name: /地图，主角位于/ })).toBeVisible();
+  await page.keyboard.press("E");
+  const battle = page.getByRole("dialog", { name: /与道德和尚战斗/ });
+  await page.getByRole("dialog", { name: "道德和尚" })
+    .getByRole("button", { name: "战斗" }).click();
+  await expect(battle.getByRole("button", { name: /绝招 Q/ })).toBeVisible();
+
+  await page.keyboard.press("q");
+  await expect(page.getByRole("dialog", { name: "选择绝招" })).toBeVisible();
+  // 面板打开时命令栏被面板盖住：直接派发底层按钮 click，应切换面板而不是再叠一层。
+  await battle.getByRole("button", { name: /情报 V/ }).evaluate((element) => {
+    (element as HTMLButtonElement).click();
+  });
+  await expect(page.getByRole("dialog", { name: /道德和尚情报/ })).toBeVisible();
+  expect(await page.locator(".special-picker").count()).toBe(1);
+  expect(await page.locator(".special-picker:visible").count()).toBe(1);
+
+  await page.keyboard.press("Escape");
+  await page.keyboard.press("i");
+  await expect(page.getByRole("dialog", { name: "战斗行囊" })).toBeVisible();
+  expect(await page.locator(".special-picker").count()).toBe(1);
+});
+
+test("从游戏返回标题后的布局与首次进入一致", async ({ page }) => {
+  await page.goto("/");
+  const before = await page.locator(".title-card").evaluate((card) => {
+    const h1 = card.querySelector("h1")!;
+    const cardStyle = getComputedStyle(card);
+    const h1Style = getComputedStyle(h1);
+    return {
+      width: cardStyle.width,
+      font: h1Style.fontSize,
+      spacing: h1Style.letterSpacing,
+    };
+  });
+  await page.locator('input[type="file"]').setInputFiles({
+    name: "exit-title-save.json",
+    mimeType: "application/json",
+    buffer: Buffer.from(JSON.stringify({
+      format: "rmxp-hero-original-world-save",
+      version: 4,
+      savedAt: "",
+      position: { mapId: 1, x: 9, y: 7, direction: 2 },
+      actor: {},
+      tasks: {},
+      flags: {},
+      variables: {},
+    })),
+  });
+  await expect(page.getByRole("img", { name: /地图，主角位于/ })).toBeVisible();
+  await page.getByRole("button", { name: "主菜单", exact: true }).click();
+  await expect(page.getByRole("button", { name: /继续游戏|开始游戏/ })).toBeVisible();
+  const after = await page.locator(".title-card").evaluate((card) => {
+    const h1 = card.querySelector("h1")!;
+    const cardStyle = getComputedStyle(card);
+    const h1Style = getComputedStyle(h1);
+    return {
+      width: cardStyle.width,
+      font: h1Style.fontSize,
+      spacing: h1Style.letterSpacing,
+    };
+  });
+  expect(after).toEqual(before);
 });

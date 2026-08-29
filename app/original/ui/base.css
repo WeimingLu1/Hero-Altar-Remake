@@ -1,0 +1,16 @@
+/*
+ * 共享排版基元：全部界面共用字体栈。
+ * 层叠顺序：tokens → base → components → 各屏（顺序即优先级）。
+ */
+
+.launch-screen,
+.world-shell {
+  font-family: var(--wx-font-serif);
+}
+
+.launch-screen button,
+.world-shell button,
+.world-shell input,
+.world-shell select {
+  font-family: var(--wx-font-ui);
+}

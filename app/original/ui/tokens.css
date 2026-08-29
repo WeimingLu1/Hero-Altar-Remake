@@ -1,0 +1,91 @@
+/*
+ * 设计 token：3A 暗黑史诗方向。
+ * 词汇表：ink=墨底 surface=面板底 paper=正文 gold=鎏金 elev=海拔阴影
+ *         rim=受光上缘 vignette=暗角 haze=光斑 glow=辉光
+ * 约束：backdrop-filter 全站只允许 3 处（战斗信息条、面板标题条、Toast）。
+ * 可展开的行囊与武学内容必须保持自然高度，不允许用固定行高或 hidden 裁切。
+ * 旧名 --wx-ink/--wx-gold 等保留为别名，既有规则直接可用。
+ */
+
+:root {
+  /* 墨底：5 级中性面，从虚空到抬升面板 */
+  --wx-void: #04070a;
+  --wx-ink: #070b0b;
+  --wx-ink-soft: #101817;
+  --wx-surface-1: rgba(10, 17, 17, 0.86);
+  --wx-surface-2: rgba(14, 23, 22, 0.9);
+  --wx-surface-3: rgba(19, 30, 28, 0.94);
+  --wx-panel: var(--wx-surface-1);
+  --wx-panel-strong: rgba(7, 12, 12, 0.97);
+
+  /* 正文与语义色 */
+  --wx-paper: #e8dfc7;
+  --wx-paper-muted: #9ca49a;
+  --wx-paper-faint: #6d7771;
+  --wx-gold: #c6a760;
+  --wx-gold-bright: #f0d58b;
+  --wx-gold-deep: #8a6d33;
+  --wx-jade: #71ad9e;
+  --wx-cyan: #77b9ca;
+  --wx-red: #bd6653;
+  --wx-ember: #d98e4a;
+  --wx-blood: #a4432f;
+  --wx-spirit: #8fd0c0;
+
+  /* 线与光 */
+  --wx-line: rgba(211, 185, 116, 0.22);
+  --wx-line-strong: rgba(232, 204, 132, 0.52);
+  --wx-rim: inset 0 1px 0 rgba(240, 213, 139, 0.14);
+  --wx-glow-gold: 0 0 18px rgba(240, 213, 139, 0.28);
+  --wx-vignette: radial-gradient(
+    ellipse at 50% 42%,
+    transparent 52%,
+    rgba(1, 3, 4, 0.55) 100%
+  );
+  --wx-haze-warm: radial-gradient(
+    ellipse 60% 44% at 12% 4%,
+    rgba(214, 168, 92, 0.13),
+    transparent 70%
+  );
+  --wx-haze-cold: radial-gradient(
+    ellipse 52% 40% at 88% 0%,
+    rgba(120, 164, 178, 0.1),
+    transparent 70%
+  );
+  --wx-grain: repeating-linear-gradient(
+    115deg,
+    rgba(255, 255, 255, 0.008) 0 1px,
+    transparent 1px 3px
+  );
+
+  /* 海拔：4 级阴影栈 + 模态遮罩 */
+  --wx-elev-1: 0 4px 14px rgba(0, 0, 0, 0.4);
+  --wx-elev-2: 0 12px 34px rgba(0, 0, 0, 0.55), var(--wx-rim);
+  --wx-elev-3: 0 26px 70px rgba(0, 0, 0, 0.75), 0 0 0 1px var(--wx-line),
+    var(--wx-rim);
+  --wx-elev-overlay: 0 34px 90px rgba(0, 0, 0, 0.85), var(--wx-rim);
+
+  /* 动效 */
+  --wx-dur-fast: 120ms;
+  --wx-dur: 220ms;
+  --wx-dur-slow: 420ms;
+  --wx-dur-scene: 700ms;
+  --wx-ease-out: cubic-bezier(0.22, 1, 0.36, 1);
+  --wx-ease-in-out: cubic-bezier(0.65, 0, 0.35, 1);
+  --wx-ease-glide: cubic-bezier(0.16, 0.84, 0.28, 0.99);
+
+  /* 字号阶梯（8 档） */
+  --wx-fs-xs: 9px;
+  --wx-fs-sm: 10px;
+  --wx-fs-md: 12px;
+  --wx-fs-lg: 14px;
+  --wx-fs-xl: 16px;
+  --wx-fs-2xl: 20px;
+  --wx-fs-3xl: 28px;
+  --wx-fs-display: clamp(52px, 6vw, 82px);
+
+  --wx-font-display: "FZKai-Z03", "Kaiti SC", "STKaiti", "KaiTi", serif;
+  --wx-font-serif: "Songti SC", "STSong", "Noto Serif SC", serif;
+  --wx-font-ui: "PingFang SC", "Microsoft YaHei", "Noto Sans SC", sans-serif;
+  --wx-font-data: "SFMono-Regular", "Cascadia Mono", "Roboto Mono", monospace;
+}

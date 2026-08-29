@@ -1,3 +1,8 @@
+/*
+ * 战斗屏：战斗舞台与五个互斥子面板（绝招/行囊/武学/调息/情报）。
+ * effect-* 动画是引擎识别的表现层，不得改动名称与关键帧。
+ */
+
 .battle{position:absolute;inset:18px;z-index:8;display:grid;grid-template-rows:178px auto 1fr auto;padding:18px;border:2px solid #bea866;background:linear-gradient(#15231ddd,#09100ded),repeating-linear-gradient(90deg,#fff1 0 1px,transparent 1px 4px);box-shadow:0 16px 60px #000;color:#eadfb8;font-family:var(--font-serif,serif)}
 .battle-stage{display:flex;align-items:flex-start;justify-content:space-around;border-bottom:1px solid #8f7d4b}
 .battle-stage>b{font-size:12px;letter-spacing:.12em;color:#b6a77e}
@@ -73,180 +78,537 @@
 @media(prefers-reduced-motion:reduce){.battle-stage::before,.battle-arena i,.fighter,.battle-fx i,.battle-live-fact,.battle-popup{animation:none}.battle-resource>i u,.battle-resource>i b,.battle-resource>i s{transition:none}}
 @media(max-width:700px){.battle{grid-template-rows:152px auto 1fr auto}.fighter .battle-portrait{width:108px;height:108px}.battle-stage>b{max-width:130px;font-size:9px}.battle-live-fact{width:62%;padding:4px 8px}.battle-live-fact strong{font-size:9px}.battle-popup{top:30px;font-size:21px}.battle-log article small{font-size:12px}.battle-narrative-copy p{font-size:16px;line-height:1.75}}
 
-/* 电影化战斗 HUD：舞台、资源、战况与命令区形成清晰的四层阅读顺序。 */
+
+.special-picker {
+  position: absolute;
+  /* 高于 .battle 的 z-index:8：面板打开时底层命令栏即使被点击也不会再叠一层。 */
+  z-index: 14;
+  inset: clamp(18px, 4vh, 54px) clamp(18px, 5vw, 70px);
+  display: grid;
+  grid-template-rows: auto minmax(0, 1fr) auto;
+  min-width: 0;
+  min-height: 0;
+  gap: 10px;
+  padding: 16px;
+  overflow: hidden;
+  border: 2px solid #c2a65e;
+  background: linear-gradient(180deg, #101a16fa, #08100dfa), #0a110f;
+  /* 9999px 扩散阴影即全屏遮罩：面板互斥的渲染层兜底。 */
+  box-shadow: 0 0 0 9999px rgba(2, 6, 6, 0.58), 0 18px 60px #000d,
+    inset 0 0 0 1px #f5d67b22;
+  color: #eadfb8;
+}
+
+.special-picker-title {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 7px 10px 12px;
+  border-bottom: 1px solid #7d7049;
+}
+
+.special-picker-title b {
+  font-size: 16px;
+  letter-spacing: .08em;
+}
+
+.special-picker-title small {
+  color: #a89c7b;
+  font: 10px monospace;
+  white-space: nowrap;
+}
+
+/* 与武学/行囊面板同构的方块卡片：按所属武学类目分组，两列网格。
+   出处、效果与消耗直接写在卡片内，点击卡片即施展该绝招。 */
+.special-picker-list {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  align-content: start;
+  gap: 6px;
+  min-width: 0;
+  min-height: 0;
+  padding: 6px 8px;
+  overflow-x: hidden;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  scrollbar-gutter: stable;
+  scrollbar-color: #9c8248 #101713;
+  scrollbar-width: thin;
+}
+
+.special-picker-list::-webkit-scrollbar { width: 8px; }
+.special-picker-list::-webkit-scrollbar-track { background: #101713; }
+.special-picker-list::-webkit-scrollbar-thumb {
+  border: 2px solid #101713;
+  border-radius: 10px;
+  background: #9c8248;
+}
+
+.special-picker-list button {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 5px 12px;
+  width: 100%;
+  min-width: 0;
+  padding: 9px;
+  margin: 0;
+  text-align: left;
+  border: 1px solid #ffffff10;
+  background: #ffffff05;
+  color: #ddd3b5;
+  transition: border-color 120ms ease, background 120ms ease;
+}
+
+.special-picker-list button.active {
+  border-color: #b39b58;
+  background: #82663338;
+  box-shadow: inset 3px 0 #f2d477;
+}
+
+.special-picker-list button:disabled { opacity: .5; }
+.special-picker-list button:disabled.active { opacity: .7; }
+
+.special-picker-list button > b {
+  display: grid;
+  gap: 3px;
+  min-width: 0;
+}
+.special-picker-list button > b small {
+  overflow: hidden;
+  color: #c7a858;
+  font: 8px monospace;
+  letter-spacing: .12em;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.special-picker-list button > b span {
+  color: #e9dfbd;
+  font-size: 13px;
+}
+.special-picker-list button > em {
+  max-width: 170px;
+  color: #bdad7b;
+  font-size: 9px;
+  line-height: 1.4;
+  text-align: right;
+}
+
+.special-card-desc,
+.special-card-damage,
+.special-card-effect {
+  grid-column: 1/-1;
+  font-style: normal;
+  font-size: 10px;
+  line-height: 1.55;
+}
+.special-card-desc { color: #918b79; }
+/* 伤害数值突出显示，与物品菜单的金色槽位强调一致。 */
+.special-card-damage {
+  color: #e0bf65;
+  font: 700 10px/1.5 "PingFang SC", "Microsoft YaHei", sans-serif;
+}
+.special-card-effect {
+  margin-top: 1px;
+  padding-top: 6px;
+  border-top: 1px dashed #ffffff14;
+  color: #7fa489;
+}
+.special-picker-list button.active .special-card-effect { color: #8fb39a; }
+
+.special-picker-empty {
+  align-self: center;
+  justify-self: center;
+  color: #aaa087;
+}
+
+/* 战斗内调息子菜单：吸气/疗伤/加力，复用特殊面板外壳。 */
+.battle-inner-list {
+  display: grid;
+  align-content: start;
+  gap: 6px;
+  min-height: 0;
+  overflow-y: auto;
+  padding: 4px 2px;
+}
+.battle-inner-row {
+  border: 1px solid transparent;
+  background: transparent;
+}
+.battle-inner-row.active {
+  border-color: #b39b58;
+  background: #82663338;
+}
+.battle-inner-row > button {
+  display: grid;
+  grid-template-columns: 56px minmax(0, 1fr);
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  padding: 10px 12px;
+  text-align: left;
+  border: 0;
+  background: transparent;
+  color: #e9dfbd;
+}
+.battle-inner-row > button b { font-size: 13px; }
+.battle-inner-row > button small { color: #a89e86; font-size: 10px; line-height: 1.5; }
+.battle-force-row {
+  display: grid;
+  grid-template-columns: auto auto auto minmax(0, 1fr);
+  align-items: center;
+  gap: 10px;
+  padding: 10px 12px;
+}
+.battle-force-row button {
+  width: 30px;
+  height: 30px;
+  padding: 0;
+  border: 1px solid #9b8957;
+  background: #201f18;
+  color: #f0dfae;
+  font-size: 15px;
+}
+.battle-force-row b {
+  min-width: 46px;
+  text-align: center;
+  color: #e0bf65;
+  font: 700 16px monospace;
+}
+.battle-force-row span { color: #a89e86; font-size: 10px; }
+
+/* 对手情报面板：全部参数网格 + 武功表。 */
+.battle-info-body {
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  overflow-y: auto;
+  padding: 4px 2px;
+}
+.battle-info-stats {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 6px 14px;
+  margin: 0;
+}
+.battle-info-stats span {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 5px 8px;
+  border-bottom: 1px dotted #4c4937;
+}
+.battle-info-stats i { color: #8f9587; font-size: 10px; font-style: normal; }
+.battle-info-stats b { color: #e9dfbd; font: 11px monospace; }
+.battle-info-skills { padding: 8px 10px; border: 1px solid #ffffff12; background: #ffffff05; }
+.battle-info-skills > i { color: #b99a51; font-size: 9px; font-style: normal; letter-spacing: .14em; }
+.battle-info-skills p { margin: 6px 0 0; color: #d9d0b5; font-size: 10px; line-height: 1.7; }
+.battle-info-skills.empty { color: #839087; font-size: 10px; }
+/* 情报面板关闭按钮与其它菜单按钮同款主题。 */
+.battle-info-panel footer {
+  display: flex;
+  justify-content: center;
+  gap: 8px;
+  padding-top: 8px;
+}
+.battle-info-panel footer button {
+  padding: 7px 18px;
+  border: 1px solid #9b8957;
+  background: #201f18;
+  color: #f0dfae;
+  font-size: 11px;
+  cursor: pointer;
+}
+.battle-info-panel footer button:hover {
+  border-color: #e2c66f;
+  background: #2c2718;
+  color: #f7e3a5;
+}
+
+.special-picker footer {
+  padding: 9px 8px 1px;
+  border-top: 1px solid #7d704966;
+  color: #a79e89;
+  font: 10px monospace;
+  text-align: center;
+}
+
+/* 战斗行囊/武学面板复用主菜单的 bag-list 与 kungfu-list 完整设计，
+   这里只补充选择器壳内的滚动与光标行样式。 */
+.battle-bag-list,
+.battle-kungfu-list {
+  min-height: 0;
+  overflow-y: auto;
+  align-content: start;
+  padding: 6px 8px;
+  border: 1px solid #ffffff12;
+  background: linear-gradient(180deg, #030604aa, #0007);
+  scrollbar-color: #7c6c43 #080d09;
+}
+.battle-bag-list::-webkit-scrollbar,
+.battle-kungfu-list::-webkit-scrollbar { width: 8px; }
+.battle-bag-list::-webkit-scrollbar-track,
+.battle-kungfu-list::-webkit-scrollbar-track { background: #101713; }
+.battle-bag-list::-webkit-scrollbar-thumb,
+.battle-kungfu-list::-webkit-scrollbar-thumb { background: #7c6c43; }
+
+.battle-kungfu-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: stretch;
+  gap: 4px;
+  width: 100%;
+  min-width: 0;
+  border: 1px solid transparent;
+  background: transparent;
+  color: inherit;
+}
+.battle-kungfu-row.active {
+  border-color: #b39b58;
+  background: #82663338;
+}
+.battle-parry-toggle {
+  padding: 0 10px;
+  border: 0;
+  border-left: 1px solid #ffffff14;
+  background: transparent;
+  color: #bdad7b;
+  white-space: nowrap;
+}
+.battle-parry-toggle:hover {
+  color: #f7d978;
+  background: #8b632c55;
+}
+
+@media (max-width: 820px) {
+  .special-picker {
+    inset: 20px 12px;
+    padding: 12px;
+  }
+
+  .special-picker-list { grid-template-columns: minmax(0, 1fr); }
+}
+
+@media (max-height: 620px) {
+  .special-picker {
+    inset-block: 12px;
+    gap: 7px;
+    padding-block: 10px;
+  }
+
+  .special-picker-title { padding-block: 4px 8px; }
+  .special-picker-list button { padding-block: 7px; }
+}
+
+
+/* 战斗：以实景演武场承载人物，信息条与命令区维持清楚分层。 */
 .battle {
   inset: 10px;
-  grid-template-rows: 188px auto minmax(0, 1fr) auto;
-  gap: 0;
-  padding: 14px;
-  border: 1px solid rgba(226, 194, 118, .56);
-  border-radius: 3px 18px 3px 18px;
-  color: var(--paper);
+  padding: 12px;
+  grid-template-rows: minmax(178px, 29%) auto minmax(0, 1fr) auto;
+  gap: 8px;
+  overflow: hidden;
+  border: 1px solid var(--wx-line-strong);
   background:
-    radial-gradient(circle at 50% 0, rgba(83, 113, 99, .2), transparent 34%),
-    linear-gradient(155deg, rgba(20, 28, 25, .982), rgba(4, 7, 6, .994) 72%);
-  box-shadow: 0 30px 100px rgba(0,0,0,.85), 0 0 0 6px rgba(2,5,3,.42), inset 0 1px rgba(255,244,209,.045);
-  font-family: var(--font-serif);
-  backdrop-filter: blur(10px) saturate(.82);
+    linear-gradient(180deg, rgba(4, 8, 9, 0.2) 0 38%, rgba(4, 8, 9, 0.9) 64%),
+    url("/game-assets/generated/wuxia-ui-battle-courtyard-v2.webp") center top / cover no-repeat,
+    #080d0e;
+  box-shadow: 0 24px 80px #000;
 }
-.battle::before {
-  content: "";
-  position: absolute;
-  inset: 7px;
-  pointer-events: none;
-  border: 1px solid rgba(225,194,120,.1);
-  border-radius: 1px 12px 1px 12px;
-}
+
 .battle-stage {
-  border: 1px solid rgba(217, 187, 118, .22);
-  border-radius: 2px 12px 2px 12px;
-  background:
-    linear-gradient(180deg, rgba(101,126,112,.12), rgba(5,10,8,.86) 74%),
-    radial-gradient(ellipse at 50% 115%, rgba(184,143,58,.24), transparent 58%);
-  box-shadow: inset 0 -28px 42px rgba(0,0,0,.34);
+  min-height: 0;
+  border: 0;
+  border-bottom: 1px solid rgba(215, 190, 124, 0.32);
+  border-radius: 0;
+  background: linear-gradient(180deg, rgba(6, 11, 12, 0.04), rgba(4, 8, 9, 0.36));
 }
-.battle-stage::before { opacity: .52; }
+
+.battle-stage::before {
+  opacity: 0.16;
+}
+
+.battle-stage .fighter {
+  padding-top: 7px;
+}
+
+.battle-stage .fighter .battle-portrait {
+  width: clamp(112px, 15vw, 150px);
+  height: clamp(112px, 15vw, 150px);
+  border: 1px solid rgba(119, 185, 202, 0.65);
+  background-color: rgba(4, 9, 10, 0.7);
+  box-shadow: inset 0 -42px 34px rgba(2, 6, 7, 0.82), 0 14px 30px #000;
+}
+
+.battle-stage .fighter.enemy .battle-portrait {
+  border-color: rgba(189, 102, 83, 0.72);
+}
+
 .battle-stage > b {
-  max-width: 210px;
-  margin-top: 11px;
-  padding: 5px 10px;
-  border: 1px solid rgba(203,177,111,.24);
-  border-radius: 12px;
-  color: #c8b98f;
-  background: rgba(3,7,5,.74);
-  box-shadow: 0 4px 16px rgba(0,0,0,.42);
-  font-family: var(--font-ui);
-  font-size: 10px;
-  font-weight: 500;
-  letter-spacing: .1em;
-  backdrop-filter: blur(5px);
+  border: 1px solid rgba(213, 188, 121, 0.25);
+  background: rgba(4, 9, 10, 0.72);
+  color: #d8c38e;
+  backdrop-filter: blur(6px);
 }
-.fighter { padding-top: 9px; gap: 5px; }
-.fighter .battle-portrait {
-  width: 144px;
-  height: 144px;
-  border: 1px solid rgba(118, 186, 204, .65);
-  border-radius: 2px 16px 2px 16px;
-  box-shadow: inset 0 -42px 36px rgba(3,8,10,.78), 0 0 0 4px rgba(5,12,13,.34), 0 12px 34px rgba(0,0,0,.52);
+
+.battle-bars {
+  gap: 8px;
+  padding: 0;
 }
-.fighter.enemy .battle-portrait { border-color: rgba(194, 105, 82, .68); box-shadow: inset 0 -42px 36px rgba(18,5,4,.78), 0 0 0 4px rgba(15,6,5,.34), 0 12px 34px rgba(0,0,0,.52); }
-.fighter > span {
-  bottom: 6px;
-  min-width: 88px;
-  padding: 4px 11px;
-  border-radius: 12px;
-  color: #c5e9f1;
-  background: rgba(4,17,20,.9);
-  font-family: var(--font-display);
-  text-align: center;
-  backdrop-filter: blur(4px);
-}
-.fighter.enemy > span { color: #f2b5a4; background: rgba(23,8,6,.9); }
-.battle-live-fact {
-  border-color: rgba(219,188,115,.45);
-  border-radius: 12px;
-  color: #eee1bd;
-  background: rgba(3,7,5,.88);
-  box-shadow: 0 7px 22px rgba(0,0,0,.56);
-  backdrop-filter: blur(4px);
-}
-.battle-live-fact small { color: #c6a253; font-family: var(--font-data); }
-.battle-live-fact strong { font-family: var(--font-ui); font-weight: 500; }
-.battle-bars { gap: 10px; padding: 9px 0; }
-.side-bars {
-  gap: 5px;
-  padding: 9px 11px;
-  border: 1px solid rgba(118,179,193,.22);
-  border-left: 2px solid rgba(101,173,190,.58);
-  border-radius: 2px 10px 2px 10px;
-  background: linear-gradient(105deg, rgba(39,91,103,.12), rgba(255,255,255,.018));
-}
-.side-bars.enemy { border-color: rgba(183,92,70,.24); border-left-color: rgba(190,93,71,.68); background: linear-gradient(105deg, rgba(105,45,37,.14), rgba(255,255,255,.014)); }
-.side-bars > b { color: #e3dcc7; font-family: var(--font-display); font-size: 12px; font-weight: 500; }
-.side-bars > b button { border-color: rgba(205,177,108,.3); border-radius: 8px; color: #d8c487; background: rgba(41,38,26,.72); font-family: var(--font-ui); }
-.side-bars label { grid-template-columns: 32px 1fr 136px; color: #aab2ab; font-family: var(--font-ui); font-size: 10px; }
-.battle-resource > i {
-  height: 8px;
-  border-color: rgba(255,255,255,.06);
-  border-radius: 8px;
-  background: rgba(0,0,0,.62);
-}
-.battle-resource > i b { border-radius: inherit; box-shadow: inset 0 1px rgba(255,255,255,.19), 0 0 10px rgba(202,98,78,.12); }
-.battle-resource.tone-force > i b { box-shadow: inset 0 1px rgba(255,255,255,.2), 0 0 10px rgba(83,156,193,.14); }
-.battle-resource.tone-magic > i b { box-shadow: inset 0 1px rgba(255,255,255,.2), 0 0 10px rgba(143,113,194,.14); }
-.side-bars em { color: #c8c3b2; font-family: var(--font-data); }
-.side-bars em small { color: #8d7b70; font-family: var(--font-ui); }
-.battle-effects { gap: 5px; border-top-color: rgba(255,255,255,.07); }
-.battle-effect { border-radius: 2px 8px 2px 8px; }
-.battle-log {
-  border: 1px solid rgba(216, 188, 124, .13);
-  border-radius: 2px 12px 2px 12px;
-  background: linear-gradient(180deg, rgba(3,7,5,.5), rgba(0,0,0,.26));
-}
-.battle-log > header {
-  border-bottom-color: rgba(218,188,115,.18);
-  color: #b8a778;
-  background: rgba(7,12,10,.9);
-  font-family: var(--font-ui);
+
+.battle .side-bars {
+  padding: 7px 10px;
+  border: 1px solid rgba(213, 195, 147, 0.13);
+  background: rgba(6, 12, 12, 0.8);
   backdrop-filter: blur(8px);
 }
-.battle-log > header i { border-radius: 10px; font-family: var(--font-data); }
-.battle-log .battle-opening { color: #c9c0a5; font-family: var(--font-serif); }
-.battle-log article {
-  margin-bottom: 10px;
-  padding: 12px 14px;
-  border: 1px solid rgba(255,255,255,.065);
-  border-left: 2px solid rgba(117,107,76,.7);
-  border-radius: 1px 8px 1px 8px;
-  color: #d0c9b5;
-  background: rgba(12,17,14,.62);
-}
-.battle-log article > header { border-bottom-color: rgba(255,255,255,.055); }
-.battle-log article time { color: #8e8366; font-family: var(--font-data); }
-.battle-log article small { color: #9da69e; font-family: var(--font-ui); }
-.battle-log article.latest {
-  border-color: rgba(197, 160, 88, .34);
-  border-left-color: var(--gold-bright);
-  background: linear-gradient(100deg, rgba(72,58,29,.4), rgba(16,22,18,.75) 58%);
-  box-shadow: 0 12px 28px rgba(0,0,0,.22), inset 0 1px rgba(255,239,193,.03);
-}
-.battle-narrative-copy p {
-  padding: 9px 11px;
-  border-left-width: 2px;
-  color: #f0dca5;
-  background: linear-gradient(90deg, rgba(128,104,38,.13), transparent);
-  font-family: var(--font-serif);
-  font-size: 16px;
-}
-.battle-narrative-copy .narrative-impact { color: #ef9a87; background: linear-gradient(90deg, rgba(128,43,35,.2), transparent); }
-.battle-narrative-copy mark { border-radius: 2px; }
-.battle nav { gap: 6px; padding-top: 9px; }
-.battle nav button,
-.battle button {
-  min-height: 35px;
-  padding: 8px 6px;
-  border: 1px solid rgba(206,178,110,.24);
-  border-radius: 2px;
-  color: #cfc7ad;
-  background: linear-gradient(180deg, rgba(50,49,36,.62), rgba(21,25,21,.82));
-  font-family: var(--font-ui);
-  font-size: 10px;
-  transition: color 130ms ease, border-color 130ms ease, background 130ms ease, transform 130ms ease;
-}
-.battle nav button:hover:not(:disabled),
-.battle button:hover:not(:disabled) { color: var(--gold-bright); border-color: rgba(235,203,125,.62); background: linear-gradient(180deg, rgba(84,70,38,.72), rgba(30,31,23,.88)); transform: translateY(-1px); }
-.battle nav button:first-child,
-.battle button:first-child { border-color: rgba(181,85,65,.46); color: #e5aa9b; background: linear-gradient(180deg, rgba(112,52,43,.74), rgba(53,28,24,.82)); }
-.battle nav button:disabled,
-.battle button:disabled { opacity: .36; filter: saturate(.36); }
-.battle kbd { padding: 1px 4px; border: 1px solid rgba(218,188,116,.22); border-radius: 3px; color: #bfae81; background: rgba(0,0,0,.18); font-family: var(--font-data); }
 
-@media(max-width:700px) {
-  .battle { inset: 4px; padding: 8px; grid-template-rows: 146px auto 1fr auto; }
-  .fighter .battle-portrait { width: 104px; height: 104px; }
-  .battle-bars { gap: 5px; }
-  .side-bars { padding: 7px; }
-  .side-bars label { grid-template-columns: 27px 1fr; }
-  .side-bars em { grid-column: 1 / -1; }
-  .battle nav { grid-template-columns: repeat(4,minmax(0,1fr)); }
+.battle-log {
+  border: 1px solid rgba(213, 195, 147, 0.14);
+  background: rgba(4, 8, 9, 0.82);
+  backdrop-filter: blur(8px);
+}
+
+.battle > nav {
+  gap: 5px;
+  padding-top: 0;
+}
+
+.battle > nav button {
+  min-height: 38px;
+  border: 1px solid rgba(213, 190, 126, 0.24);
+  background: rgba(9, 16, 15, 0.9);
+  color: #d4d4c5;
+}
+
+.battle > nav button:first-child {
+  border-color: rgba(206, 158, 83, 0.65);
+  background: linear-gradient(180deg, rgba(121, 78, 37, 0.78), rgba(66, 42, 24, 0.86));
+  color: #ffe8b5;
+}
+
+@media (max-width: 820px) {
+  .battle { grid-template-rows: 154px auto minmax(0, 1fr) auto; }
+}
+
+@media (max-width: 560px) {
+  .battle { inset: 5px; padding: 7px; }
+}
+
+/* ---------- 战斗 3A 层：三段式纵深与可读性 ---------- */
+
+/* 在演武场实景上叠暗角与顶光，把注意力压向战报与命令区。
+   grid-template-rows 是 e2e 几何契约，不得改动。 */
+.battle {
+  background:
+    var(--wx-vignette),
+    var(--wx-haze-warm),
+    linear-gradient(180deg, rgba(4, 8, 9, 0.2) 0 38%, rgba(4, 8, 9, 0.9) 64%),
+    url("/game-assets/generated/wuxia-ui-battle-courtyard-v2.webp") center top / cover no-repeat,
+    #080d0e;
+}
+
+.battle {
+  font-family: var(--wx-font-serif);
+}
+
+.battle > nav button {
+  transition:
+    color var(--wx-dur-fast) var(--wx-ease-out),
+    border-color var(--wx-dur-fast) var(--wx-ease-out),
+    background var(--wx-dur-fast) var(--wx-ease-out);
+}
+
+.battle > nav button:hover {
+  border-color: var(--wx-gold);
+  color: var(--wx-gold-bright);
+}
+
+/* 子面板标题条：楷体 + 字距（面板标题条是全站允许的 backdrop-filter 之一） */
+.special-picker-title {
+  font-family: var(--wx-font-display);
+  letter-spacing: 0.1em;
+}
+
+.special-picker-title b {
+  font-size: var(--wx-fs-xl);
+}
+
+.special-picker-title small {
+  font: var(--wx-fs-sm) var(--wx-font-data);
+  letter-spacing: 0.06em;
+}
+
+/* 绝招卡片可读性：原 8-10px 太挤，统一抬到字号阶梯并放宽行距。 */
+.special-picker-list button {
+  gap: 6px 14px;
+  padding: 11px 12px;
+}
+
+.special-picker-list button > b small {
+  font: var(--wx-fs-sm) var(--wx-font-ui);
+  letter-spacing: 0.08em;
+}
+
+.special-picker-list button > b span {
+  font-size: var(--wx-fs-lg);
+}
+
+.special-picker-list button > em {
+  font-size: var(--wx-fs-sm);
+  line-height: 1.5;
+}
+
+.special-card-desc,
+.special-card-damage,
+.special-card-effect {
+  font-size: var(--wx-fs-md);
+  line-height: 1.6;
+}
+
+.special-picker footer {
+  font: var(--wx-fs-sm) var(--wx-font-data);
+  letter-spacing: 0.05em;
+}
+
+.battle-inner-row > button b {
+  font-size: var(--wx-fs-lg);
+}
+
+.battle-inner-row > button small,
+.battle-info-stats i,
+.battle-info-stats b,
+.battle-info-skills p {
+  font-size: var(--wx-fs-md);
+}
+
+/* 列表项禁止 stretch：默认拉伸会把卡片压到 min-height 行高、内容溢出叠到下一行
+   （旧主题层的 align-items:start 在界面拆分时丢失，导致绝招列表文字互相重叠）。 */
+.special-picker-list,
+.battle-bag-list,
+.battle-kungfu-list,
+.battle-inner-list,
+.battle-info-body {
+  align-items: start;
+}
+
+/* 行高按内容计算：Chrome 对 stretch 网格项会把轨道压到 min-height，
+   必须显式 height:max-content 才能按自然高度排列（与主菜单行囊同款修复）。 */
+.special-picker-list button,
+.battle-inner-list .battle-inner-row,
+.battle-kungfu-row {
+  height: max-content;
+  min-height: 0;
+  overflow: visible;
+}
+
+/* 跨浏览器兜底：Firefox 下 height:max-content 不改变轨道计算，
+   显式声明隐式轨道按内容取高（Chrome 下与上面的修复等价）。 */
+.special-picker-list,
+.battle-bag-list,
+.battle-kungfu-list,
+.battle-inner-list {
+  grid-auto-rows: max-content;
 }

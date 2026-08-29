@@ -1,0 +1,909 @@
+/*
+ * 世界屏：行走 HUD、对白、任务簿、街机小游戏。
+ */
+
+.world-shell {
+  min-height: 100vh;
+  width: min(96vw, calc((100vh - 126px) * 4 / 3 + 282px), 1600px);
+  margin: 0 auto;
+  background:
+    radial-gradient(
+      circle at 12% 12%,
+      rgba(105, 145, 99, 0.14),
+      transparent 28%
+    ),
+    radial-gradient(
+      circle at 88% 84%,
+      rgba(172, 125, 62, 0.1),
+      transparent 30%
+    ),
+    linear-gradient(145deg, #19291f, #070b08 68%);
+  color: #e5d7b3;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 282px;
+  grid-template-rows: 62px auto 42px;
+  justify-content: center;
+  align-content: center;
+  padding: 10px 0;
+}
+.world-shell header {
+  grid-column: 1/3;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  border-bottom: 1px solid rgba(145, 164, 145, 0.28);
+  padding: 0 16px;
+  background: linear-gradient(
+    90deg,
+    rgba(7, 12, 9, 0.88),
+    rgba(24, 39, 29, 0.7)
+  );
+}
+.world-shell header > strong {
+  color: #d8bd77;
+  letter-spacing: 5px;
+  font-size: 18px;
+}
+.world-shell header > div {
+  display: flex;
+  flex-direction: column;
+  text-align: center;
+  letter-spacing: 4px;
+}
+.world-shell header span {
+  font: 9px monospace;
+  color: #718076;
+  margin-top: 4px;
+}
+.world-shell header > .header-actions {
+  flex-direction: row;
+  gap: 8px;
+  letter-spacing: 0;
+}
+.world-shell header button,
+.world-shell aside button {
+  background: #1b261e;
+  border: 1px solid #516052;
+  color: #d6c9a7;
+  padding: 8px 12px;
+}
+.world-frame {
+  position: relative;
+  background: #000;
+  aspect-ratio: 4/3;
+  min-width: 0;
+  box-shadow:
+    0 24px 80px rgba(0, 0, 0, 0.78),
+    0 0 0 1px rgba(202, 178, 111, 0.28),
+    inset 0 0 50px rgba(0, 0, 0, 0.35);
+}
+.world-frame canvas {
+  width: 100%;
+  height: 100%;
+  display: block;
+  image-rendering: auto;
+}
+.world-shell aside {
+  background:
+    linear-gradient(180deg, rgba(29, 45, 34, 0.98), rgba(11, 18, 13, 0.98)),
+    #111a14;
+  border-left: 1px solid rgba(180, 156, 91, 0.3);
+  padding: 14px 14px;
+  display: flex;
+  flex-direction: column;
+  gap: 9px;
+  overflow-y: auto;
+}
+.world-shell aside > div {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+}
+.world-shell aside > div:first-child {
+  padding-bottom: 9px;
+  border-bottom: 1px solid rgba(154, 174, 156, 0.2);
+}
+.actor-identity strong {
+  color: #dabb68;
+  font-size: 11px;
+}
+.vital-stack label {
+  display: grid;
+  gap: 2px;
+}
+.vital-stack label span {
+  display: flex;
+  justify-content: space-between;
+  font-size: 10px;
+  color: #aeb9ae;
+}
+.vital-stack label i {
+  position: relative;
+  display: block;
+  height: 4px;
+  overflow: hidden;
+  background: #071009;
+}
+.vital-stack label i u {
+  position: absolute;
+  inset: 0 auto 0 0;
+  display: block;
+  background: #5d3c2f;
+  text-decoration: none;
+}
+.vital-stack label i b {
+  position: absolute;
+  inset: 0 auto 0 0;
+  display: block;
+  height: 100%;
+  background: linear-gradient(90deg, #668f5f, #cfb65f);
+}
+.vital-stack label i s {
+  position: absolute;
+  z-index: 2;
+  top: 0;
+  bottom: 0;
+  width: 1px;
+  background: #f4d58b;
+  box-shadow: 0 0 3px #000;
+  text-decoration: none;
+}
+.vital-stack .status-bar > small {
+  color: #927f6d;
+  font-size: 8px;
+  line-height: 1.1;
+  text-align: right;
+}
+.vital-stack .tone-health i b { background: linear-gradient(90deg, #87362f, #d56450); }
+.vital-stack .tone-health i u { background: #552c28; }
+.vital-stack .tone-force i b { background: linear-gradient(90deg, #315d86, #64a2c9); }
+.vital-stack .tone-magic i b { background: linear-gradient(90deg, #58437f, #9276c5); }
+.actor-numbers,
+.actor-resources {
+  display: grid !important;
+  grid-template-columns: 1fr 1fr;
+  gap: 4px 10px !important;
+  padding: 7px;
+  border: 1px solid #ffffff12;
+  background: #ffffff05;
+}
+.actor-numbers span,
+.actor-resources span {
+  display: flex;
+  justify-content: space-between;
+  color: #89988d;
+  font-size: 10px;
+}
+.actor-numbers span b,
+.actor-resources span b {
+  color: #d8cda9;
+  font: 10px monospace;
+}
+.world-shell aside .actor-resources b {
+  min-width: 0;
+  max-width: 72px;
+  overflow: hidden;
+  font: 10px monospace;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.world-shell aside .actor-resources span {
+  min-width: 0;
+}
+.generated-quest-sidebar {
+  display: grid;
+  gap: 4px;
+  width: 100%;
+  padding: 9px 10px;
+  text-align: left;
+  border: 1px solid #c7a95f88;
+  border-radius: 3px;
+  background: linear-gradient(135deg, #302615e8, #101912e8);
+  color: #eadcae;
+  box-shadow: inset 0 0 18px #e4c5680d;
+  cursor: pointer;
+}
+.generated-quest-sidebar:hover,
+.generated-quest-sidebar:focus-visible {
+  border-color: #e7cb76;
+  outline: 2px solid #e7cb7630;
+}
+.generated-quest-sidebar small { color: #c9aa58 !important; letter-spacing: .08em; }
+.generated-quest-sidebar b { color: #f0d27b; font-size: 12px !important; }
+.generated-quest-sidebar span { color: #c9c4ac; font-size: 9px; line-height: 1.45; }
+.world-shell aside small {
+  color: #79877c;
+}
+.world-shell aside b {
+  font-size: 17px;
+}
+.world-shell aside em {
+  font: 10px monospace;
+  color: #68766b;
+}
+.world-shell aside p {
+  font-size: 12px;
+  line-height: 1.6;
+  color: #a9b4aa;
+  border-left: 3px solid #b79a55;
+  padding: 7px 0 7px 9px;
+  background: linear-gradient(90deg, rgba(183, 154, 85, 0.08), transparent);
+}
+.world-shell aside nav {
+  display: flex;
+  flex-direction: column;
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 5px;
+  margin-top: auto;
+}
+.world-dialog {
+  position: absolute;
+  left: 24px;
+  right: 24px;
+  bottom: 22px;
+  min-height: 105px;
+  background: rgba(13, 20, 15, 0.96);
+  border: 2px solid #b39557;
+  color: #eadcb7;
+  padding: 16px 40px 16px 18px;
+  text-align: left;
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+.character-portrait {
+  background-image: url("/game-assets/generated/wuxia-portrait-atlas-v1.webp");
+  background-repeat: no-repeat;
+  background-size: 500% 400%;
+  background-color: #111711;
+  border: 1px solid #9f874f;
+  box-shadow: inset 0 0 24px #0008, 0 8px 24px #0008;
+  aspect-ratio: 1;
+  flex: 0 0 auto;
+  align-self: center;
+}
+.world-dialog.with-portrait {
+  min-height: 145px;
+  display: grid;
+  grid-template-columns: 126px 1fr;
+  align-items: stretch;
+  padding: 12px 40px 12px 12px;
+}
+.dialog-portrait { width: 126px; height: 126px; }
+.world-dialog-copy { display: flex; flex-direction: column; gap: 4px; padding: 8px 4px; }
+/* 道德和尚对白后的「回去/开战」选择项。 */
+.world-dialog-option {
+  margin-top: 6px;
+  color: #b7a67d;
+}
+.world-dialog-option.selected {
+  color: #ffe9a8;
+  font-weight: 700;
+}
+.world-dialog i {
+  position: absolute;
+  right: 14px;
+  bottom: 10px;
+}
+.npc-talk-dialog {
+  position: absolute;
+  z-index: 44;
+  left: 14px;
+  right: 14px;
+  bottom: 14px;
+  height: 236px;
+  min-height: 158px;
+  max-height: 236px;
+  padding: 12px;
+  display: grid;
+  grid-template-columns: 112px minmax(0, 1fr) 112px;
+  align-items: stretch;
+  gap: 12px;
+  overflow: hidden;
+  cursor: pointer;
+  color: #eadcb7;
+  border: 1px solid #c4a75f;
+  border-radius: 12px 3px 12px 3px;
+  background:
+    linear-gradient(100deg, #18251df7, #080e0af8 28%, #080e0af8 72%, #15231bf7),
+    repeating-linear-gradient(90deg, transparent 0 31px, #d3b66308 32px);
+  box-shadow: 0 14px 36px #000d, inset 0 0 34px #d8bb6810;
+  backdrop-filter: blur(3px);
+}
+.npc-talk-dialog::before {
+  content: "";
+  position: absolute;
+  inset: 5px;
+  pointer-events: none;
+  border: 1px solid #c4a75f2b;
+  border-radius: 8px 1px 8px 1px;
+}
+.npc-talk-dialog.has-offer {
+  height: 306px;
+  max-height: 306px;
+}
+.npc-talk-dialog.has-offer .npc-talk-center {
+  grid-template-rows: minmax(118px, 1fr) auto auto;
+}
+.npc-talk-dialog.has-offer .npc-talk-copy {
+  padding: 10px 12px;
+  border: 1px solid #8d784855;
+  background: #060b08a6;
+  box-shadow: inset 0 0 16px #0008;
+}
+.npc-talk-portrait {
+  position: relative;
+  z-index: 1;
+  min-width: 0;
+  display: grid;
+  align-content: center;
+  justify-items: center;
+  gap: 6px;
+  opacity: 1;
+  transform: translateY(-2px);
+  transition: opacity 160ms ease, filter 160ms ease, transform 160ms ease;
+}
+.npc-talk-portrait .dialog-portrait {
+  width: 104px;
+  height: 104px;
+  border-width: 2px;
+}
+.npc-talk-portrait b {
+  max-width: 100%;
+  overflow: hidden;
+  color: #ddc87e;
+  font-size: 12px;
+  letter-spacing: .08em;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.npc-talk-portrait.npc.active .dialog-portrait {
+  border-color: #e8c96d;
+  box-shadow: inset 0 0 24px #0008, 0 0 18px #dcb95655;
+}
+.npc-talk-portrait.player.active .dialog-portrait {
+  border-color: #8ecce8;
+  box-shadow: inset 0 0 24px #0008, 0 0 18px #6fbee055;
+}
+.npc-talk-portrait.player b { color: #a9d9ef; }
+.npc-talk-portrait.muted { opacity: .7; filter: saturate(.72) brightness(.88); transform: none; }
+.npc-talk-center {
+  position: relative;
+  z-index: 2;
+  min-width: 0;
+  display: grid;
+  grid-template-rows: minmax(0, 1fr) auto auto;
+  align-content: center;
+  gap: 7px;
+  padding: 4px 2px 1px;
+  overflow: hidden;
+}
+.npc-talk-copy {
+  min-width: 0;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  justify-content: flex-start;
+  gap: 3px;
+  padding-right: 5px;
+  overflow-y: auto;
+  scrollbar-color: #8d7848 transparent;
+  scrollbar-width: thin;
+  text-align: left;
+  animation: npc-talk-line-in 150ms ease-out;
+}
+.npc-talk-advance-surface {
+  width: 100%;
+  min-height: 0;
+  align-self: stretch;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  cursor: pointer;
+}
+.npc-talk-advance-surface:disabled { cursor: default; }
+.npc-talk-advance-surface:focus-visible {
+  outline: 1px solid #cdb66e88;
+  outline-offset: 4px;
+}
+.npc-talk-copy strong { font-size: 15px; letter-spacing: .1em; }
+.npc-talk-copy strong.npc-speaker { color: #f0d27b; }
+.npc-talk-copy strong.player-speaker { color: #9fdaf2; }
+.npc-talk-copy em,
+.npc-talk-copy small { color: #9daaa0; font-size: 9px; font-style: normal; }
+.npc-talk-copy p {
+  min-height: 2.8em;
+  margin: 3px 0 0;
+  color: #f1e6c5;
+  font-size: 14px;
+  line-height: 1.6;
+  text-shadow: 0 1px 1px #000;
+}
+.npc-talk-copy p.thinking { color: #9eaa9f; font-style: italic; }
+.npc-talk-hint { color: #7f8e84 !important; font-size: 8px; text-align: center; }
+.npc-talk-offer {
+  display: grid;
+  grid-template-columns: minmax(0, 1.2fr) minmax(145px, .9fr) auto;
+  align-items: center;
+  gap: 8px 12px;
+  padding: 8px 10px;
+  border: 1px solid #b3955788;
+  background: linear-gradient(120deg, #342a18e8, #111a13e8);
+  box-shadow: inset 0 0 16px #e4c5680d;
+}
+.npc-talk-offer-summary { display: grid; gap: 2px; min-width: 0; }
+.npc-talk-offer-summary > b { color: #f0d27b; }
+.npc-talk-offer-summary > small,
+.npc-talk-offer-reward { color: #b8b5a1; font-size: 9px; line-height: 1.4; }
+.npc-talk-offer-reward { padding-left: 10px; border-left: 1px solid #8d784855; }
+.npc-talk-actions,
+.npc-talk-controls { display: flex; justify-content: center; gap: 7px; }
+.npc-talk-actions button,
+.npc-talk-controls button {
+  min-width: 82px;
+  min-height: 30px;
+  padding: 6px 11px;
+  border: 1px solid #6f704f;
+  border-radius: 2px;
+  background: #101912;
+  color: #d8cfb3;
+  font: inherit;
+  cursor: pointer;
+}
+.npc-talk-actions button:hover,
+.npc-talk-controls button:hover:not(:disabled),
+.npc-talk-actions button:focus-visible,
+.npc-talk-controls button:focus-visible,
+.npc-talk-actions button.active,
+.npc-talk-controls button.active {
+  border-color: #e7cb76;
+  box-shadow: 0 0 0 2px #e7cb7630;
+  color: #ffe8a3;
+  outline: none;
+}
+.npc-talk-controls button.active { background: #263d2c; border-color: #83c19b; color: #bde8ca; }
+.npc-talk-controls button:disabled { cursor: default; opacity: .45; }
+.npc-talk-actions.quest-action { margin-top: 3px; }
+.npc-talk-terminal {
+  padding: 6px 9px;
+  text-align: center;
+  color: #d8c98f;
+  font-size: 9px;
+  border: 1px solid #9a814b55;
+  background: #211b10aa;
+}
+@keyframes npc-talk-line-in {
+  from { opacity: .25; transform: translateY(3px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+.generated-quest-offer,
+.generated-quest-progress {
+  margin: 0 12px 8px;
+  padding: 10px 12px;
+  border: 1px solid #c6a85c88;
+  background: linear-gradient(135deg, #2d2617ee, #111b13f2);
+  color: #e9dfbd;
+  box-shadow: 0 8px 22px #0007;
+}
+.generated-quest-offer h3 { margin: 3px 0 6px; color: #f0d27b; }
+.generated-quest-offer p,
+.generated-quest-progress p { margin: 3px 0; font-size: 10px; line-height: 1.5; }
+.generated-quest-offer > div { display: flex; gap: 8px; margin-top: 8px; }
+.generated-quest-offer button.active { border-color: #e7cb76; box-shadow: 0 0 0 2px #e7cb7630; color: #ffe8a3; }
+.generated-quest-progress { border-color: #6ebf9d88; background: #0d241bf0; }
+.generated-quest-progress small { color: #84d4b2; }
+.task-journal {
+  position: absolute;
+  inset: 18px;
+  z-index: 86;
+  display: grid;
+  grid-template-rows: auto minmax(0, 1fr) auto;
+  border: 2px solid #a98d4f;
+  background: linear-gradient(155deg, #101810fa, #080d09fd 72%);
+  color: #e6ddc2;
+  box-shadow: 0 16px 60px #000d, inset 0 0 42px #c3a4540c;
+}
+.task-journal > header,
+.task-journal > footer { display: flex; align-items: center; justify-content: space-between; gap: 10px; padding: 12px 16px; border-bottom: 1px solid #806d4188; }
+.task-journal > footer { justify-content: flex-end; border-top: 1px solid #806d4188; border-bottom: 0; }
+.task-journal h2,
+.task-journal h3,
+.task-journal p { margin: 0; }
+.task-journal h2 { color: #ebd387; letter-spacing: 4px; }
+.task-journal button { padding: 8px 14px; border: 1px solid #80734d; background: #111912; color: #ddd1af; }
+.task-journal button.active { border-color: #e2c66f; box-shadow: 0 0 0 2px #e2c66f22; color: #f1dc99; }
+.task-journal button.danger { border-color: #9b514b; color: #e5a49b; }
+.task-journal-body { min-height: 0; display: grid; grid-template-columns: minmax(190px, .62fr) minmax(0, 1.7fr); grid-template-rows: minmax(210px, 1.15fr) minmax(150px, .85fr); gap: 14px; padding: 14px; overflow: hidden; }
+.task-journal-body > section { min-height: 0; padding: 14px; border: 1px solid #61573c88; background: #0c120dcc; overflow: auto; }
+.task-journal-body ul { padding-left: 20px; line-height: 1.8; }
+/* 当前奇遇：标题/阶段、缘由、目标、地点与奖励独立成区，对白记录单独滚动。 */
+.task-journal-generated { display: flex; flex-direction: column; gap: 9px; overflow: auto; }
+.task-quest-head { display: flex; align-items: flex-start; justify-content: space-between; gap: 10px; }
+.task-quest-head > div { display: grid; gap: 3px; min-width: 0; }
+.task-quest-head small { color: #79cfa9; }
+.task-quest-head h3 { color: #ebd387; font-size: 15px; line-height: 1.3; }
+.task-quest-stage { flex-shrink: 0; padding: 3px 9px; color: #9fe3c2; border: 1px solid #79cfa955; background: #12382a33; font-size: 9px; white-space: nowrap; }
+.task-quest-premise { color: #cfc5a6; font-size: 11px; line-height: 1.6; }
+.task-quest-objective { display: block; padding: 8px 10px; color: #9fe3c2; border: 1px solid #79cfa944; background: #12382a22; font-size: 11px; line-height: 1.5; }
+.task-quest-meta { display: flex; flex-wrap: wrap; gap: 5px 16px; color: #8f9587; font-size: 10px; }
+.task-quest-reward { padding: 6px 10px; color: #e0c06b; border: 1px dashed #b99a5166; background: #3a2c0e22; font-size: 10px; line-height: 1.5; }
+.task-transcript { flex: 0 1 44%; min-height: 56px; margin-top: 2px; padding: 8px 10px; border-top: 1px solid #5d533988; border-left: 1px solid #5d533966; background: #070d09aa; overflow: auto; }
+.task-transcript p { display: grid; grid-template-columns: 90px minmax(0, 1fr); gap: 8px; padding: 6px 0; border-bottom: 1px dotted #4c4937; line-height: 1.5; }
+.task-transcript b { color: #d8bd72; }
+.task-transcript p > :not(b) { grid-column: 2; }
+.task-transcript em,
+.task-transcript i { color: #98a99c; font-size: 9px; }
+.task-journal-history { grid-column: 1 / -1; display: grid; grid-template-rows: auto minmax(0, 1fr); gap: 9px; overflow: hidden !important; }
+.task-history-heading,
+.task-history-heading > div { display: flex; align-items: center; justify-content: space-between; gap: 10px; }
+.task-history-heading > div { justify-content: flex-start; }
+.task-history-heading small { color: #b99a51; }
+.task-history-heading > b { color: #7fcaa9; font-size: 10px; }
+.task-history-list { min-height: 0; display: grid; grid-auto-flow: row; grid-template-columns: 1fr; align-content: start; gap: 10px; overflow-x: hidden; overflow-y: auto; padding: 2px 7px 7px 2px; scrollbar-color: #8d7848 transparent; scrollbar-width: thin; }
+.task-history-list article { display: grid; align-content: start; gap: 5px; padding: 10px 12px; border: 1px solid #6d604088; background: linear-gradient(135deg, #171b12, #0a100c); }
+.task-history-list article > header,
+.task-history-list article > footer { display: flex; justify-content: space-between; gap: 10px; }
+.task-history-list article > header b { color: #dfc574; }
+.task-history-list article time { color: #7da990; font: 9px monospace; }
+.task-history-list article p { color: #d9d0b5; font-size: 10px; line-height: 1.45; }
+.task-history-list article > small { color: #8f9587; font-size: 8px; }
+.task-history-list blockquote { margin: 2px 0; color: #bdb08c; font-size: 9px; font-style: italic; }
+.task-history-list article > footer { margin-top: 3px; padding-top: 5px; border-top: 1px dotted #514a34; color: #8f9d90; font-size: 8px; }
+.task-history-list article > footer span:last-child { text-align: right; }
+.task-history-empty { align-self: center; color: #839087; text-align: center; font-size: 10px; }
+.task-abandon-confirm { position: absolute; inset: 25% 20%; display: grid; align-content: center; gap: 12px; padding: 24px; border: 2px solid #a4554d; background: #170d0cf8; text-align: center; box-shadow: 0 10px 50px #000e; }
+.task-abandon-confirm > div { display: flex; justify-content: center; gap: 10px; }
+@media (max-width: 700px) {
+  .npc-talk-dialog {
+    left: 6px;
+    right: 6px;
+    bottom: 6px;
+    height: 255px;
+    min-height: 142px;
+    max-height: 255px;
+    grid-template-columns: 76px minmax(0, 1fr) 76px;
+    gap: 7px;
+    padding: 8px;
+  }
+  .npc-talk-dialog.has-offer { height: 330px; max-height: calc(100% - 12px); }
+  .npc-talk-offer { grid-template-columns: 1fr; gap: 5px; }
+  .npc-talk-offer-reward { padding-left: 0; border-left: 0; }
+  .npc-talk-portrait .dialog-portrait { width: 70px; height: 70px; }
+  .npc-talk-portrait b { font-size: 9px; }
+  .npc-talk-copy strong { font-size: 12px; }
+  .npc-talk-copy p { font-size: 11px; }
+  .npc-talk-controls { flex-wrap: wrap; }
+  .npc-talk-controls button { min-width: 70px; min-height: 28px; padding: 5px 7px; }
+  .npc-talk-hint { display: none; }
+  .task-journal { inset: 6px; }
+  .task-journal-body { grid-template-columns: 1fr; grid-template-rows: none; overflow: auto; }
+  .task-journal-history { grid-column: auto; }
+  .task-history-list { grid-auto-flow: row; grid-template-columns: 1fr; overflow-x: hidden; overflow-y: auto; }
+  .task-abandon-confirm { inset: 18% 8%; }
+}
+.world-shell footer {
+  grid-column: 1/3;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font: 11px monospace;
+  color: #77857a;
+  background: rgba(7, 12, 9, 0.82);
+}
+.world-shell kbd {
+  margin: 0 4px;
+}
+.arcade-panel {
+  position: absolute;
+  inset: 22px;
+  z-index: 20;
+  padding: 34px 70px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 14px;
+  color: #eadcb7;
+  background: linear-gradient(
+    145deg,
+    rgba(17, 28, 21, 0.98),
+    rgba(8, 13, 10, 0.98)
+  );
+  border: 2px solid #b39557;
+}
+.arcade-panel h2 {
+  letter-spacing: 8px;
+  margin: 0 0 8px;
+}
+.arcade-panel > b {
+  width: 260px;
+  padding: 12px 18px;
+  border: 1px solid #425447;
+  text-align: center;
+}
+.arcade-panel > b.active {
+  background: #b39557;
+  color: #101811;
+}
+.arcade-panel small {
+  margin-top: auto;
+  color: #93a096;
+}
+.life-hint {
+  max-width: 300px;
+  margin: 6px 0 0;
+  padding: 7px 9px;
+  color: #d9c186;
+  border-left: 3px solid #b39557;
+  background: #b3955714;
+  font-size: 11px;
+  line-height: 1.5;
+}
+.arcade-score {
+  font: 13px monospace;
+  color: #d7bd72;
+}
+.dance-panel > strong {
+  font: 120px/1 monospace;
+  color: #f2d273;
+  text-shadow: 0 0 20px #bf7b25;
+}
+.dance-pad {
+  width: 110px;
+  height: 110px;
+  border: 2px solid #617466;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  font: 24px monospace;
+  gap: 5px;
+}
+.dance-pad i {
+  font-style: normal;
+}
+.aim-track {
+  position: relative;
+  width: 150px;
+  height: 24px;
+  border: 2px solid #718072;
+  margin-top: 20px;
+}
+.aim-track::after {
+  content: "";
+  position: absolute;
+  left: 58px;
+  width: 18px;
+  inset-block: 0;
+  background: rgba(210, 177, 92, 0.4);
+}
+.aim-track i {
+  position: absolute;
+  top: 2px;
+  width: 8px;
+  height: 16px;
+  background: #ecddd0;
+}
+.hoop {
+  position: relative;
+  width: 420px;
+  height: 220px;
+  border-bottom: 2px solid #718072;
+  text-align: right;
+  padding-right: 50px;
+  font: 80px monospace;
+  color: #b7c3ba;
+}
+.hoop span {
+  position: absolute;
+  font: 18px monospace;
+  color: #d48648;
+  transition: none;
+}
+
+/* 常驻世界框：地图仍是主角，外围 HUD 变成轻量电影式仪表层。 */
+.world-shell {
+  width: min(98vw, calc((100vh - 104px) * 4 / 3 + 264px), 1660px);
+  grid-template-columns: minmax(0, 1fr) 264px;
+  grid-template-rows: 54px auto 34px;
+  padding: 8px 0;
+  background:
+    radial-gradient(circle at 10% 0%, rgba(70, 117, 105, 0.18), transparent 30%),
+    linear-gradient(135deg, #111a18, #050808 72%);
+  color: var(--wx-paper);
+}
+
+.world-shell > header {
+  padding: 0 18px;
+  border-bottom: 1px solid var(--wx-line);
+  background: linear-gradient(90deg, rgba(7, 12, 12, 0.98), rgba(15, 26, 23, 0.82));
+}
+
+.world-shell > header > strong {
+  color: var(--wx-gold-bright);
+  font-family: var(--wx-font-display);
+  font-size: 20px;
+  font-weight: 500;
+  letter-spacing: 0.28em;
+}
+
+.world-shell > header .header-actions button,
+.world-shell > aside button {
+  border: 1px solid rgba(208, 187, 129, 0.26);
+  background: rgba(12, 20, 18, 0.72);
+  color: #cdd1c5;
+}
+
+.world-frame {
+  box-shadow: 0 24px 70px rgba(0, 0, 0, 0.78), 0 0 0 1px var(--wx-line);
+}
+
+.world-shell > aside {
+  padding: 15px;
+  border-left: 1px solid var(--wx-line);
+  background:
+    linear-gradient(180deg, rgba(10, 17, 16, 0.9), rgba(7, 12, 11, 0.98)),
+    url("/game-assets/generated/wuxia-ui-archive-v2.webp") 72% center / auto 100% no-repeat;
+}
+
+.world-shell > aside > div {
+  padding: 8px 9px;
+  border-left: 1px solid rgba(198, 167, 96, 0.16);
+  background: linear-gradient(90deg, rgba(255, 255, 255, 0.025), transparent);
+}
+
+.world-location b,
+.actor-identity b {
+  color: #ead9aa;
+}
+
+@media (max-width: 820px) {
+  .world-shell { grid-template-columns: minmax(0, 1fr); width: 100%; }
+  .world-shell > aside { display: none; }
+  .world-shell > header { grid-column: 1; }
+}
+
+/* ---------- 世界 HUD 3A 层：景深、四角装饰、入场揭幕 ---------- */
+
+.world-shell {
+  background:
+    var(--wx-vignette),
+    var(--wx-haze-warm),
+    linear-gradient(160deg, #0d1614 0%, var(--wx-void) 78%);
+  animation: wx-scene-reveal var(--wx-dur-scene) var(--wx-ease-out) both;
+}
+
+@keyframes wx-scene-reveal {
+  from {
+    opacity: 0;
+    filter: blur(8px) brightness(0.6);
+  }
+  to {
+    opacity: 1;
+    filter: none;
+  }
+}
+
+.world-shell > header > strong {
+  text-shadow: 0 2px 10px rgba(0, 0, 0, 0.9), 0 0 26px rgba(240, 213, 139, 0.22);
+}
+
+.world-shell > header .header-actions button,
+.world-shell > aside button {
+  transition:
+    color var(--wx-dur-fast) var(--wx-ease-out),
+    border-color var(--wx-dur-fast) var(--wx-ease-out),
+    background var(--wx-dur-fast) var(--wx-ease-out);
+}
+
+.world-shell > header .header-actions button:hover,
+.world-shell > aside button:hover {
+  border-color: var(--wx-gold);
+  color: var(--wx-gold-bright);
+  background: rgba(64, 47, 21, 0.72);
+}
+
+/* 画框：海拔阴影 + 四角 L 形刻线（纯渐变，无 DOM 改动） */
+.world-frame {
+  box-shadow: var(--wx-elev-3);
+}
+
+.world-frame::after {
+  content: "";
+  position: absolute;
+  inset: -7px;
+  pointer-events: none;
+  background:
+    linear-gradient(var(--wx-gold), var(--wx-gold)) 0 0 / 18px 1px no-repeat,
+    linear-gradient(var(--wx-gold), var(--wx-gold)) 0 0 / 1px 18px no-repeat,
+    linear-gradient(var(--wx-gold), var(--wx-gold)) 100% 0 / 18px 1px no-repeat,
+    linear-gradient(var(--wx-gold), var(--wx-gold)) 100% 0 / 1px 18px no-repeat,
+    linear-gradient(var(--wx-gold), var(--wx-gold)) 0 100% / 18px 1px no-repeat,
+    linear-gradient(var(--wx-gold), var(--wx-gold)) 0 100% / 1px 18px no-repeat,
+    linear-gradient(var(--wx-gold), var(--wx-gold)) 100% 100% / 18px 1px no-repeat,
+    linear-gradient(var(--wx-gold), var(--wx-gold)) 100% 100% / 1px 18px no-repeat;
+  opacity: 0.55;
+}
+
+/* 对白框：上缘受光金线 + 阴影，文字加投影保证任意地图可读 */
+.world-dialog,
+.npc-talk-dialog {
+  text-shadow: 0 1px 3px rgba(0, 0, 0, 0.85);
+}
+
+.npc-talk-dialog {
+  box-shadow:
+    0 18px 46px rgba(0, 0, 0, 0.85),
+    inset 0 1px 0 rgba(240, 213, 139, 0.22),
+    inset 0 0 36px rgba(0, 0, 0, 0.4);
+}
+
+/* ---------- 响应式（必须晚于 .world-shell 基座规则：display/列宽在此覆盖） ---------- */
+
+@media (min-width: 1500px) and (min-height: 900px) {
+  .world-shell {
+    grid-template-columns: minmax(0, 1fr) 310px;
+    width: min(96vw, calc((100vh - 126px) * 4 / 3 + 310px), 1740px);
+  }
+  .world-shell aside {
+    padding: 32px 26px;
+    gap: 24px;
+  }
+  .world-shell aside b {
+    font-size: 20px;
+  }
+}
+
+@media (max-width: 980px) {
+  .world-shell {
+    width: 100%;
+    display: flex;
+    flex-direction: column;
+    padding: 8px;
+    justify-content: center;
+  }
+  .world-shell aside {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    border-left: 0;
+  }
+  .world-shell aside p,
+  .world-shell aside nav {
+    display: none;
+  }
+  /* 头部固定高度：窄屏 flex 纵排会把头部拉伸、按钮溢出被画布遮挡。 */
+  .world-shell header {
+    height: 54px;
+    min-height: 0;
+    flex: 0 0 54px;
+    overflow: hidden;
+  }
+  .world-shell header button,
+  .world-shell aside button {
+    padding: 6px 10px;
+  }
+  .world-shell footer {
+    height: 36px;
+  }
+}
+
+@media (max-width: 520px) {
+  .world-shell {
+    padding: 0;
+  }
+  .world-shell header {
+    padding: 0 10px;
+  }
+  .world-shell aside,
+  .world-shell footer {
+    display: none;
+  }
+  .world-frame {
+    width: 100vw;
+  }
+  .world-shell header > div span {
+    display: none;
+  }
+}
