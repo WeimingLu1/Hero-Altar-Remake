@@ -217,6 +217,9 @@ import "./battle.css";
 import "./special.css";
 import "./menu.css";
 
+// 原作 $data_system.boss3_choice：道德和尚(197)对白后的「回去/开战」选择。
+const BOSS_EXIT_CHOICES = ["回去", "少废话，这次你会死的很难看的"];
+
 // 标题页与操作说明统一由首页 OriginalEntry 呈现，世界内只剩序章/创建/游玩。
 export type LaunchScreen = "intro" | "create" | "play";
 type CreatorState = {
@@ -357,6 +360,12 @@ export default function OriginalWorld({
   // 铸剑挑战首轮：先显示文字说明，玩家确认后再进入战斗。
   const [pendingSwordBattle, setPendingSwordBattle] =
     useState<OriginalBattle | null>(null);
+  // 最终决战入口：先播放原作 boss_text 对白，确认后才开战。
+  const [pendingBossBattle, setPendingBossBattle] = useState<number | null>(
+    null,
+  );
+  // 道德和尚(197)对白后展示的原作「回去/开战」选择项下标。
+  const [bossChoice, setBossChoice] = useState<number | null>(null);
   const [battleNarratives, setBattleNarratives] = useState<BattleNarrative[]>([]);
   const [battlePlayback, setBattlePlayback] =
     useState<BattlePlaybackState | null>(null);
@@ -541,13 +550,39 @@ export default function OriginalWorld({
       beginOriginalBattle(149, s.tasks.clock + 149, undefined, "story"),
     );
   }, [sync]);
+  // 最终决战与原作一致：story 模式开战，对白确认后才进入战斗。
+  const startBossBattle = useCallback((enemyId: number) => {
+    setBattle(
+      beginOriginalBattle(
+        enemyId,
+        enemyId + stateRef.current.position.mapId,
+        undefined,
+        "story",
+      ),
+    );
+  }, []);
   const advanceEventText = useCallback(() => {
     const pending = pendingSwordBattle;
+    const boss = pendingBossBattle;
     setPendingSwordBattle(null);
+    setPendingBossBattle(null);
+    setBossChoice(null);
     setEventText("");
     setEventNpcId(null);
-    if (pending) setBattle(pending);
-  }, [pendingSwordBattle]);
+    if (boss !== null) startBossBattle(boss);
+    else if (pending) setBattle(pending);
+  }, [pendingSwordBattle, pendingBossBattle, startBossBattle]);
+  // 道德和尚对白后的选择：回去=关闭对话，开战=进入决战。
+  const resolveBossChoice = useCallback(
+    (fight: boolean) => {
+      const boss = pendingBossBattle;
+      setBossChoice(null);
+      setPendingBossBattle(null);
+      setEventText("");
+      if (fight && boss !== null) startBossBattle(boss);
+    },
+    [pendingBossBattle, startBossBattle],
+  );
   const runAt = useCallback(
     (x: number, y: number, automatic = false) => {
       const s = stateRef.current,
@@ -656,13 +691,18 @@ export default function OriginalWorld({
             direction: next.position.direction,
           };
         sync(next);
-        if (resolution.battleEnemyId)
+        if (resolution.battleEnemyId && resolution.battleEnemyId >= 195) {
+          // 原作 boss_text：先对白后开战；道德和尚(197)另有「回去/开战」选择。
+          setEventText(resolution.lines.join("\n"));
+          setPendingBossBattle(resolution.battleEnemyId);
+          if (resolution.battleEnemyId === 197) setBossChoice(0);
+        } else if (resolution.battleEnemyId)
           setBattle(
             beginOriginalBattle(
               resolution.battleEnemyId,
               resolution.battleEnemyId + s.position.mapId,
               undefined,
-              resolution.battleEnemyId >= 195 ? "story" : "lethal",
+              "lethal",
             ),
           );
         else
@@ -3285,6 +3325,14 @@ export default function OriginalWorld({
           else if (cancel || isMainMenuKey(k)) setMenu(null);
           return;
         }
+        if (resolved.layer === "dialogue" && eventText && bossChoice !== null) {
+          // 道德和尚的「回去/开战」选择：上下切换，确认执行，取消视为回去。
+          if (["arrowup", "arrowdown", "w", "s"].includes(k))
+            setBossChoice((bossChoice + 1) % 2);
+          else if (confirm) resolveBossChoice(bossChoice === 1);
+          else if (cancel) resolveBossChoice(false);
+          return;
+        }
         if (resolved.layer === "dialogue" && eventText && (confirm || cancel)) {
           advanceEventText();
           return;
@@ -3386,6 +3434,8 @@ export default function OriginalWorld({
     battleSkill,
     battleOutcome,
     advanceEventText,
+    bossChoice,
+    resolveBossChoice,
     advanceNpcConversation,
     beginCultivation,
     beginStudyAt,
@@ -3864,8 +3914,14 @@ export default function OriginalWorld({
         </canvas>
         {eventText && (
           <button
-            className={`world-dialog${eventNpcId ? " with-portrait" : ""}`}
-            onClick={advanceEventText}
+            className={`world-dialog${eventNpcId ? " with-portrait" : ""}${
+              bossChoice !== null ? " with-choice" : ""
+            }`}
+            onClick={
+              bossChoice !== null
+                ? () => resolveBossChoice(bossChoice === 1)
+                : advanceEventText
+            }
           >
             {eventNpcId && (
               <CharacterPortrait
@@ -3878,6 +3934,18 @@ export default function OriginalWorld({
               {eventText.split("\n").map((line, i) => (
                 <span key={i}>{line || " "}</span>
               ))}
+              {bossChoice !== null &&
+                BOSS_EXIT_CHOICES.map((label, i) => (
+                  <span
+                    key={label}
+                    className={`world-dialog-option${
+                      i === bossChoice ? " selected" : ""
+                    }`}
+                  >
+                    {i === bossChoice ? "▶" : "　"}
+                    {label}
+                  </span>
+                ))}
             </span>
             <i>▼</i>
           </button>

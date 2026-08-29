@@ -77,7 +77,11 @@ test("所有行囊操作都先确认，剧情说明的鼠标和键盘推进共�
     worldSource,
     /resolved\.layer === "dialogue"[\s\S]*advanceEventText\(\)/,
   );
-  assert.match(worldSource, /onClick=\{advanceEventText\}/);
+  // 剧情说明点击推进；道德和尚的「回去/开战」选择打开时点击改为确认当前选项。
+  assert.match(
+    worldSource,
+    /onClick=\{[\s\S]*?bossChoice !== null\s*\?\s*\(\) => resolveBossChoice\(bossChoice === 1\)\s*:\s*advanceEventText\s*\}/,
+  );
 });
 
 test("被砍头的地图人物会变成不可重复互动的遗骸", () => {

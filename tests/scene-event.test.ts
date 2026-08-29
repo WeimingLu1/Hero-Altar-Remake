@@ -94,6 +94,19 @@ test("BOSS 入口按道德选择原作 195 至 197 号敌人", () => {
   assert.equal(resolveSceneEvent({ type: 8 }, a).battleEnemyId, 197);
 });
 
+test("BOSS 入口返回原作 boss_text 开场对白供先播后战", () => {
+  const a = actor();
+  const neutral = resolveSceneEvent({ type: 8 }, a);
+  assert.ok(
+    neutral.lines[0]?.includes("最终BOSS"),
+    `我是谁开场对白首行应是原作文案，实际：${neutral.lines[0]}`,
+  );
+  a.morals = 90;
+  a.killList = [125];
+  const monk = resolveSceneEvent({ type: 8 }, a);
+  assert.equal(monk.lines[monk.lines.length - 1], "请选择：");
+});
+
 test("坛入口按事件第三参数选择原作坐标分支", () => {
   const result = resolveSceneEvent({ type: 13, id: 62, extra: 2 }, actor());
   assert.deepEqual(result.transfer, { mapId: 62, x: 17, y: 12 });

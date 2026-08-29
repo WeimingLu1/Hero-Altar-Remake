@@ -706,6 +706,14 @@ test("战斗界面提供完整行囊与临阵武学切换入口", () => {
   assert.match(worldSource, /title="如何处置对手？"/);
   assert.match(worldSource, /items=\{\["手下留情", "杀死"\]\}/);
   assert.match(worldSource, /settleBattle\(index === 1\)/);
+  // 最终决战入口与原作一致：先播 boss_text 对白再开战，道德和尚另有「回去/开战」选择。
+  assert.match(worldSource, /setPendingBossBattle\(resolution\.battleEnemyId\)/);
+  assert.match(worldSource, /if \(boss !== null\) startBossBattle\(boss\)/);
+  assert.match(
+    worldSource,
+    /BOSS_EXIT_CHOICES = \["回去", "少废话，这次你会死的很难看的"\]/,
+  );
+  assert.match(worldSource, /resolveBossChoice\(bossChoice === 1\)/);
   // 战斗行囊复用主菜单 bag-list 的完整条目设计(分类、像素图标、描述、加成)。
   assert.match(uiSource, /className="bag-list battle-bag-list"/);
   assert.match(uiSource, /item-pixel kind-\$\{entry\.kind\}/);
