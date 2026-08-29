@@ -317,3 +317,90 @@
   .special-picker-title { padding-block: 4px 8px; }
   .special-picker-list button { padding-block: 7px; }
 }
+
+/* 战斗子面板沿用主菜单材质，并用更明确的招式、消耗与禁用层级。 */
+.special-picker {
+  inset: clamp(14px, 3vh, 42px) clamp(14px, 4vw, 58px);
+  gap: 11px;
+  padding: 15px;
+  border: 1px solid var(--line-strong);
+  border-radius: 3px 18px 3px 18px;
+  color: var(--paper);
+  background:
+    radial-gradient(circle at 10% 0, rgba(87, 128, 110, .14), transparent 32%),
+    linear-gradient(150deg, rgba(21, 31, 27, .99), rgba(5, 9, 7, .995) 72%);
+  box-shadow: 0 30px 90px rgba(0,0,0,.8), 0 0 0 6px rgba(3,6,5,.38), inset 0 1px rgba(255,244,209,.045);
+  backdrop-filter: blur(11px) saturate(.82);
+}
+.special-picker::before {
+  content: "";
+  position: absolute;
+  inset: 7px;
+  pointer-events: none;
+  border: 1px solid rgba(225,194,120,.1);
+  border-radius: 1px 12px 1px 12px;
+}
+.special-picker > * { position: relative; z-index: 1; }
+.special-picker-title { padding: 8px 10px 12px; border-bottom-color: rgba(215,185,113,.22); }
+.special-picker-title b { color: var(--gold-bright); font-family: var(--font-display); font-size: 18px; font-weight: 500; letter-spacing: .16em; }
+.special-picker-title small { color: #78847d; font-family: var(--font-data); font-size: 9px; }
+.special-picker-list { gap: 7px; padding: 7px 8px; scrollbar-color: #806a3e #090e0c; }
+.special-picker-list button,
+.battle-inner-row,
+.battle-kungfu-row {
+  border: 1px solid rgba(214,188,128,.1);
+  border-radius: 2px;
+  color: #d8d3c2;
+  background: linear-gradient(145deg, rgba(255,255,255,.032), rgba(255,255,255,.012));
+  box-shadow: inset 0 1px rgba(255,255,255,.018);
+  transition: border-color 130ms ease, background 130ms ease, transform 130ms ease;
+}
+.special-picker-list button:hover:not(:disabled),
+.battle-inner-row:hover,
+.battle-kungfu-row:hover { border-color: rgba(215,185,113,.34); background: linear-gradient(145deg, rgba(211,178,104,.075), rgba(255,255,255,.014)); }
+.special-picker-list button.active,
+.battle-inner-row.active,
+.battle-kungfu-row.active {
+  border-color: rgba(235,203,125,.64);
+  background: linear-gradient(100deg, rgba(168,128,50,.2), rgba(55,53,35,.12));
+  box-shadow: inset 3px 0 var(--gold-bright), 0 8px 18px rgba(0,0,0,.16);
+}
+.special-picker-list button:disabled { opacity: .36; filter: saturate(.42); }
+.special-picker-list button:disabled.active { opacity: .58; }
+.special-picker-list button > b small { color: #b69750; font-family: var(--font-data); }
+.special-picker-list button > b span { color: #e8dfc8; font-family: var(--font-serif); font-size: 13px; }
+.special-picker-list button > em { color: #bcae88; font-family: var(--font-ui); }
+.special-card-desc { color: #929990; font-family: var(--font-ui); }
+.special-card-damage { color: #d8b65d; font-family: var(--font-ui); }
+.special-card-effect { border-top-color: rgba(255,255,255,.08); color: #79a88f; font-family: var(--font-ui); }
+.special-picker-list button.active .special-card-effect { color: #99c8af; }
+.special-picker-empty { color: #78837c; font-family: var(--font-ui); }
+.battle-inner-row > button { color: #dfd8c3; }
+.battle-inner-row > button b { color: #e8ddbe; font-family: var(--font-display); }
+.battle-inner-row > button small,
+.battle-force-row span { color: #929b93; font-family: var(--font-ui); }
+.battle-force-row button,
+.battle-info-panel footer button {
+  border-color: rgba(207,178,108,.32);
+  border-radius: 2px;
+  color: #e4cc86;
+  background: linear-gradient(180deg, rgba(54,51,35,.76), rgba(24,26,21,.88));
+}
+.battle-force-row button:hover,
+.battle-info-panel footer button:hover { border-color: rgba(235,203,125,.66); color: var(--gold-bright); background: rgba(80,65,34,.5); }
+.battle-force-row b { color: #e2c573; font-family: var(--font-data); }
+.battle-info-stats span { border-bottom-color: rgba(255,255,255,.07); }
+.battle-info-stats i { color: #849089; font-family: var(--font-ui); }
+.battle-info-stats b { color: #ded8c5; font-family: var(--font-data); font-weight: 500; }
+.battle-info-skills { border-color: rgba(214,187,120,.13); border-radius: 2px 10px 2px 10px; background: rgba(255,255,255,.02); }
+.battle-info-skills > i { color: #c1a25d; font-family: var(--font-ui); }
+.battle-info-skills p { color: #c9c5b6; font-family: var(--font-ui); }
+.battle-bag-list,
+.battle-kungfu-list { border-color: rgba(214,187,120,.12); border-radius: 2px 10px 2px 10px; background: rgba(1,4,2,.34); }
+.battle-parry-toggle { border-left-color: rgba(255,255,255,.08); color: #bba977; font-family: var(--font-ui); }
+.battle-parry-toggle:hover { color: var(--gold-bright); background: rgba(139,99,44,.2); }
+.special-picker footer { color: #707c75; border-top-color: rgba(214,185,113,.16); font-family: var(--font-data); }
+
+@media (max-width: 820px) {
+  .special-picker { inset: 8px; padding: 10px; }
+}

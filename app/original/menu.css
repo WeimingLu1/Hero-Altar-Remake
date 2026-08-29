@@ -558,6 +558,249 @@
   .cultivation-actions,
   .cultivation-practice { grid-template-columns: minmax(0, 1fr); }
 }
+
+/* 玄铁鎏金菜单体系：统一行囊、状态、功夫、修炼与秘技的视觉语法。 */
+.game-menu,
+.cultivation-panel,
+.cheat-menu {
+  border: 1px solid var(--line-strong);
+  border-radius: 3px 18px 3px 18px;
+  color: var(--paper);
+  background:
+    radial-gradient(circle at 12% 0, rgba(91, 132, 113, .14), transparent 32%),
+    linear-gradient(150deg, rgba(21, 31, 27, .985), rgba(6, 10, 8, .992) 68%);
+  box-shadow:
+    0 30px 90px rgba(0, 0, 0, .78),
+    0 0 0 6px rgba(3, 6, 5, .38),
+    inset 0 1px rgba(255, 244, 209, .045),
+    inset 0 0 70px rgba(166, 133, 66, .035);
+  backdrop-filter: blur(12px) saturate(.82);
+}
+.game-menu { inset: 12px; width: calc(100% - 24px); grid-template-rows: 54px minmax(0, 1fr) 36px; padding: 12px; }
+.game-menu::before,
+.cultivation-panel::before,
+.cheat-menu::before {
+  content: "";
+  position: absolute;
+  inset: 7px;
+  z-index: 0;
+  pointer-events: none;
+  border: 1px solid rgba(225, 194, 120, .1);
+  border-radius: 1px 12px 1px 12px;
+}
+.game-menu > *,
+.cultivation-panel > *,
+.cheat-menu > * { position: relative; z-index: 1; }
+.game-menu > nav {
+  height: 54px;
+  min-height: 54px;
+  gap: 3px;
+  padding: 0 4px;
+  border-bottom: 1px solid rgba(214, 184, 113, .2);
+}
+.game-menu > nav button {
+  position: relative;
+  height: 53px;
+  padding: 9px 12px;
+  border: 0;
+  color: #858d87;
+  background: transparent;
+  font-family: var(--font-display);
+  font-size: 13px;
+  letter-spacing: .14em;
+  transition: color 150ms ease, background 150ms ease;
+}
+.game-menu > nav button::after {
+  content: "";
+  position: absolute;
+  inset: auto 26% 0;
+  height: 2px;
+  background: linear-gradient(90deg, transparent, var(--gold-bright), transparent);
+  opacity: 0;
+  transform: scaleX(.25);
+  transition: opacity 150ms ease, transform 150ms ease;
+}
+.game-menu > nav button:hover { color: #d7cfb7; background: linear-gradient(180deg, transparent, rgba(199,163,90,.055)); }
+.game-menu > nav button.active {
+  color: var(--gold-bright);
+  background: linear-gradient(180deg, rgba(207, 170, 87, .02), rgba(207, 170, 87, .1));
+  box-shadow: none;
+  text-shadow: 0 0 16px rgba(225, 188, 100, .18);
+}
+.game-menu > nav button.active::after { opacity: 1; transform: scaleX(1); }
+.game-menu > nav .cheat-entry { color: #a99aaa; background: transparent; }
+.game-menu > nav .cheat-entry.active { color: #d6bbdf; background: linear-gradient(180deg, transparent, rgba(126,81,139,.12)); }
+.game-menu > nav .cheat-entry.active::after { background: linear-gradient(90deg, transparent, #c59bd1, transparent); }
+.game-menu section { padding: 14px 12px 10px; }
+.game-menu > footer,
+.cultivation-panel > footer,
+.special-picker footer {
+  color: #737d77;
+  border-top-color: rgba(211, 183, 116, .16);
+  font-family: var(--font-data);
+  font-size: 9px;
+  letter-spacing: .02em;
+}
+.equipment-category,
+.kungfu-category {
+  min-height: 34px;
+  margin-top: 8px;
+  padding: 8px 12px;
+  border-left: 2px solid rgba(214, 176, 87, .82);
+  border-bottom: 1px solid rgba(215, 184, 112, .08);
+  color: #d9bd78;
+  background: linear-gradient(90deg, rgba(184, 142, 57, .14), rgba(184,142,57,.025) 54%, transparent);
+  font-family: var(--font-display);
+  font-size: 11px;
+  letter-spacing: .2em;
+}
+.equipment-category small,
+.kungfu-category small { color: #66726b; font-family: var(--font-data); }
+.bag-list,
+.kungfu-list { gap: 7px; }
+.bag-list .bag-row,
+.kungfu-list p,
+.kungfu-list button,
+.cultivation-actions button,
+.cultivation-practice button {
+  position: relative;
+  overflow: hidden;
+  border: 1px solid rgba(216, 191, 131, .1);
+  border-radius: 2px;
+  color: #d8d3c2;
+  background: linear-gradient(145deg, rgba(255,255,255,.034), rgba(255,255,255,.012));
+  box-shadow: inset 0 1px rgba(255,255,255,.018);
+  transition: border-color 130ms ease, background 130ms ease, transform 130ms ease;
+}
+.bag-list .bag-row:hover,
+.kungfu-list button:hover,
+.cultivation-actions button:hover,
+.cultivation-practice button:hover {
+  border-color: rgba(213, 184, 113, .34);
+  background: linear-gradient(145deg, rgba(212,180,108,.075), rgba(255,255,255,.015));
+}
+.bag-list .bag-row.active,
+.kungfu-list button.active,
+.cultivation-actions button.active,
+.cultivation-practice button.active {
+  border-color: rgba(235, 203, 125, .64);
+  background: linear-gradient(100deg, rgba(168, 128, 50, .2), rgba(55, 53, 35, .12));
+  box-shadow: inset 3px 0 var(--gold-bright), 0 8px 18px rgba(0,0,0,.16);
+}
+.bag-list .bag-row.equipped,
+.kungfu-list button.equipped {
+  border-color: rgba(112, 180, 195, .56);
+  background: linear-gradient(100deg, rgba(43, 96, 108, .26), rgba(30, 57, 61, .08));
+}
+.kungfu-list button.parrying { border-color: rgba(184, 94, 72, .55); background: linear-gradient(100deg, rgba(114,50,43,.25), rgba(70,35,30,.06)); }
+.kungfu-list button.parrying.equipped { border-color: rgba(210,161,91,.62); background: linear-gradient(90deg, rgba(113,50,42,.2), rgba(41,93,103,.2)); }
+.bag-list .bag-main { padding: 10px; }
+.bag-list .bag-main > span > b,
+.kungfu-list button > b span { color: #e8e0c9; font-family: var(--font-serif); font-weight: 600; }
+.bag-list small,
+.bag-list .item-desc,
+.kungfu-list em { color: #939b93; font-family: var(--font-ui); line-height: 1.5; }
+.bag-list .item-slot,
+.kungfu-list button > b small { color: #ba9b57; font-family: var(--font-data); }
+.bag-list .item-bonuses { color: #75a68f; font-family: var(--font-data); }
+.bag-list em { color: #d5c7a1; font-family: var(--font-data); }
+.bag-list .bag-drop { border-left-color: rgba(255,255,255,.08); color: #8c918a; font-family: var(--font-ui); }
+.bag-list .bag-drop:hover { color: #efaa99; background: rgba(128,48,38,.24); }
+.item-pixel { filter: saturate(.75) contrast(1.08); transform: scale(.88); }
+.skill-tags span {
+  padding: 3px 7px;
+  border-radius: 10px;
+  color: #cfb873;
+  border-color: rgba(195,153,65,.28);
+  background: rgba(141,105,37,.14);
+  font-family: var(--font-data);
+}
+.skill-tags span.tag-equipped { color: #9bd6e3; border-color: rgba(79,179,201,.35); background: rgba(47,95,116,.24); }
+.skill-tags span.tag-parrying { color: #e8a798; border-color: rgba(201,106,79,.34); background: rgba(116,50,47,.23); }
+.skill-effect {
+  padding: 8px 10px;
+  border-top-color: rgba(255,255,255,.08);
+  color: #a7ad9e;
+  background: rgba(0,0,0,.12);
+  font-family: var(--font-ui);
+}
+.actor-status-panel { gap: 12px; }
+.actor-status-panel > header {
+  grid-template-columns: 144px minmax(0, 1fr);
+  padding: 13px 14px;
+  border: 1px solid rgba(218, 189, 120, .14);
+  border-left: 2px solid rgba(205, 167, 76, .7);
+  background: linear-gradient(105deg, rgba(211,172,82,.085), rgba(255,255,255,.015));
+}
+.status-portrait { width: 132px; height: 132px; border-color: rgba(213,181,103,.46); box-shadow: inset 0 0 25px rgba(0,0,0,.48), 0 12px 30px rgba(0,0,0,.3); }
+.status-identity strong { color: var(--gold-bright); font-family: var(--font-display); font-size: 18px; letter-spacing: .12em; }
+.status-identity small,
+.status-identity em { color: #8f9991; font-family: var(--font-ui); }
+.ladder-summary span {
+  padding: 8px 10px;
+  border-color: rgba(218,189,120,.12);
+  border-radius: 2px;
+  color: #90978f;
+  background: rgba(0,0,0,.14);
+  font-family: var(--font-ui);
+}
+.ladder-summary b { color: #ddc479; font-family: var(--font-data); }
+.status-cards { gap: 10px; }
+.actor-status-panel fieldset {
+  padding: 7px 12px 10px;
+  border-color: rgba(217,189,123,.13);
+  border-radius: 2px 10px 2px 10px;
+  background: linear-gradient(145deg, rgba(255,255,255,.025), rgba(0,0,0,.08));
+}
+.actor-status-panel legend { color: #c7a960; font-family: var(--font-display); letter-spacing: .14em; }
+.actor-status-panel fieldset > span { border-bottom-color: rgba(255,255,255,.07); color: #969e96; font-family: var(--font-ui); }
+.actor-status-panel fieldset b { color: #ded8c5; font-family: var(--font-data); font-weight: 500; }
+.status-explain small { color: #6f7972; }
+
+.cultivation-panel { inset: clamp(14px, 3vh, 40px) clamp(14px, 4vw, 54px); padding: 15px; gap: 11px; }
+.cultivation-panel > header { padding: 8px 10px 12px; border-bottom-color: rgba(214,184,112,.22); }
+.cultivation-panel > header h2 { color: var(--gold-bright); font-family: var(--font-display); font-size: 18px; font-weight: 500; letter-spacing: .16em; }
+.cultivation-panel > header small,
+.cultivation-panel > header > span { color: #77827b; font-family: var(--font-data); }
+.cultivation-panel .cultivation-section {
+  gap: 9px;
+  padding: 11px 13px;
+  border-color: rgba(215,187,120,.13);
+  border-radius: 2px 10px 2px 10px;
+  background: linear-gradient(145deg, rgba(255,255,255,.025), rgba(0,0,0,.1));
+}
+.cultivation-panel .cultivation-section h4 { border-bottom-color: rgba(214,184,112,.14); color: #d0b16b; font-family: var(--font-display); }
+.cultivation-number { border-color: rgba(205,177,108,.3); color: #dfc370; background: rgba(2,6,4,.62); font-family: var(--font-data); }
+.cultivation-power-row { border-radius: 2px; }
+.cultivation-power-row.active { border-color: rgba(235,203,125,.6); background: rgba(160,121,47,.16); box-shadow: inset 3px 0 var(--gold-bright); }
+.cultivation-power-row > button { border-color: rgba(203,175,107,.32); color: #dfc57e; background: rgba(39,37,26,.8); }
+.training-progress { border-color: rgba(197,159,72,.28); background: rgba(181,139,47,.05); }
+.training-progress > i { height: 8px; border-color: rgba(119,138,121,.25); border-radius: 8px; }
+.training-progress > i b { border-radius: inherit; background: linear-gradient(90deg, #5d8e79, #dfbb62); box-shadow: 0 0 12px rgba(212,177,83,.26); }
+
+/* 秘技保留异色识别，但结构、焦点与材质和主菜单一致。 */
+.cheat-menu {
+  border-color: rgba(180, 137, 193, .58);
+  background:
+    radial-gradient(circle at 85% 0, rgba(109, 55, 127, .18), transparent 35%),
+    linear-gradient(150deg, rgba(27, 23, 31, .99), rgba(8, 8, 12, .995) 70%);
+}
+.cheat-menu::before { border-color: rgba(196,154,209,.12); }
+.cheat-menu h2 { color: #dfc3e5; font-family: var(--font-display); font-weight: 500; text-shadow: 0 0 20px rgba(196,121,221,.25); }
+.cheat-menu > nav { border-bottom-color: rgba(166,112,181,.28); }
+.cheat-menu > nav button.active,
+.cheat-subnav button.active { border-color: rgba(205,161,216,.62); color: #efd8f3; background: rgba(122,72,138,.2); }
+.cheat-number { border-color: rgba(186,143,198,.34); color: #e0c4e7; background: rgba(7,6,10,.72); font-family: var(--font-data); }
+
+@media (max-width: 700px) {
+  .game-menu { inset: 6px; width: calc(100% - 12px); padding: 8px; }
+  .bag-list,
+  .kungfu-list,
+  .status-cards,
+  .ladder-summary { grid-template-columns: 1fr; }
+  .actor-status-panel > header { grid-template-columns: 100px minmax(0,1fr); }
+  .status-portrait { width: 92px; height: 92px; }
+}
 .game-menu > footer {
   grid-area: help;
   padding-top: 10px;
@@ -1069,3 +1312,47 @@
     grid-template-columns: minmax(0, 1fr) auto minmax(150px, auto);
   }
 }
+
+/* 秘技面板末尾覆盖：旧版紫色组件保留功能分区，不保留霓虹式视觉噪声。 */
+.cheat-menu {
+  border: 1px solid rgba(181, 137, 193, .58);
+  border-radius: 3px 18px 3px 18px;
+  background: radial-gradient(circle at 85% 0, rgba(109,55,127,.18), transparent 35%), linear-gradient(150deg, rgba(27,23,31,.99), rgba(8,8,12,.995) 70%);
+  box-shadow: 0 30px 95px rgba(0,0,0,.84), 0 0 0 6px rgba(3,3,5,.4), inset 0 1px rgba(255,244,209,.035);
+}
+.cheat-menu > header { border-bottom: 1px solid rgba(181,137,193,.1); }
+.cheat-menu h2 { color: #dec2e5; font-family: var(--font-display); font-weight: 500; text-shadow: 0 0 20px rgba(196,121,221,.2); }
+.cheat-menu > header small,
+.cheat-menu > footer { color: #8c8091; font-family: var(--font-data); }
+.cheat-menu > header button,
+.cheat-menu > nav button,
+.cheat-subnav button,
+.cheat-kind-buttons button,
+.cheat-list button {
+  border-color: rgba(190,151,201,.2);
+  border-radius: 2px;
+  color: #c8bacb;
+  background: linear-gradient(180deg, rgba(64,50,68,.42), rgba(25,22,28,.72));
+  font-family: var(--font-ui);
+}
+.cheat-menu > nav button.active,
+.cheat-subnav button.active,
+.cheat-kind-buttons button.active,
+.cheat-list button.active { color: #edd9f2; border-color: rgba(205,161,216,.58); background: rgba(116,71,130,.24); box-shadow: inset 0 -2px rgba(211,168,222,.62); }
+.cheat-list { background: rgba(3,3,5,.22); }
+.cheat-list > button,
+.cheat-list > div,
+.cheat-owned-row,
+.identity-editor > label,
+.cheat-toggle-grid label,
+.cheat-catalog-row,
+.cheat-skill-row {
+  border-color: rgba(205,173,214,.1);
+  border-radius: 2px;
+  background: linear-gradient(145deg, rgba(255,255,255,.026), rgba(255,255,255,.008));
+}
+.cheat-number { border-color: rgba(186,143,198,.3); color: #e0c4e7; background: rgba(5,4,7,.72); font-family: var(--font-data); }
+.cheat-list > div button.max { color: #e6c978; font-family: var(--font-data); }
+.danger-action,
+.cheat-list > div button.remove { color: #eba79e; border-color: rgba(190,83,91,.5); background: rgba(118,42,51,.22); }
+.cheat-list > div button.add { color: #a9d49e; border-color: rgba(107,166,91,.38); background: rgba(55,100,47,.18); }
