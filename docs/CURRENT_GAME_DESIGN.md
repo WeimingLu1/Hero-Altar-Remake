@@ -426,7 +426,7 @@ NPC数值与武学通过可重复运行的 `scripts/rebalance-npcs.mjs` 从固�
 - 首页：`https://rmxp-hero-web.weminl.chatgpt.site`
 - 完整游戏：`https://rmxp-hero-web.weminl.chatgpt.site/original`
 
-本文基准为 2026-08-29 的本地工作区（main 提交 `f7c53cd`，含最终决战入口先对白后开战修复）；当前生产发布仍为 Sites v113，生产源提交为 `4b4e6fb5f546b216cc3eb174ae15bec05efc9327`。后续发布时应重新执行完整构建与测试，并同步发布说明。
+本文基准为 2026-08-29 的本地工作区；当前生产发布为 Sites v114，生产源提交为 `3d571c08ce8827f8cb6e38460cb96d86ca52aa8d`，包含最终决战入口先对白后开战修复与全界面“玄铁鎏金”3A 武侠视觉重绘。后续发布时应重新执行完整构建与测试，并同步发布说明。
 
 ## 15. 当前质量基线与后续重点
 
